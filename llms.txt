@@ -1,0 +1,25 @@
+# Pocket Arcade
+
+> Pocket Arcade (https://pocketarcade.net) is a free website with 10 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
+
+## Games
+
+- [Snake](https://pocketarcade.net/games/snake.html): Snake is the classic arcade game where you steer a growing snake around the board. Every fruit you eat makes the snake longer, so the board gets more crowded the better you do.
+- [Runner](https://pocketarcade.net/games/runner.html): Runner is an endless running game. Your runner moves on its own and you jump over blocks as the speed keeps rising. After 400 m, low-flying birds join in.
+- [Breakout](https://pocketarcade.net/games/breakout.html): Breakout is a brick breaker game. Bounce the ball off your paddle to smash a wall of bricks. Clear the wall and a new, faster one appears. You get 3 balls.
+- [Memory](https://pocketarcade.net/games/memory.html): Memory is a card matching game. Flip two cards at a time and try to find all 8 matching pairs in as few moves as possible.
+- [Pong](https://pocketarcade.net/games/pong.html): Pong is the classic paddle game. You are the left paddle and play against the computer. Score as many points as you can before the computer reaches 5.
+- [Blocks](https://pocketarcade.net/games/blocks.html): Blocks is a falling block puzzle. Move and turn the falling pieces to fill full rows. Full rows disappear and give points, and the pieces fall faster every 10 rows.
+- [Invaders](https://pocketarcade.net/games/invaders.html): Invaders is a retro space shooter. Move your cannon left and right and shoot down waves of aliens before they land, while dodging their shots. You have 3 ships.
+- [Flappy](https://pocketarcade.net/games/flappy.html): Flappy is a one-button game. Tap to make the bird flap up and fly through the gaps between pipes. Touch a pipe or the ground and the flight is over.
+- [Maze Muncher](https://pocketarcade.net/games/muncher.html): Maze Muncher is a maze chase game. Eat every dot in the maze while four ghosts chase you. Big dots turn the ghosts blue for a few seconds so you can chase them back. You have 3 lives.
+- [Blackjack](https://pocketarcade.net/games/blackjack.html): Blackjack is the classic card game against the dealer, played with free play coins only. Get closer to 21 than the dealer without going over. No real money is used and coins can't be bought.
+
+## Play a game directly
+
+Open `https://pocketarcade.net/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, blocks, invaders, flappy, muncher, blackjack.
+
+## More
+
+- [About Pocket Arcade](https://pocketarcade.net/about.html)
+- [Privacy policy](https://pocketarcade.net/privacy.html)

@@ -69,6 +69,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .about { display: grid; gap: 10px; padding-top: 8px; border-top: 2px dashed var(--line); }
 .about h2 { font: 13px/1.4 var(--display); color: var(--amber); margin: 0; }
+.about h3 { font: 15px/1.4 var(--body); font-weight: 600; color: var(--ink); margin: 6px 0 -4px; }
 .about p { margin: 0; max-width: 68ch; color: var(--ink); }
 .site-foot { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 13px; }
 .site-foot a, .about a { color: var(--cyan); }
