@@ -144,6 +144,7 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       stage.style.maxWidth = game.W + 'px';
     }
+    fit();
     game.reset(); setScore(0);
     if (!game.dom) game.draw();
     phase = 'idle';
@@ -153,6 +154,7 @@
   function closeGame() {
     running = false; cancelAnimationFrame(raf); phase = 'idle';
     if (game && game.stop) game.stop();
+    setFull(false);
     showScreen(false);
     refreshMenu();
     const card = document.querySelector('[data-game="' + id + '"]'); if (card) card.focus();
@@ -168,6 +170,60 @@
     b.addEventListener('touchstart', warm, { once: true, passive: true });
   });
   $('#back').addEventListener('click', closeGame);
+
+  /* ---------- Full screen ---------- */
+  // Uses the browser's Fullscreen API. Where that is missing (iPhone Safari), the game screen is
+  // instead stretched over the whole page, which still hides the rest of the site.
+  const fullBtn = $('#full');
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const isFull = () => screen.classList.contains('full');
+  function fit() {
+    // In full screen a canvas game grows as big as it can while keeping its shape.
+    if (!game || game.dom) return;
+    let scale = 1;
+    if (isFull()) {
+      const cs = getComputedStyle(screen), gap = parseFloat(cs.rowGap) || 0;
+      let room = screen.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 12; // 12 = the frame around the stage
+      [...screen.children].forEach((el) => { if (el !== stage && !el.hidden) room -= el.offsetHeight + gap; });
+      const w = Math.max(160, Math.floor(room * game.W / game.H));
+      stage.style.maxWidth = w + 'px';
+      scale = Math.max(1, cv.clientWidth / game.W);
+    } else stage.style.maxWidth = game.W + 'px';
+    // Draw with more pixels when the game is shown bigger, so it stays sharp.
+    const d = Math.min(Math.min(window.devicePixelRatio || 1, 2) * scale, 4);
+    if (Math.abs(d - dpr) > 0.05) {
+      dpr = d; cv.width = Math.round(game.W * dpr); cv.height = Math.round(game.H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      game.draw();
+    }
+  }
+  function paintFull() {
+    const on = isFull();
+    fullBtn.textContent = on ? 'EXIT FULL' : 'FULL SCREEN';
+    fullBtn.setAttribute('aria-pressed', String(on));
+    document.documentElement.classList.toggle('lock', on);
+    fit();
+  }
+  function setFull(on) {
+    if (on === isFull()) return;
+    screen.classList.toggle('full', on);
+    paintFull();
+    try {
+      if (on) {
+        const req = screen.requestFullscreen || screen.webkitRequestFullscreen;
+        if (req) { const p = req.call(screen); if (p && p.catch) p.catch(() => {}); }
+      } else if (fsEl()) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        const p = exit.call(document); if (p && p.catch) p.catch(() => {});
+      }
+    } catch (e) {}
+  }
+  // Leaving real full screen with the browser's own Esc key or gesture also shrinks the game back.
+  const onFsChange = () => { if (!fsEl() && isFull()) { screen.classList.remove('full'); paintFull(); } else fit(); };
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+  window.addEventListener('resize', fit);
+  fullBtn.addEventListener('click', () => { setFull(!isFull()); fullBtn.blur(); });
 
   /* ---------- Input ---------- */
   const GAME_KEYS = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
