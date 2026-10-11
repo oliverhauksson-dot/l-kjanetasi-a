@@ -6,7 +6,7 @@
 (() => {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
-  const cv = $('#cv'), ctx = cv.getContext('2d');
+  const cv = $('#cv'), ctx = cv.getContext('2d', { alpha: false }); // Every game paints its whole background, so the canvas needs no transparency.
   const C = { bg: '#0d0a15', ink: '#f4ecdc', muted: '#a39abb', line: '#2a2240', amber: '#ffb347', cyan: '#5ce1e6', pink: '#ff6b9a', lime: '#b8e65c', violet: '#a78bfa' };
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -17,7 +17,7 @@
   };
 
   const store = {
-    get(k) { try { const v = localStorage.getItem('arcade:' + k); return v === null ? null : +v; } catch (e) { return null; } },
+    get(k) { try { const v = Number(localStorage.getItem('arcade:' + k) ?? NaN); return Number.isFinite(v) ? v : null; } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem('arcade:' + k, String(v)); } catch (e) {} },
   };
 
@@ -63,6 +63,7 @@
   const loading = {};
   function load(gid) {
     if (GAMES[gid]) return Promise.resolve(GAMES[gid]);
+    if (!/^[a-z]+$/.test(gid)) return Promise.reject(new Error('Unknown game: ' + gid));
     if (!loading[gid]) {
       loading[gid] = new Promise((resolve, reject) => {
         const s = document.createElement('script');
@@ -77,11 +78,11 @@
 
   /* ---------- Shell ---------- */
   let id = null, game = null, running = false, phase = 'idle', raf = 0, last = 0, ovAction = null, lastScore = 0;
-  const ov = $('#ov'), stage = $('#stage'), screen = $('#game'), home = $('#home');
+  const ov = $('#ov'), stage = $('#stage'), screen = $('#game'), home = $('#home'), scoreEl = $('#score'), bestEl = $('#best');
 
   const fmtBest = (gid) => { const v = store.get(gid); return v === null ? '—' : String(v); };
   function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); }
-  function setScore(v) { if (phase === 'play' && v > lastScore) sfx.point(); lastScore = v; $('#score').textContent = v; }
+  function setScore(v) { if (phase === 'play' && v > lastScore) sfx.point(); lastScore = v; scoreEl.textContent = v; }
   function paintSound() { $$('.sound').forEach((b) => { b.textContent = sfx.on ? 'SOUND ON' : 'SOUND OFF'; b.setAttribute('aria-pressed', String(sfx.on)); }); }
   $$('.sound').forEach((b) => b.addEventListener('click', () => { sfx.on = !sfx.on; store.set('sound', sfx.on ? 1 : 0); sfx.unlock(); paintSound(); b.blur(); }));
   paintSound();
@@ -92,9 +93,12 @@
   }
   $('#ovb').addEventListener('click', () => ovAction && ovAction());
 
+  // Physics runs in small steps so a fast ball can't skip through a paddle or brick when a phone drops frames.
+  const STEP = 1 / 120;
   function loop(t) {
-    const dt = Math.min((t - last) / 1000, 1 / 30); last = t;
-    game.update(dt); game.draw();
+    let dt = Math.min((t - last) / 1000, 1 / 30); last = t;
+    while (running && dt > 1e-6) { const s = Math.min(dt, STEP); game.update(s); dt -= s; }
+    game.draw();
     if (running) raf = requestAnimationFrame(loop);
   }
   function play() {
@@ -115,7 +119,7 @@
     const prev = store.get(id);
     const better = prev === null || (game.lowerWins ? score < prev : score > prev);
     if (better && (score > 0 || game.lowerWins)) store.set(id, score);
-    $('#best').textContent = fmtBest(id);
+    bestEl.textContent = fmtBest(id);
     const line = msg || (game.label + ': ' + score + '.');
     if (title) sfx.win(); else sfx.lose();
     showOverlay(title || 'Game over', line + (better && prev !== null ? ' New best!' : ''), 'Play again', startGame);
@@ -131,7 +135,7 @@
     screen.style.setProperty('--c', game.color);
     $('#gtitle').textContent = game.title; $('#slabel').textContent = game.label;
     $('#blabel').textContent = game.lowerWins ? 'Fewest' : 'Best';
-    $('#best').textContent = fmtBest(gid); $('#hint').innerHTML = game.hint;
+    bestEl.textContent = fmtBest(gid); $('#hint').innerHTML = game.hint;
     $('#mem').hidden = !game.dom; cv.hidden = !!game.dom;
     if (game.dom) stage.style.maxWidth = '520px';
     else {
@@ -186,6 +190,8 @@
   cv.addEventListener('pointerdown', (e) => {
     if (phase !== 'play') return;
     e.preventDefault();
+    // Keep getting this finger's events even if it slides off the game screen, so a held jump or drag always ends.
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
     if (game.press) game.press(true);
     if (game.point) game.point(toGame(e));
     if (game.swipe || game.tap) swipeStart = { x: e.clientX, y: e.clientY, moved: false };

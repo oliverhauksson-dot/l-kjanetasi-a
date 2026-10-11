@@ -1,6 +1,6 @@
 /* Blocks. Loaded on demand by js/arcade.js the first time the game is opened. */
 (() => {
-  const { ctx, C, setScore, over, font } = Arcade;
+  const { ctx, C, cached, setScore, over, font } = Arcade;
 
   const COLS = 10, ROWS = 20, CS = 21;
   const PIECES = [
@@ -79,10 +79,13 @@
     },
     draw() {
       const ox = 10, oy = 10;
-      ctx.fillStyle = C.bg; ctx.fillRect(0, 0, this.W, this.H);
-      ctx.fillStyle = '#151024'; ctx.fillRect(ox, oy, COLS * CS, ROWS * CS);
-      ctx.strokeStyle = '#1f1832'; ctx.lineWidth = 1;
-      for (let c = 1; c < COLS; c++) { ctx.beginPath(); ctx.moveTo(ox + c * CS + 0.5, oy); ctx.lineTo(ox + c * CS + 0.5, oy + ROWS * CS); ctx.stroke(); }
+      ctx.drawImage(cached('blocks-well', this.W, this.H, (g) => {
+        g.fillStyle = C.bg; g.fillRect(0, 0, this.W, this.H);
+        g.fillStyle = '#151024'; g.fillRect(ox, oy, COLS * CS, ROWS * CS);
+        g.strokeStyle = '#1f1832'; g.lineWidth = 1; g.beginPath();
+        for (let c = 1; c < COLS; c++) { g.moveTo(ox + c * CS + 0.5, oy); g.lineTo(ox + c * CS + 0.5, oy + ROWS * CS); }
+        g.stroke();
+      }), 0, 0, this.W, this.H);
       this.board.forEach((row, r) => row.forEach((v, c) => { if (v) this.cell(ox + c * CS, oy + r * CS, v); }));
       let gy = this.y; while (!this.collide(this.p.m, this.x, gy + 1)) gy++;
       this.p.m.forEach((row, r) => row.forEach((v, c) => {
