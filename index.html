@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pocket Arcade</title>
+<meta name="description" content="Play 8 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders and Flappy. No download, works on phones and computers.">
+<meta name="theme-color" content="#15111f">
+<meta property="og:title" content="Pocket Arcade">
+<meta property="og:description" content="8 free retro games you can play right in your browser.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2315111f'/%3E%3Crect x='3' y='4' width='10' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='7' width='12' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='12' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='5' y='8' width='2' height='1' fill='%2315111f'/%3E%3Crect x='9' y='8' width='2' height='1' fill='%2315111f'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
@@ -72,6 +78,15 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 .card .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .game { display: grid; gap: 14px; }
+.sound { font: 10px/1 var(--display); color: var(--ink); background: var(--panel); border: 2px solid var(--line); border-radius: 4px; padding: 10px 12px; cursor: pointer; }
+.sound:hover { border-color: var(--muted); }
+.sound:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.about { display: grid; gap: 10px; padding-top: 8px; border-top: 2px dashed var(--line); }
+.about h2 { font: 13px/1.4 var(--display); color: var(--amber); margin: 0; }
+.about p { margin: 0; max-width: 68ch; color: var(--ink); }
+.site-foot { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 13px; }
+.site-foot a { color: var(--cyan); }
 .hud { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 .back {
   font: 10px/1 var(--display); color: var(--ink); background: var(--panel);
@@ -121,7 +136,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 
 <div class="wrap">
   <header class="marquee" id="top">
-    <span class="coin">INSERT COIN · 8 GAMES</span>
+    <div class="topbar"><span class="coin">INSERT COIN · 8 GAMES</span><button class="sound" id="sound1" aria-pressed="true">SOUND ON</button></div>
     <h1>Pocket Arcade</h1>
     <p>Pick a cabinet. Your best scores are kept in this browser.</p>
   </header>
@@ -161,9 +176,22 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
     </button>
   </section>
 
+  <section class="about" id="about">
+    <h2>About Pocket Arcade</h2>
+    <p>Pocket Arcade is a collection of 8 classic-style games you can play for free in your browser, on a phone or a computer. There is nothing to download and no account to make. Your best score for each game is saved on your own device.</p>
+    <p>New to a game? Open it and the start screen tells you the controls. On a phone you can swipe, tap and drag; on a computer use the arrow keys, Space and the mouse.</p>
+  </section>
+
+  <footer class="site-foot" id="foot">
+    <span>© 2026 Pocket Arcade</span>
+    <a href="about.html">About</a>
+    <a href="privacy.html">Privacy policy</a>
+  </footer>
+
   <section class="game" id="game" hidden>
     <div class="hud">
       <button class="back" id="back">◀ MENU</button>
+      <button class="sound" id="sound2" aria-pressed="true">SOUND ON</button>
       <h2 id="gtitle">Snake</h2>
       <div class="stat"><span id="slabel">Score</span><b id="score">0</b></div>
       <div class="stat"><span id="blabel">Best</span><b id="best">—</b></div>
@@ -192,6 +220,28 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
   const store = {
     get(k) { try { const v = localStorage.getItem('arcade:' + k); return v === null ? null : +v; } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem('arcade:' + k, String(v)); } catch (e) {} },
+  };
+
+  /* ---------- Sound ---------- */
+  const sfx = {
+    on: store.get('sound') !== 0, ac: null,
+    unlock() { try { if (!this.ac) this.ac = new (window.AudioContext || window.webkitAudioContext)(); if (this.ac.state === 'suspended') this.ac.resume(); } catch (e) {} },
+    tone(f, d, type = 'square', vol = 0.05, to = 0) {
+      if (!this.on || !this.ac) return;
+      try {
+        const t = this.ac.currentTime, o = this.ac.createOscillator(), g = this.ac.createGain();
+        o.type = type; o.frequency.setValueAtTime(f, t);
+        if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
+        g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.connect(g); g.connect(this.ac.destination); o.start(t); o.stop(t + d + 0.02);
+      } catch (e) {}
+    },
+    point() { this.tone(880, 0.07); },
+    hop() { this.tone(330, 0.12, 'square', 0.04, 660); },
+    hit() { this.tone(220, 0.05, 'triangle', 0.08); },
+    shoot() { this.tone(1200, 0.1, 'sawtooth', 0.03, 300); },
+    lose() { this.tone(300, 0.5, 'sawtooth', 0.05, 60); },
+    win() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, 0.12), i * 110)); },
   };
 
   /* ---------- Snake ---------- */
@@ -271,7 +321,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
       this.py = 0; this.vy = 0; this.ground = true; this.held = false;
       this.speed = 330; this.dist = 0; this.obs = []; this.next = 420; this.t = 0; this.score = 0;
     },
-    jump() { if (this.ground) { this.vy = 760; this.ground = false; } },
+    jump() { if (this.ground) { this.vy = 760; this.ground = false; sfx.hop(); } },
     key(e, down) {
       if (!['Space', 'ArrowUp', 'KeyW'].includes(e.code)) return;
       if (down && !e.repeat) this.jump();
@@ -393,7 +443,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
         const hit = clamp(((this.bx - this.px) / this.pw) * 2 - 1, -1, 1);
         this.speed = Math.min(this.speed * 1.02, 560);
         this.vx = this.speed * Math.sin(hit * 1.05); this.vy = -this.speed * Math.cos(hit * 1.05);
-        this.by = this.PY - R;
+        this.by = this.PY - R; sfx.hit();
       }
       if (this.by > this.H + R) {
         this.lives--;
@@ -496,7 +546,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
     hit(px, dir) {
       const rel = clamp((this.by - (px + this.PH / 2)) / (this.PH / 2), -1, 1);
       this.speed = Math.min(this.speed * 1.06, 720);
-      this.vx = dir * this.speed * Math.cos(rel * 1.0); this.vy = this.speed * Math.sin(rel * 1.0);
+      this.vx = dir * this.speed * Math.cos(rel * 1.0); this.vy = this.speed * Math.sin(rel * 1.0); sfx.hit();
     },
     update(dt) {
       if (this.target !== null) this.py += clamp(this.target - this.PH / 2 - this.py, -600 * dt, 600 * dt);
@@ -644,7 +694,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
       this.shot = null; this.bombs = []; this.inv = 0;
     },
     pos(a) { return { x: this.fx + a.c * 40, y: this.fy + a.r * 32, w: 26, h: 18 }; },
-    fire() { if (!this.shot) this.shot = { x: this.px + 15, y: this.PY - 6 }; },
+    fire() { if (!this.shot) { this.shot = { x: this.px + 15, y: this.PY - 6 }; sfx.shoot(); } },
     key(e, down) {
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') { this.left = down; this.target = null; }
       if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.right = down; this.target = null; }
@@ -729,7 +779,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
     intro: 'Tap to flap and fly through the gaps. Touching a pipe or the ground ends the flight.',
     hint: '<kbd>Space</kbd> <kbd>↑</kbd>, click or tap to flap. <kbd>P</kbd> to pause',
     reset() { this.by = this.H / 2 - 40; this.vy = -300; this.pipes = []; this.score = 0; this.t = 0; this.dist = 0; },
-    flap() { this.vy = -400; },
+    flap() { this.vy = -400; sfx.hop(); },
     key(e, down) { if (down && !e.repeat && ['Space', 'ArrowUp', 'KeyW'].includes(e.code)) this.flap(); },
     press(down) { if (down) this.flap(); },
     update(dt) {
@@ -777,7 +827,11 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 
   function fmtBest(gid) { const v = store.get(gid); return v === null ? '—' : String(v); }
   function refreshMenu() { document.querySelectorAll('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); }
-  function setScore(v) { $('#score').textContent = v; }
+  let lastScore = 0;
+  function setScore(v) { if (phase === 'play' && v > lastScore) sfx.point(); lastScore = v; $('#score').textContent = v; }
+  function paintSound() { document.querySelectorAll('.sound').forEach((b) => { b.textContent = sfx.on ? 'SOUND ON' : 'SOUND OFF'; b.setAttribute('aria-pressed', String(sfx.on)); }); }
+  document.querySelectorAll('.sound').forEach((b) => b.addEventListener('click', () => { sfx.on = !sfx.on; store.set('sound', sfx.on ? 1 : 0); sfx.unlock(); paintSound(); b.blur(); }));
+  paintSound();
 
   function showOverlay(title, text, btn, action) {
     $('#ovt').textContent = title; $('#ovp').textContent = text; $('#ovb').textContent = btn;
@@ -791,6 +845,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
     if (running) raf = requestAnimationFrame(loop);
   }
   function play() {
+    sfx.unlock();
     ov.hidden = true; phase = 'play';
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     if (game.dom) return;
@@ -809,12 +864,13 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
     if (better && (score > 0 || game.lowerWins)) store.set(id, score);
     $('#best').textContent = fmtBest(id);
     const line = msg || (game.label + ': ' + score + '.');
+    if (title) sfx.win(); else sfx.lose();
     showOverlay(title || 'Game over', line + (better && prev !== null ? ' New best!' : ''), 'Play again', startGame);
   }
 
   function openGame(gid) {
     id = gid; game = GAMES[gid];
-    $('#menu').hidden = true; $('.marquee').hidden = true; $('#game').hidden = false;
+    $('#menu').hidden = true; $('.marquee').hidden = true; $('#about').hidden = true; $('#foot').hidden = true; $('#game').hidden = false;
     $('#game').style.setProperty('--c', game.color);
     $('#gtitle').textContent = game.title; $('#slabel').textContent = game.label;
     $('#blabel').textContent = game.lowerWins ? 'Fewest' : 'Best';
@@ -836,7 +892,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
   function closeGame() {
     running = false; cancelAnimationFrame(raf); phase = 'idle';
     if (game && game.stop) game.stop();
-    $('#game').hidden = true; $('#menu').hidden = false; $('.marquee').hidden = false;
+    $('#game').hidden = true; $('#menu').hidden = false; $('.marquee').hidden = false; $('#about').hidden = false; $('#foot').hidden = false;
     refreshMenu();
     const card = document.querySelector('[data-game="' + id + '"]'); if (card) card.focus();
   }
