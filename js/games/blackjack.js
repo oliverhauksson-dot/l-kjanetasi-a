@@ -12,10 +12,10 @@
   const blackjack = {
     dom: true, color: 'var(--amber)', title: 'Blackjack', label: 'Coins',
     intro: 'Get closer to 21 than the dealer without going over. You start with 100 play coins (not real money). Win 3 hands in a row for 25 bonus coins. Blackjack pays 3 to 2. The dealer stands on 17.',
-    hint: 'Click the buttons, or press <kbd>H</kbd> hit, <kbd>S</kbd> stand, <kbd>X</kbd> split, <kbd>Enter</kbd> deal',
+    hint: 'Click the buttons, or press <kbd>H</kbd> hit, <kbd>S</kbd> stand, <kbd>X</kbd> split, <kbd>Enter</kbd> deal the same bet again',
     reset() {
       clearTimeout(this.timer);
-      this.coins = 100; this.peak = 100; this.base = 10; this.shoe = []; this.phase = 'bet'; this.msg = 'Place your bet.'; this.tone = '';
+      this.coins = 100; this.peak = 100; this.base = 10; this.shoe = []; this.phase = 'bet'; this.msg = 'Tap a bet to deal.'; this.tone = '';
       this.hands = []; this.cur = 0; this.dealer = [];
       this.streak = 0; this.stats = { hands: 0, won: 0, lost: 0, biggest: 0 };
       this.seen = { d: 0, h: [] }; this.holeShown = false;
@@ -51,7 +51,7 @@
     act(a) {
       if (!Arcade.playing()) return;
       if (this.phase === 'bet') {
-        if (a.startsWith('bet')) { this.base = a === 'betall' ? 'all' : +a.slice(3); sfx.hit(); this.render(); }
+        if (a.startsWith('bet')) { this.base = a === 'betall' ? 'all' : +a.slice(3); this.deal(); }
         else if (a === 'deal') this.deal();
         else if (a === 'cashout') over(this.peak, 'You cashed out with ' + this.coins + ' coins. Most coins: ' + this.peak + '.', 'Cashed out!');
       } else if (this.phase === 'turn') {
@@ -170,9 +170,9 @@
       const btn = (a, label, on = true, sel = false) => '<button data-a="' + a + '"' + (on ? '' : ' disabled') + (sel ? ' class="sel"' : '') + '>' + label + '</button>';
       let controls;
       if (this.phase === 'bet') {
-        controls = '<div class="row">' + BETS.map((v) => btn('bet' + v, 'BET ' + v, this.coins >= v || v === BETS[0], this.base === v)).join('')
-          + btn('betall', 'ALL IN', this.coins > 0, this.base === 'all') + '</div>'
-          + '<div class="row">' + btn('deal', 'DEAL', this.coins > 0) + btn('cashout', 'CASH OUT') + '</div>';
+        controls = '<div class="row">' + BETS.map((v) => btn('bet' + v, 'BET ' + v, this.coins >= v || v === BETS[0], this.base === v && this.hands.length > 0)).join('')
+          + btn('betall', 'ALL IN', this.coins > 0, this.base === 'all' && this.hands.length > 0) + '</div>'
+          + '<div class="row">' + btn('cashout', 'CASH OUT') + '</div>';
       } else if (this.phase === 'turn') {
         controls = '<div class="row">' + btn('hit', 'HIT') + btn('stand', 'STAND') + (this.canSplit() ? btn('split', 'SPLIT') : '') + '</div>';
       } else controls = '<div class="row"><span class="muted">Dealer plays…</span></div>';
