@@ -3,14 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pocket Arcade</title>
+<title>Pocket Arcade: Free Retro Games to Play Online</title>
 <meta name="description" content="Play 8 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders and Flappy. No download, works on phones and computers.">
 <meta name="theme-color" content="#15111f">
-<meta property="og:title" content="Pocket Arcade">
+<meta property="og:site_name" content="Pocket Arcade">
+<meta property="og:title" content="Pocket Arcade: Free Retro Games to Play Online">
 <meta property="og:description" content="8 free retro games you can play right in your browser.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://pocketarcade.net/">
+<meta property="og:image" content="https://pocketarcade.net/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="https://pocketarcade.net/">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Pocket Arcade",
+  "url": "https://pocketarcade.net/",
+  "description": "Play 8 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders and Flappy."
+}
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2315111f'/%3E%3Crect x='3' y='4' width='10' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='7' width='12' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='12' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='5' y='8' width='2' height='1' fill='%2315111f'/%3E%3Crect x='9' y='8' width='2' height='1' fill='%2315111f'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;600&display=swap">
@@ -88,7 +102,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 .about h2 { font: 13px/1.4 var(--display); color: var(--amber); margin: 0; }
 .about p { margin: 0; max-width: 68ch; color: var(--ink); }
 .site-foot { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 13px; }
-.site-foot a { color: var(--cyan); }
+.site-foot a, .about a { color: var(--cyan); }
 .hud { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 .back {
   font: 10px/1 var(--display); color: var(--ink); background: var(--panel);
@@ -182,6 +196,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
     <h2>About Pocket Arcade</h2>
     <p>Pocket Arcade is a collection of 8 classic-style games you can play for free in your browser, on a phone or a computer. There is nothing to download and no account to make. Your best score for each game is saved on your own device.</p>
     <p>New to a game? Open it and the start screen tells you the controls. On a phone you can swipe, tap and drag; on a computer use the arrow keys, Space and the mouse.</p>
+    <p class="game-links">How to play: <a href="games/snake.html">Snake</a> · <a href="games/runner.html">Runner</a> · <a href="games/breakout.html">Breakout</a> · <a href="games/memory.html">Memory</a> · <a href="games/pong.html">Pong</a> · <a href="games/blocks.html">Blocks</a> · <a href="games/invaders.html">Invaders</a> · <a href="games/flappy.html">Flappy</a></p>
   </section>
 
   <footer class="site-foot" id="foot">
@@ -940,6 +955,9 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
   refreshMenu();
+  // Game pages link here as ?play=<game> so a search visitor lands right in that game.
+  const startId = new URLSearchParams(location.search).get('play');
+  if (startId && Object.prototype.hasOwnProperty.call(GAMES, startId)) openGame(startId);
 })();
 </script>
 
