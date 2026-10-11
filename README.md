@@ -12,4 +12,5 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `css/arcade.css`: styles for the home page and game screen.
 - `js/arcade.js`: the shared part (menu, game screen, controls, sound, saved scores).
 - `js/games/*.js`: one file per game. A game file is only downloaded when someone opens that game.
+- `fonts/`: the two fonts, served from this site.
 - `games/*.html`, `about.html`, `privacy.html`: the "how to play" and info pages, styled by `page.css`.

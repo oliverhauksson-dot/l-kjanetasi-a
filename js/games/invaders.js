@@ -1,6 +1,6 @@
 /* Invaders. Loaded on demand by js/arcade.js the first time the game is opened. */
 (() => {
-  const { ctx, C, clamp, sfx, setScore, over, font } = Arcade;
+  const { ctx, C, cached, clamp, sfx, setScore, over, font } = Arcade;
 
   const invaders = {
     W: 480, H: 440, PY: 400, color: 'var(--lime)', title: 'Invaders', label: 'Score',
@@ -71,8 +71,10 @@
       if (!this.aliens.some((a) => a.alive)) { this.wave++; this.newWave(); }
     },
     draw() {
-      ctx.fillStyle = C.bg; ctx.fillRect(0, 0, this.W, this.H);
-      for (let i = 0; i < 40; i++) { ctx.fillStyle = i % 3 ? '#2a2240' : '#3a3052'; ctx.fillRect((i * 97) % this.W, (i * 53) % (this.PY - 20), 2, 2); }
+      ctx.drawImage(cached('invaders-sky', this.W, this.H, (g) => {
+        g.fillStyle = C.bg; g.fillRect(0, 0, this.W, this.H);
+        for (let i = 0; i < 40; i++) { g.fillStyle = i % 3 ? '#2a2240' : '#3a3052'; g.fillRect((i * 97) % this.W, (i * 53) % (this.PY - 20), 2, 2); }
+      }), 0, 0, this.W, this.H);
       const cols = ['#ff6b9a', '#ffb347', '#ffb347', '#b8e65c', '#b8e65c'];
       for (const a of this.aliens) {
         if (!a.alive) continue;

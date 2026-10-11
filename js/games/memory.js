@@ -29,7 +29,7 @@
       this.moves++; setScore(this.moves);
       if (a.dataset.sym === b.dataset.sym) {
         a.classList.add('done'); b.classList.add('done');
-        if (++this.found === SYMBOLS.length) setTimeout(() => over(this.moves, 'All 8 pairs in ' + this.moves + ' moves.', 'Cleared!'), 450);
+        if (++this.found === SYMBOLS.length) this.timer = setTimeout(() => over(this.moves, 'All 8 pairs in ' + this.moves + ' moves.', 'Cleared!'), 450);
       } else {
         this.lock = true;
         this.timer = setTimeout(() => {
