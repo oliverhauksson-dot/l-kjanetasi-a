@@ -6,11 +6,11 @@
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pocket Arcade: Free Retro Games to Play Online</title>
-<meta name="description" content="Play 8 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders and Flappy. No download, works on phones and computers.">
+<meta name="description" content="Play 10 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher and Blackjack. No download, works on phones and computers.">
 <meta name="theme-color" content="#15111f">
 <meta property="og:site_name" content="Pocket Arcade">
 <meta property="og:title" content="Pocket Arcade: Free Retro Games to Play Online">
-<meta property="og:description" content="8 free retro games you can play right in your browser.">
+<meta property="og:description" content="10 free retro games you can play right in your browser.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://pocketarcade.net/">
 <meta property="og:image" content="https://pocketarcade.net/og-image.png">
@@ -24,7 +24,7 @@
   "@type": "WebSite",
   "name": "Pocket Arcade",
   "url": "https://pocketarcade.net/",
-  "description": "Play 8 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders and Flappy."
+  "description": "Play 10 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher and Blackjack."
 }
 </script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2315111f'/%3E%3Crect x='3' y='4' width='10' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='7' width='12' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='12' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='5' y='8' width='2' height='1' fill='%2315111f'/%3E%3Crect x='9' y='8' width='2' height='1' fill='%2315111f'/%3E%3C/svg%3E">
@@ -146,6 +146,20 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 .mc.up .back-face { transform: rotateY(180deg); }
 .mc.up .front-face { transform: rotateY(360deg); }
 .mc.done .front-face { border-color: var(--lime); background: #26331f; }
+.bj { display: grid; gap: 16px; padding: 18px 14px; min-height: 420px; align-content: start; background: radial-gradient(ellipse at 50% 40%, #1f3326, #0d0a15 75%); }
+.bj .hand { display: grid; gap: 8px; }
+.bj .lbl { font: 10px/1.4 var(--display); color: var(--muted); }
+.bj .cards { display: flex; flex-wrap: wrap; gap: 8px; min-height: 86px; }
+.bj .pc { width: 60px; height: 86px; border-radius: 6px; background: #211b31; border: 2px solid var(--line); display: grid; place-items: center; align-content: center; gap: 4px; font: 16px/1 var(--display); }
+.bj .pc span { font: 24px/1 var(--body); }
+.bj .pc.down { background: var(--panel); background-image: repeating-linear-gradient(45deg, transparent 0 6px, rgba(255,179,71,.18) 6px 12px); }
+.bj .msg { margin: 0; text-align: center; font-size: 15px; color: var(--ink); min-height: 1.5em; }
+.bj .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.bj .row button { font: 11px/1 var(--display); color: #15111f; background: var(--amber); border: 0; border-radius: 4px; padding: 13px 14px; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,.45); }
+.bj .row button.sel { background: var(--cyan); }
+.bj .row button:disabled { opacity: .35; cursor: default; }
+.bj .row button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.bj .muted { color: var(--muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .mc i { transition: none; } .card { transition: none; } }
 </style>
 </head>
@@ -154,7 +168,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 
 <div class="wrap">
   <header class="marquee" id="top">
-    <div class="topbar"><span class="coin">INSERT COIN · 8 GAMES</span><button class="sound" id="sound1" aria-pressed="true">SOUND ON</button></div>
+    <div class="topbar"><span class="coin">INSERT COIN · 10 GAMES</span><button class="sound" id="sound1" aria-pressed="true">SOUND ON</button></div>
     <h1>Pocket Arcade</h1>
     <p>Pick a cabinet. Your best scores are kept in this browser.</p>
   </header>
@@ -192,13 +206,21 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
       <svg viewBox="0 0 84 84" aria-hidden="true"><rect x="52" y="0" width="16" height="26" fill="#b8e65c"/><rect x="50" y="22" width="20" height="6" fill="#e3ff9e"/><rect x="52" y="58" width="16" height="26" fill="#b8e65c"/><rect x="50" y="56" width="20" height="6" fill="#e3ff9e"/><rect x="18" y="36" width="18" height="14" fill="#ffb347"/><rect x="30" y="38" width="4" height="4" fill="#f4ecdc"/><rect x="36" y="43" width="5" height="4" fill="#ff6b9a"/></svg>
       <div><h2>Flappy</h2><p>Flap through the gaps between the pipes.</p><div class="meta"><span>Space / tap</span><span>Best <b data-best="flappy">—</b></span></div></div>
     </button>
+    <button class="card" data-game="muncher" style="--c: var(--cyan)">
+      <svg viewBox="0 0 84 84" aria-hidden="true"><g fill="#2b2340" stroke="#a78bfa" stroke-width="2"><rect x="6" y="6" width="72" height="14"/><rect x="6" y="64" width="72" height="14"/></g><g fill="#f4ecdc"><rect x="44" y="40" width="4" height="4"/><rect x="54" y="40" width="4" height="4"/></g><rect x="64" y="37" width="10" height="10" fill="#ffb347"/><rect x="12" y="32" width="22" height="20" fill="#5ce1e6"/><rect x="25" y="39" width="9" height="6" fill="#15111f"/><rect x="20" y="34" width="3" height="3" fill="#15111f"/><g fill="#ff6b9a"><rect x="40" y="24" width="14" height="4"/><rect x="38" y="28" width="18" height="10"/></g></svg>
+      <div><h2>Maze Muncher</h2><p>Eat every dot and dodge the ghosts in the maze.</p><div class="meta"><span>Arrows / swipe</span><span>Best <b data-best="muncher">—</b></span></div></div>
+    </button>
+    <button class="card" data-game="blackjack" style="--c: var(--amber)">
+      <svg viewBox="0 0 84 84" aria-hidden="true"><rect x="12" y="16" width="34" height="48" rx="4" fill="#211b31" stroke="#a39abb" stroke-width="2" transform="rotate(-10 29 40)"/><rect x="36" y="18" width="34" height="48" rx="4" fill="#211b31" stroke="#ffb347" stroke-width="2"/><text x="53" y="40" text-anchor="middle" font-size="14" fill="#f4ecdc" font-family="monospace" font-weight="700">A</text><text x="53" y="58" text-anchor="middle" font-size="16" fill="#ff6b9a">♥</text><circle cx="22" cy="70" r="8" fill="#5ce1e6"/><circle cx="22" cy="70" r="4" fill="#15111f"/></svg>
+      <div><h2>Blackjack</h2><p>Beat the dealer to 21 with play chips.</p><div class="meta"><span>Click / tap</span><span>Most chips <b data-best="blackjack">—</b></span></div></div>
+    </button>
   </section>
 
   <section class="about" id="about">
     <h2>About Pocket Arcade</h2>
-    <p>Pocket Arcade is a collection of 8 classic-style games you can play for free in your browser, on a phone or a computer. There is nothing to download and no account to make. Your best score for each game is saved on your own device.</p>
+    <p>Pocket Arcade is a collection of 10 classic-style games you can play for free in your browser, on a phone or a computer. There is nothing to download and no account to make. Your best score for each game is saved on your own device.</p>
     <p>New to a game? Open it and the start screen tells you the controls. On a phone you can swipe, tap and drag; on a computer use the arrow keys, Space and the mouse.</p>
-    <p class="game-links">How to play: <a href="games/snake.html">Snake</a> · <a href="games/runner.html">Runner</a> · <a href="games/breakout.html">Breakout</a> · <a href="games/memory.html">Memory</a> · <a href="games/pong.html">Pong</a> · <a href="games/blocks.html">Blocks</a> · <a href="games/invaders.html">Invaders</a> · <a href="games/flappy.html">Flappy</a></p>
+    <p class="game-links">How to play: <a href="games/snake.html">Snake</a> · <a href="games/runner.html">Runner</a> · <a href="games/breakout.html">Breakout</a> · <a href="games/memory.html">Memory</a> · <a href="games/pong.html">Pong</a> · <a href="games/blocks.html">Blocks</a> · <a href="games/invaders.html">Invaders</a> · <a href="games/flappy.html">Flappy</a> · <a href="games/muncher.html">Maze Muncher</a> · <a href="games/blackjack.html">Blackjack</a></p>
   </section>
 
   <footer class="site-foot" id="foot">
@@ -514,7 +536,7 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
       const deck = [...SYMBOLS, ...SYMBOLS].map((s) => s);
       for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
       this.moves = 0; this.found = 0; this.first = null; this.lock = false;
-      const grid = $('#mem'); grid.innerHTML = '';
+      const grid = $('#mem'); grid.className = 'mem'; grid.onclick = null; grid.innerHTML = '';
       deck.forEach(([sym, col], i) => {
         const b = document.createElement('button');
         b.className = 'mc'; b.id = 'card' + i; b.dataset.sym = sym;
@@ -840,7 +862,314 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
   };
 
   /* ---------- Shell ---------- */
-  const GAMES = { snake, runner, breakout, memory, pong, blocks, invaders, flappy };
+  /* ---------- Maze Muncher ---------- */
+  const MAZE = [
+    '###################',
+    '#........#........#',
+    '#o##.###.#.###.##o#',
+    '#.................#',
+    '#.##.#.#####.#.##.#',
+    '#....#...#...#....#',
+    '####.### # ###.####',
+    '   #.#       #.#   ',
+    '####.# ##-## #.####',
+    '    .  #   #  .    ',
+    '####.# ##### #.####',
+    '   #.#       #.#   ',
+    '####.# ##### #.####',
+    '#........#........#',
+    '#.##.###.#.###.##.#',
+    '#o.#...........#.o#',
+    '##.#.#.#####.#.#.##',
+    '#....#...#...#....#',
+    '#.######.#.######.#',
+    '#.................#',
+    '###################',
+  ];
+  const MW = 19, MH = 21, MT = 22;
+  const DIRS = [[0, -1], [-1, 0], [0, 1], [1, 0]];
+  const muncher = {
+    W: MW * MT, H: MH * MT + 28, color: 'var(--cyan)', title: 'Maze Muncher', label: 'Score',
+    intro: 'Eat every dot in the maze and dodge the ghosts. Grab a big dot to turn the ghosts blue, then chase them for bonus points. You have 3 lives.',
+    hint: '<kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> or <kbd>WASD</kbd> to move, swipe on a phone, <kbd>P</kbd> to pause',
+    reset() { this.score = 0; this.lives = 3; this.level = 1; this.t = 0; this.fill(); this.place(); },
+    fill() {
+      this.dots = MAZE.map((row) => [...row].map((ch) => (ch === '.' ? 1 : ch === 'o' ? 2 : 0)));
+      this.left = this.dots.flat().filter(Boolean).length;
+    },
+    place() {
+      const spd = 6 + Math.min(this.level - 1, 5) * 0.4;
+      this.pl = { x: 9, y: 15, dx: 0, dy: 0, p: 0, want: null, speed: spd };
+      const cols = ['#ff6b9a', '#ffb347', '#b8e65c', '#a78bfa'];
+      this.ghosts = cols.map((col, i) => ({
+        col, i, x: 9, y: 7, dx: i % 2 ? 1 : -1, dy: 0, p: 0, state: 'home',
+        wait: i * 3 + 1, hx: 8 + (i % 3), speed: spd * 0.9,
+      }));
+      this.fright = 0; this.chain = 0; this.ready = 1.2; this.dying = 0;
+    },
+    open(x, y) { x = (x + MW) % MW; return y >= 0 && y < MH && MAZE[y][x] !== '#' && MAZE[y][x] !== '-'; },
+    key(e, down) {
+      if (!down) return;
+      const m = { ArrowUp: 0, KeyW: 0, ArrowLeft: 1, KeyA: 1, ArrowDown: 2, KeyS: 2, ArrowRight: 3, KeyD: 3 }[e.code];
+      if (m !== undefined) this.steer(DIRS[m]);
+    },
+    swipe(dx, dy) { if (Math.abs(dx) > Math.abs(dy)) this.steer([Math.sign(dx), 0]); else this.steer([0, Math.sign(dy)]); },
+    steer(d) {
+      const pl = this.pl; pl.want = d;
+      // Turning around mid-step is allowed at any time.
+      if (pl.p > 0 && d[0] === -pl.dx && d[1] === -pl.dy) {
+        pl.x = (pl.x + pl.dx + MW) % MW; pl.y += pl.dy; pl.dx = d[0]; pl.dy = d[1]; pl.p = 1 - pl.p;
+      }
+    },
+    // Move an actor along the grid; choose(a) picks its next direction at each tile.
+    walk(a, dist, choose) {
+      while (dist > 0) {
+        if (a.p === 0) {
+          choose(a);
+          if (!a.dx && !a.dy) return;
+        }
+        const stepLen = Math.min(dist, 1 - a.p);
+        a.p += stepLen; dist -= stepLen;
+        if (a.p >= 1) { a.x = (a.x + a.dx + MW) % MW; a.y += a.dy; a.p = 0; if (a === this.pl) this.eat(); }
+      }
+    },
+    eat() {
+      const pl = this.pl, d = this.dots[pl.y][pl.x];
+      if (!d) return;
+      this.dots[pl.y][pl.x] = 0; this.left--;
+      if (d === 2) { this.score += 50; this.fright = Math.max(3, 8 - this.level); this.chain = 0; this.ghosts.forEach((g) => { if (g.state === 'chase') { g.dx = -g.dx; g.dy = -g.dy; g.p = g.p ? 1 - g.p : 0; if (g.p) { g.x = (g.x - g.dx + MW) % MW; g.y -= g.dy; } } }); sfx.tone(260, 0.25, 'square', 0.05, 520); }
+      else { this.score += 10; sfx.tone(this.left % 2 ? 620 : 520, 0.04, 'square', 0.025); }
+      setScore(this.score);
+      if (!this.left) { this.level++; this.score += 500; setScore(this.score); sfx.win(); this.fill(); this.place(); }
+    },
+    target(g) {
+      const pl = this.pl;
+      if (g.state === 'eyes') return [9, 7];
+      const scatter = (this.t % 27) < 7;
+      const corners = [[MW - 2, 1], [1, 1], [MW - 2, MH - 2], [1, MH - 2]];
+      if (scatter) return corners[g.i];
+      if (g.i === 1) return [pl.x + pl.dx * 4, pl.y + pl.dy * 4];
+      if (g.i === 2) return [MW - 1 - pl.x, MH - 1 - pl.y];
+      if (g.i === 3 && Math.hypot(g.x - pl.x, g.y - pl.y) < 6) return corners[3];
+      return [pl.x, pl.y];
+    },
+    update(dt) {
+      this.t += dt;
+      if (this.dying) {
+        this.dying -= dt;
+        if (this.dying <= 0) { if (--this.lives <= 0) return over(this.score); this.place(); }
+        return;
+      }
+      if (this.ready > 0) { this.ready -= dt; return; }
+      const pl = this.pl;
+      this.walk(pl, pl.speed * dt, (a) => {
+        if (a.want && this.open(a.x + a.want[0], a.y + a.want[1])) { a.dx = a.want[0]; a.dy = a.want[1]; }
+        else if (!this.open(a.x + a.dx, a.y + a.dy)) { a.dx = 0; a.dy = 0; }
+      });
+      if (this.fright > 0) this.fright -= dt;
+      for (const g of this.ghosts) {
+        if (g.state === 'home') {
+          g.wait -= dt;
+          if (g.wait <= 0) { g.state = 'chase'; g.x = 9; g.y = 7; g.p = 0; g.dx = g.i % 2 ? 1 : -1; g.dy = 0; }
+          continue;
+        }
+        const scared = this.fright > 0 && g.state === 'chase';
+        const sp = g.state === 'eyes' ? g.speed * 2 : scared ? g.speed * 0.55 : (MAZE[g.y][g.x] === ' ' && g.y === 9 ? g.speed * 0.6 : g.speed);
+        this.walk(g, sp * dt, (a) => {
+          if (a.state === 'eyes' && a.x === 9 && a.y === 7) { a.state = 'home'; a.wait = 1; a.dx = a.dy = 0; return; }
+          const opts = DIRS.filter(([dx, dy]) => !(dx === -a.dx && dy === -a.dy) && this.open(a.x + dx, a.y + dy));
+          if (!opts.length) { a.dx = -a.dx; a.dy = -a.dy; return; }
+          let pick;
+          if (scared) pick = opts[Math.floor(Math.random() * opts.length)];
+          else {
+            const [tx, ty] = this.target(a);
+            pick = opts.reduce((best, d) => {
+              const v = Math.hypot(a.x + d[0] - tx, a.y + d[1] - ty);
+              return v < best.v ? { d, v } : best;
+            }, { d: opts[0], v: Infinity }).d;
+          }
+          a.dx = pick[0]; a.dy = pick[1];
+        });
+        if (g.state === 'home') continue;
+        const gx = g.x + g.dx * g.p, gy = g.y + g.dy * g.p, px = pl.x + pl.dx * pl.p, py = pl.y + pl.dy * pl.p;
+        if (g.state !== 'eyes' && Math.hypot(gx - px, gy - py) < 0.7) {
+          if (this.fright > 0) {
+            g.state = 'eyes'; this.chain++;
+            this.score += 100 * 2 ** this.chain; setScore(this.score);
+            sfx.tone(900, 0.2, 'square', 0.05, 1800);
+          } else { this.dying = 1.4; sfx.lose(); return; }
+        }
+      }
+    },
+    draw() {
+      const s = MT;
+      ctx.fillStyle = C.bg; ctx.fillRect(0, 0, this.W, this.H);
+      for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+        const ch = MAZE[y][x];
+        if (ch === '#') {
+          ctx.fillStyle = '#211b31'; ctx.fillRect(x * s, y * s, s, s);
+          ctx.fillStyle = C.violet;
+          const wall = (xx, yy) => xx < 0 || yy < 0 || xx >= MW || yy >= MH || MAZE[yy][xx] === '#' || MAZE[yy][xx] === '-';
+          if (!wall(x, y - 1)) ctx.fillRect(x * s, y * s, s, 2);
+          if (!wall(x, y + 1)) ctx.fillRect(x * s, y * s + s - 2, s, 2);
+          if (!wall(x - 1, y)) ctx.fillRect(x * s, y * s, 2, s);
+          if (!wall(x + 1, y)) ctx.fillRect(x * s + s - 2, y * s, 2, s);
+        } else if (ch === '-') { ctx.fillStyle = C.pink; ctx.fillRect(x * s, y * s + s / 2 - 2, s, 4); }
+        const d = this.dots[y][x];
+        if (d === 1) { ctx.fillStyle = '#f4ecdc'; ctx.fillRect(x * s + s / 2 - 2, y * s + s / 2 - 2, 4, 4); }
+        if (d === 2 && Math.floor(this.t * 4) % 2 === 0) { ctx.fillStyle = C.amber; ctx.fillRect(x * s + 5, y * s + 5, s - 10, s - 10); }
+      }
+      // Ghosts
+      for (const g of this.ghosts) {
+        let gx, gy;
+        if (g.state === 'home') { gx = g.hx * s; gy = 9 * s + Math.sin(this.t * 5 + g.i) * 3; }
+        else { gx = (g.x + g.dx * g.p) * s; gy = (g.y + g.dy * g.p) * s; }
+        const blink = this.fright > 0 && this.fright < 1.5 && Math.floor(this.t * 6) % 2;
+        const body = g.state === 'eyes' ? null : (this.fright > 0 && g.state === 'chase') ? (blink ? '#f4ecdc' : '#3d5afe') : g.col;
+        if (body) {
+          ctx.fillStyle = body;
+          ctx.fillRect(gx + 4, gy + 2, s - 8, 4); ctx.fillRect(gx + 2, gy + 6, s - 4, s - 10);
+          for (let k = 0; k < 3; k++) ctx.fillRect(gx + 2 + k * 6, gy + s - 4, 4, 3);
+        }
+        ctx.fillStyle = '#f4ecdc'; ctx.fillRect(gx + 5, gy + 7, 5, 5); ctx.fillRect(gx + 12, gy + 7, 5, 5);
+        ctx.fillStyle = '#15111f'; ctx.fillRect(gx + 6 + g.dx * 2, gy + 9 + g.dy * 2, 3, 3); ctx.fillRect(gx + 13 + g.dx * 2, gy + 9 + g.dy * 2, 3, 3);
+      }
+      // Muncher: a square cyan critter with a chomping mouth.
+      const pl = this.pl, px = (pl.x + pl.dx * pl.p) * s, py = (pl.y + pl.dy * pl.p) * s;
+      const shrink = this.dying ? Math.max(0, 1 - (1.4 - this.dying) / 1.2) : 1;
+      const sz = (s - 4) * shrink, ox = px + (s - sz) / 2, oy = py + (s - sz) / 2;
+      ctx.fillStyle = C.cyan; ctx.fillRect(ox, oy, sz, sz);
+      if (shrink > 0.3) {
+        const open = (pl.dx || pl.dy) && !this.ready ? Math.abs(Math.sin(this.t * 14)) * 6 : 2;
+        const fx = pl.dx || (pl.dy ? 0 : 1), fy = pl.dy;
+        ctx.fillStyle = C.bg;
+        const cx = px + s / 2, cy = py + s / 2;
+        if (fx) ctx.fillRect(fx > 0 ? cx + 2 : cx - sz / 2, cy - open / 2, sz / 2 - 2, open);
+        else ctx.fillRect(cx - open / 2, fy > 0 ? cy + 2 : cy - sz / 2, open, sz / 2 - 2);
+        if (fx) ctx.fillRect(cx - fx * 2 - 1.5, cy - 7, 3, 3); else ctx.fillRect(cx + 5, cy - fy * 2 - 1.5, 3, 3);
+      }
+      // Footer: lives and level
+      ctx.fillStyle = C.cyan;
+      for (let k = 0; k < this.lives - (this.dying ? 0 : 1); k++) ctx.fillRect(8 + k * 22, MH * s + 8, 14, 14);
+      ctx.fillStyle = C.muted; ctx.font = '10px "Press Start 2P", monospace'; ctx.textAlign = 'right';
+      ctx.fillText('LEVEL ' + this.level, this.W - 8, MH * s + 20);
+      if (this.ready > 0) { ctx.fillStyle = C.amber; ctx.textAlign = 'center'; ctx.fillText('READY!', this.W / 2, 11 * s + 15); }
+      ctx.textAlign = 'left';
+    },
+  };
+
+  /* ---------- Blackjack ---------- */
+  const SUITS = [['♠', '#f4ecdc'], ['♥', '#ff6b9a'], ['♦', '#ff6b9a'], ['♣', '#f4ecdc']];
+  const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  const blackjack = {
+    dom: true, color: 'var(--amber)', title: 'Blackjack', label: 'Chips',
+    intro: 'Get closer to 21 than the dealer without going over. You start with 100 play chips (not real money). Blackjack pays 3 to 2. The dealer stands on 17.',
+    hint: 'Click the buttons, or press <kbd>H</kbd> hit, <kbd>S</kbd> stand, <kbd>D</kbd> double, <kbd>Enter</kbd> deal',
+    reset() {
+      clearTimeout(this.timer);
+      this.chips = 100; this.peak = 100; this.base = 10; this.bet = 10; this.shoe = []; this.phase = 'bet'; this.msg = 'Place your bet.';
+      this.player = []; this.dealer = [];
+      const el = $('#mem'); el.className = 'bj'; el.innerHTML = '';
+      el.onclick = (e) => { const b = e.target.closest('button[data-a]'); if (b) this.act(b.dataset.a); };
+      this.render();
+    },
+    draw1() {
+      if (this.shoe.length < 15) {
+        this.shoe = [];
+        for (let d = 0; d < 4; d++) for (const s of SUITS) for (const r of RANKS) this.shoe.push({ r, s });
+        for (let i = this.shoe.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [this.shoe[i], this.shoe[j]] = [this.shoe[j], this.shoe[i]]; }
+      }
+      return this.shoe.pop();
+    },
+    total(hand) {
+      let t = 0, aces = 0;
+      for (const c of hand) { if (c.r === 'A') { aces++; t += 11; } else t += ['J', 'Q', 'K'].includes(c.r) ? 10 : +c.r; }
+      while (t > 21 && aces) { t -= 10; aces--; }
+      return t;
+    },
+    key(e, down) {
+      if (!down || e.repeat) return;
+      const a = { KeyH: 'hit', KeyS: 'stand', KeyD: 'double', Enter: 'deal', NumpadEnter: 'deal' }[e.code];
+      if (a) { e.preventDefault(); this.act(a); }
+    },
+    act(a) {
+      if (phase !== 'play') return;
+      if (this.phase === 'bet') {
+        if (a.startsWith('bet')) { this.base = this.bet = +a.slice(3); sfx.hit(); this.render(); }
+        else if (a === 'deal') this.deal();
+        else if (a === 'cashout') over(this.peak, 'You cashed out with ' + this.chips + ' chips. Most chips: ' + this.peak + '.', 'Cashed out!');
+      } else if (this.phase === 'turn') {
+        if (a === 'hit') { this.player.push(this.draw1()); sfx.hit(); if (this.total(this.player) > 21) this.finish(); else if (this.total(this.player) === 21) this.dealerPlay(); else this.render(); }
+        else if (a === 'stand') this.dealerPlay();
+        else if (a === 'double' && this.player.length === 2 && this.chips >= this.bet) {
+          this.chips -= this.bet; this.bet *= 2; setScore(this.chips); this.player.push(this.draw1()); sfx.hit();
+          if (this.total(this.player) > 21) this.finish(); else this.dealerPlay();
+        }
+      }
+    },
+    deal() {
+      const bet = Math.min(this.base, this.chips);
+      if (bet <= 0) return;
+      this.bet = bet; this.chips -= bet; setScore(this.chips);
+      this.player = [this.draw1(), this.draw1()]; this.dealer = [this.draw1(), this.draw1()];
+      this.phase = 'turn'; this.msg = 'Hit or stand?'; sfx.hit();
+      const pj = this.total(this.player) === 21, dj = this.total(this.dealer) === 21;
+      if (pj || dj) this.finish(); else this.render();
+    },
+    dealerPlay() {
+      this.phase = 'dealer'; this.render();
+      const stepDealer = () => {
+        if (this.total(this.dealer) < 17) { this.dealer.push(this.draw1()); sfx.hit(); this.render(); this.timer = setTimeout(stepDealer, 550); }
+        else this.finish();
+      };
+      this.timer = setTimeout(stepDealer, 550);
+    },
+    finish() {
+      const p = this.total(this.player), d = this.total(this.dealer);
+      const pj = p === 21 && this.player.length === 2, dj = d === 21 && this.dealer.length === 2;
+      let win = 0;
+      if (p > 21) this.msg = 'Bust! You lose ' + this.bet + '.';
+      else if (pj && !dj) { win = this.bet + Math.floor(this.bet * 1.5); this.msg = 'Blackjack! You win ' + Math.floor(this.bet * 1.5) + '.'; }
+      else if (dj && !pj) this.msg = 'Dealer has blackjack. You lose ' + this.bet + '.';
+      else if (d > 21) { win = this.bet * 2; this.msg = 'Dealer busts! You win ' + this.bet + '.'; }
+      else if (p > d) { win = this.bet * 2; this.msg = 'You win ' + this.bet + '!'; }
+      else if (p === d) { win = this.bet; this.msg = 'Push. Your bet comes back.'; }
+      else this.msg = 'Dealer wins. You lose ' + this.bet + '.';
+      this.chips += win; this.peak = Math.max(this.peak, this.chips);
+      if (win > this.bet) sfx.win(); else if (!win) sfx.tone(200, 0.25, 'triangle', 0.06, 120);
+      setScore(this.chips);
+      if (this.peak > (store.get('blackjack') || 0)) { store.set('blackjack', this.peak); $('#best').textContent = this.peak; }
+      this.bet = this.base;
+      this.phase = 'bet'; this.render(true);
+      if (this.chips <= 0) this.timer = setTimeout(() => over(this.peak, 'Out of chips! Most chips you had: ' + this.peak + '.'), 1200);
+    },
+    card(c, hidden) {
+      if (hidden) return '<div class="pc down" aria-label="Hidden card"></div>';
+      return '<div class="pc" style="color:' + c.s[1] + '" aria-label="' + c.r + ' ' + c.s[0] + '"><b>' + c.r + '</b><span>' + c.s[0] + '</span></div>';
+    },
+    render(showAll) {
+      const hide = this.phase === 'turn';
+      const dTot = hide ? this.total([this.dealer[1]]) : this.total(this.dealer);
+      const btn = (a, label, on = true, sel = false) => '<button data-a="' + a + '"' + (on ? '' : ' disabled') + (sel ? ' class="sel"' : '') + '>' + label + '</button>';
+      let controls;
+      if (this.phase === 'bet') {
+        controls = '<div class="row">' + [10, 25, 50].map((v) => btn('bet' + v, 'BET ' + v, this.chips >= v || v === 10, this.base === v)).join('') + '</div>'
+          + '<div class="row">' + btn('deal', 'DEAL', this.chips > 0) + btn('cashout', 'CASH OUT') + '</div>';
+      } else if (this.phase === 'turn') {
+        controls = '<div class="row">' + btn('hit', 'HIT') + btn('stand', 'STAND') + btn('double', 'DOUBLE', this.player.length === 2 && this.chips >= this.bet) + '</div>';
+      } else controls = '<div class="row"><span class="muted">Dealer plays…</span></div>';
+      $('#mem').innerHTML =
+        '<div class="hand"><span class="lbl">DEALER' + (this.dealer.length ? ' · ' + dTot : '') + '</span><div class="cards">'
+        + this.dealer.map((c, i) => this.card(c, hide && i === 0)).join('') + '</div></div>'
+        + '<p class="msg" aria-live="polite">' + this.msg + '</p>'
+        + '<div class="hand"><span class="lbl">YOU' + (this.player.length ? ' · ' + this.total(this.player) : '') + ' · BET ' + this.bet + '</span><div class="cards">'
+        + this.player.map((c) => this.card(c)).join('') + '</div></div>'
+        + controls;
+    },
+    stop() { clearTimeout(this.timer); },
+  };
+
+  const GAMES = { snake, runner, breakout, memory, pong, blocks, invaders, flappy, muncher, blackjack };
   let id = null, game = null, running = false, phase = 'idle', raf = 0, last = 0, ovAction = null;
   const ov = $('#ov'), stage = $('#stage');
 
