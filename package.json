@@ -1,8 +1,0 @@
-{
-  "name": "pocket-arcade",
-  "private": true,
-  "description": "Pocket Arcade. Run `npm start` to preview the site at http://localhost:8000",
-  "scripts": {
-    "start": "npx --yes http-server@14.1.1 . -p 8000 -c-1 -o"
-  }
-}
