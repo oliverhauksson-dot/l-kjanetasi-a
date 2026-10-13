@@ -147,9 +147,8 @@
     game.reset(); setScore(0);
     fit();
     if (!game.dom) game.draw();
-    phase = 'idle';
-    showOverlay(game.title, game.intro, 'Start', play);
     window.scrollTo(0, 0);
+    play(); // Picking a game starts it right away, with no extra Start button.
   }
   function closeGame() {
     running = false; cancelAnimationFrame(raf); phase = 'idle';
@@ -264,6 +263,8 @@
   const release = () => { if (phase === 'play' && game && game.tap && swipeStart && !swipeStart.moved) game.tap(); swipeStart = null; if (phase === 'play' && game && game.press) game.press(false); };
   cv.addEventListener('pointerup', release);
   cv.addEventListener('pointercancel', release);
+  // A game opened from a link starts without a click, so sound is switched on at the first touch or key.
+  ['pointerdown', 'keydown'].forEach((t) => document.addEventListener(t, () => sfx.unlock(), { capture: true }));
   document.addEventListener('visibilitychange', () => { if (document.hidden && game) pause(); });
 
   /* ---------- What game files can use ---------- */
