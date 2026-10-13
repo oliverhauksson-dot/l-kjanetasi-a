@@ -129,7 +129,7 @@
 
   async function openGame(gid) {
     id = gid;
-    try { game = await load(gid); } catch (e) { game = null; alert('Sorry, that game could not load. Check your connection and try again.'); return; }
+    try { game = await load(gid); } catch (e) { game = null; setFull(false); alert('Sorry, that game could not load. Check your connection and try again.'); return; }
     if (id !== gid) return; // Another game was picked while this one was loading.
     showScreen(true);
     screen.style.setProperty('--c', game.color);
@@ -144,8 +144,8 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       stage.style.maxWidth = game.W + 'px';
     }
-    fit();
     game.reset(); setScore(0);
+    fit();
     if (!game.dom) game.draw();
     phase = 'idle';
     showOverlay(game.title, game.intro, 'Start', play);
@@ -162,7 +162,8 @@
 
   $$('[data-game]').forEach((b) => {
     const gid = b.dataset.game;
-    b.addEventListener('click', () => openGame(gid));
+    // Games open in full screen. The browser only allows that straight from a click, so it is asked for here.
+    b.addEventListener('click', () => { setFull(true); openGame(gid); });
     // Start downloading a game as soon as the player shows interest in it.
     const warm = () => load(gid).catch(() => {});
     b.addEventListener('pointerenter', warm, { once: true });
@@ -210,8 +211,8 @@
     paintFull();
     try {
       if (on) {
-        const req = screen.requestFullscreen || screen.webkitRequestFullscreen;
-        if (req) { const p = req.call(screen); if (p && p.catch) p.catch(() => {}); }
+        const root = document.documentElement, req = root.requestFullscreen || root.webkitRequestFullscreen;
+        if (req) { const p = req.call(root); if (p && p.catch) p.catch(() => {}); }
       } else if (fsEl()) {
         const exit = document.exitFullscreen || document.webkitExitFullscreen;
         const p = exit.call(document); if (p && p.catch) p.catch(() => {});
@@ -275,5 +276,5 @@
   refreshMenu();
   // Game pages link here as ?play=<game> so a search visitor lands right in that game.
   const startId = new URLSearchParams(location.search).get('play');
-  if (startId && document.querySelector('[data-game="' + CSS.escape(startId) + '"]')) openGame(startId);
+  if (startId && document.querySelector('[data-game="' + CSS.escape(startId) + '"]')) { setFull(true); openGame(startId); }
 })();
