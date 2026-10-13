@@ -1,13 +1,16 @@
 /* Ski Runner. Loaded on demand by js/arcade.js the first time the game is opened.
    An endless zig-zag slope seen from the side. Each slope ends in a kicker that throws the
-   skier out over the edge; they turn around in the air and land on the next slope below.
+   skier forward over the edge and down onto the next slope, which sticks out a little further.
+   They land, carve a hard turn in a spray of snow, and ski off the other way.
    Positions on a slope are kept as u (how far along it) and h (height above the snow). */
 (() => {
   const { ctx, C, rand, clamp, cached, sfx, setScore, over } = Arcade;
 
-  const LEFT = 26, RIGHT = 374;     // The slopes zig-zag between these two x values.
+  const LEFT = 46, RIGHT = 354;     // Slopes end between these two x values.
+  const OUT = 32;                   // Each new slope starts this far out past the edge above it, so you land on it.
   const DROP = 46;                  // How far below a slope's end the next one starts.
-  const LAND = 34;                  // Where on the new slope a turn jump lands.
+  const LAND = 12;                  // Where on the new slope a turn jump lands.
+  const CARVE = 0.2;                // Seconds the turn on the snow takes after landing.
   const KICK = 20;                  // Length of the kicker ramp at the end of each slope.
   const SNOW = '#e8eef7', LIGHT = '#ffffff', SHADE = '#b9c6dd', DEEP = '#8f9cc0', ROCK = '#5d5180', ROCK2 = '#463b66', ROCK3 = '#2e2645';
 
@@ -19,7 +22,7 @@
     reset() {
       this.t = 0; this.dist = 0; this.score = 0; this.speed = 150;
       this.held = false; this.h = 0; this.vy = 0; this.ground = true;
-      this.turn = null; this.turns = 0; this.spray = []; this.puff = 0;
+      this.turn = null; this.turns = 0; this.spray = []; this.carve = 0;
       this.slopes = [];
       this.addSlope({ x: LEFT, y: 120, d: 1, L: RIGHT - LEFT, slope: 0.3, obs: [] });
       this.fill();
@@ -41,15 +44,16 @@
         const d = -prev.d;
         // Tighter turns: slopes get shorter as you go.
         const want = rand(260 - 90 * k, 348 - 150 * k);
-        const end = clamp(e.x + d * want, LEFT, RIGHT);
-        const s = this.addSlope({ x: e.x, y: e.y + DROP, d, L: Math.abs(end - e.x), slope: 0.3 + 0.16 * k + rand(-0.03, 0.03), obs: [] });
+        const x = e.x - d * OUT, end = clamp(x + d * want, LEFT, RIGHT);
+        const s = this.addSlope({ x, y: e.y + DROP, d, L: Math.abs(end - x), slope: 0.3 + 0.16 * k + rand(-0.03, 0.03), obs: [] });
         this.addObstacles(s, k);
       }
     },
     addObstacles(s, k) {
       // Leave enough room after each obstacle to land and jump again at the speed you'll have by then.
       const v = this.speed + 30;
-      let u = LAND + rand(70 - 40 * k, 120 - 50 * k);
+      // Keep the landing and the carve after it clear.
+      let u = LAND + v * CARVE + rand(60 - 25 * k, 110 - 40 * k);
       while (u < s.L - KICK - 26) {
         const r = Math.random();
         let o;
@@ -98,7 +102,8 @@
           this.h += this.vy * dt;
           if (this.h <= 0) { this.h = 0; this.vy = 0; this.ground = true; this.kick(6, 0.4); }
         }
-        if (this.ground && Math.random() < dt * 40) this.kick(1, 0.5);
+        if (this.carve > 0) { this.carve = Math.max(0, this.carve - dt); this.kick(1, 0.9); }
+        else if (this.ground && Math.random() < dt * 40) this.kick(1, 0.5);
         if (this.u >= s.L) this.startTurn();
         else {
           for (const o of s.obs) {
@@ -125,12 +130,12 @@
     },
     startTurn() {
       const from = this.pos(), cur = this.slopes[this.seg], next = this.slopes[this.seg + 1], to = this.at(next, LAND);
-      // The flight curves out past the edge and back in under it, like a real jump turn.
+      // Off the ramp, a little hop up, then forward and down onto the next slope.
       // Faster skiing makes it a little shorter, so the next slope comes at you quicker.
       this.turn = {
-        t: 0, T: clamp(0.72 - (this.speed - 150) * 0.0012, 0.5, 0.72), d: next.d,
-        fx: from.x, fy: from.y, cx: from.x + cur.d * 64, cy: from.y - 58, tx: to.x, ty: to.y,
-        a0: Math.atan(cur.slope), a1: Math.atan(next.slope), x: from.x, y: from.y,
+        t: 0, T: clamp(0.62 - (this.speed - 150) * 0.001, 0.45, 0.62), d: cur.d,
+        fx: from.x, fy: from.y, cx: from.x + cur.d * 14, cy: from.y - 34, tx: to.x, ty: to.y,
+        a0: Math.atan(cur.slope), a1: -Math.atan(next.slope), x: from.x, y: from.y,
       };
       this.h = 0; this.vy = 0; this.ground = true;
       sfx.tone(520, 0.18, 'square', 0.04, 1040);
@@ -139,13 +144,13 @@
       const tr = this.turn;
       tr.t += dt;
       const p = Math.min(1, tr.t / tr.T);
-      // A curve from the ramp, out over the edge, and back down onto the next slope.
+      // Always moving forward, so the jump never looks like it hits something.
       const q = 1 - p;
       tr.x = q * q * tr.fx + 2 * q * p * tr.cx + p * p * tr.tx;
       tr.y = q * q * tr.fy + 2 * q * p * tr.cy + p * p * tr.ty;
       if (p >= 1) {
-        this.turn = null; this.seg++; this.u = LAND; this.turns++;
-        sfx.hit(); this.kick(12, 0.6);
+        this.turn = null; this.seg++; this.u = LAND; this.turns++; this.carve = CARVE;
+        sfx.hit(); this.kick(14, 0.7);
         // Forget slopes far above the screen and build more below.
         if (this.seg > 2) { this.slopes.shift(); this.seg--; }
         this.fill();
@@ -290,12 +295,17 @@
       let face, ski, tuck;
       if (this.turn) {
         const q = Math.min(1, this.turn.t / this.turn.T);
-        // Turn around in the air: the skier swings from facing one way to the other,
-        // with the ski tips lifting off the ramp and dropping to match the new slope.
-        face = -this.turn.d * Math.cos(Math.PI * q);
-        if (Math.abs(face) < 0.2) face = face < 0 ? -0.2 : 0.2;
-        ski = this.turn.a0 + (this.turn.a1 - this.turn.a0) * q - 0.6 * Math.sin(Math.PI * q);
+        // Still facing forward in the air: tips up off the ramp, then down to meet the slope below.
+        face = this.turn.d;
+        ski = this.turn.a0 + (this.turn.a1 - this.turn.a0) * q - 0.45 * Math.sin(Math.PI * q);
         tuck = 5;
+      } else if (this.carve > 0) {
+        // Carving round on the snow: the skier swings from the old direction to the new one.
+        const s = this.slopes[this.seg], q = 1 - this.carve / CARVE;
+        face = -s.d * Math.cos(Math.PI * q);
+        if (Math.abs(face) < 0.25) face = face < 0 ? -0.25 : 0.25;
+        ski = Math.atan(s.slope) * Math.sign(face) * s.d;
+        tuck = 6;
       } else {
         const s = this.slopes[this.seg];
         face = s.d;
