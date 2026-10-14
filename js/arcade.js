@@ -103,6 +103,7 @@
   }
   function play() {
     sfx.unlock();
+    if (phase !== 'paused' && window.track) window.track('game_start', { game_name: id });
     ov.hidden = true; phase = 'play';
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     if (game.dom) return;
@@ -119,6 +120,7 @@
     const prev = store.get(id);
     const better = prev === null || (game.lowerWins ? score < prev : score > prev);
     if (better && (score > 0 || game.lowerWins)) store.set(id, score);
+    if (window.track) window.track('game_over', { game_name: id, score });
     bestEl.textContent = fmtBest(id);
     const line = msg || (game.label + ': ' + score + '.');
     if (title) sfx.win(); else sfx.lose();

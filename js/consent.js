@@ -54,6 +54,7 @@
       var yes = e.target.closest(".yes"), no = e.target.closest(".no");
       if (!yes && !no) return;
       save(yes ? "yes" : "no");
+      document.dispatchEvent(new CustomEvent("pa-cookies", { detail: yes ? "yes" : "no" })); // js/stats.js listens for this.
       if (no) ads.requestNonPersonalizedAds = 1;
       pop.remove();
       release();
