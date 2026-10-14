@@ -89,8 +89,68 @@
 
   function showOverlay(title, text, btn, action) {
     $('#ovt').textContent = title; $('#ovp').textContent = text; $('#ovb').textContent = btn;
-    ovAction = action; ov.hidden = false;
+    ovAction = action; ov.hidden = false; board.hide();
   }
+
+  /* ---------- Leaderboard ---------- */
+  // Top 10 for every game, shown under the game screen at game over. The scores are kept by the Cloudflare Worker in
+  // leaderboard/worker.js; if it can't be reached (or you run the site on your own computer), the box just stays hidden.
+  const board = {
+    el: $('#lb'), ask: 0,
+    MIN: { blackjack: 101, memory: 8 }, // Scores below this can't go on the board (everyone starts Blackjack with 100 coins).
+    hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
+    async show(gid, g, score) {
+      const ask = ++this.ask;
+      let scores;
+      try {
+        const r = await fetch('/api/scores?game=' + gid);
+        if (!r.ok) return;
+        scores = (await r.json()).scores;
+      } catch (e) { return; }
+      if (ask !== this.ask || !Array.isArray(scores)) return;
+      const beats = (s) => (g.lowerWins ? score < s.score : score > s.score);
+      const fits = score >= (this.MIN[gid] ?? 1) && (scores.length < 10 || beats(scores[scores.length - 1]));
+      this.render(scores, null);
+      if (fits) this.askName(gid, score, ask);
+    },
+    render(scores, mine) {
+      const el = this.el; el.textContent = ''; el.hidden = false;
+      const h = document.createElement('h4'); h.textContent = 'Top 10'; el.appendChild(h);
+      if (!scores.length) { const p = document.createElement('p'); p.textContent = 'No scores yet. Be the first!'; el.appendChild(p); }
+      const ol = document.createElement('ol');
+      scores.forEach((s, i) => {
+        const li = document.createElement('li');
+        if (i + 1 === mine) li.className = 'me';
+        [String(i + 1), s.name, String(s.score)].forEach((t) => { const b = document.createElement('span'); b.textContent = t; li.appendChild(b); });
+        ol.appendChild(li);
+      });
+      el.appendChild(ol);
+    },
+    askName(gid, score, ask) {
+      const row = document.createElement('div'); row.className = 'lbname';
+      const input = document.createElement('input');
+      input.maxLength = 12; input.placeholder = 'YOUR NAME'; input.autocomplete = 'nickname'; input.setAttribute('aria-label', 'Your name for the leaderboard');
+      try { input.value = localStorage.getItem('arcade:name') || ''; } catch (e) {}
+      const send = document.createElement('button'); send.textContent = 'Save score';
+      const msg = document.createElement('p');
+      row.append(input, send); this.el.insertBefore(row, this.el.querySelector('ol')); this.el.insertBefore(msg, row.nextSibling);
+      const submit = async () => {
+        const name = input.value.toUpperCase().replace(/[^A-Z0-9 _-]/g, '').trim();
+        if (!name) { msg.textContent = 'Type a name first (A-Z, 0-9).'; input.focus(); return; }
+        try { localStorage.setItem('arcade:name', name); } catch (e) {}
+        send.disabled = true; msg.textContent = 'Saving...';
+        try {
+          const r = await fetch('/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ game: gid, name, score }) });
+          const data = await r.json();
+          if (ask !== this.ask) return;
+          if (!r.ok) { msg.textContent = data.error || 'Could not save. Try again.'; send.disabled = false; return; }
+          this.render(data.scores, data.rank);
+        } catch (e) { if (ask === this.ask) { msg.textContent = 'Could not save. Try again.'; send.disabled = false; } }
+      };
+      send.addEventListener('click', submit);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    },
+  };
   $('#ovb').addEventListener('click', () => ovAction && ovAction());
 
   // Physics runs in small steps so a fast ball can't skip through a paddle or brick when a phone drops frames.
@@ -104,7 +164,7 @@
   function play() {
     sfx.unlock();
     if (phase !== 'paused' && window.track) window.track('game_start', { game_name: id });
-    ov.hidden = true; phase = 'play';
+    ov.hidden = true; phase = 'play'; board.hide();
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     if (game.dom) return;
     running = true; last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
@@ -125,6 +185,7 @@
     const line = msg || (game.label + ': ' + score + '.');
     if (title) sfx.win(); else sfx.lose();
     showOverlay(title || 'Game over', line + (better && prev !== null ? ' New best!' : ''), 'Play again', startGame);
+    board.show(id, game, score);
   }
 
   function showScreen(gameOpen) { home.hidden = gameOpen; screen.hidden = !gameOpen; }
@@ -232,6 +293,7 @@
   document.addEventListener('keydown', (e) => {
     if (screen.hidden) return;
     const onButton = document.activeElement && document.activeElement.tagName === 'BUTTON';
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return; // Typing a leaderboard name.
     if (e.code === 'Escape') { closeGame(); return; }
     if (phase === 'play') {
       if (e.code === 'KeyP') { pause(); return; }
