@@ -267,15 +267,18 @@
     document.documentElement.classList.toggle('lock', on);
     fit();
   }
+  function askFull() {
+    const root = document.documentElement, req = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (navigator.userActivation && !navigator.userActivation.isActive) return; // No tap yet, so the browser would say no.
+    if (req && !fsEl()) { try { const p = req.call(root); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+  }
   function setFull(on) {
     if (on === isFull()) return;
     screen.classList.toggle('full', on);
     paintFull();
     try {
-      if (on) {
-        const root = document.documentElement, req = root.requestFullscreen || root.webkitRequestFullscreen;
-        if (req) { const p = req.call(root); if (p && p.catch) p.catch(() => {}); }
-      } else if (fsEl()) {
+      if (on) askFull();
+      else if (fsEl()) {
         const exit = document.exitFullscreen || document.webkitExitFullscreen;
         const p = exit.call(document); if (p && p.catch) p.catch(() => {});
       }
@@ -329,6 +332,9 @@
   cv.addEventListener('pointercancel', release);
   // A game opened from a link starts without a click, so sound is switched on at the first touch or key.
   ['pointerdown', 'keydown'].forEach((t) => document.addEventListener(t, () => sfx.unlock(), { capture: true }));
+  // A game opened from a link (like the Play button on a game's own page) can only fill the window at first,
+  // because browsers allow real full screen only right after a tap. So the first tap or key in the game asks for it.
+  ['pointerup', 'keydown'].forEach((t) => document.addEventListener(t, (e) => { if (e.key !== 'Escape' && isFull() && !(e.target.closest && e.target.closest('button'))) askFull(); }, { capture: true }));
   document.addEventListener('visibilitychange', () => { if (document.hidden && game) pause(); });
 
   /* ---------- What game files can use ---------- */
