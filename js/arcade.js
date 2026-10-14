@@ -82,7 +82,7 @@
 
   const fmtBest = (gid) => { const v = store.get(gid); return v === null ? '—' : String(v); };
   function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); }
-  function setScore(v) { if (phase === 'play' && v > lastScore) sfx.point(); lastScore = v; scoreEl.textContent = v; }
+  function setScore(v) { if (phase === 'play' && v > lastScore && !game.quietScore) sfx.point(); lastScore = v; scoreEl.textContent = v; }
   function paintSound() { $$('.sound').forEach((b) => { b.textContent = sfx.on ? 'SOUND ON' : 'SOUND OFF'; b.setAttribute('aria-pressed', String(sfx.on)); }); }
   $$('.sound').forEach((b) => b.addEventListener('click', () => { sfx.on = !sfx.on; store.set('sound', sfx.on ? 1 : 0); sfx.unlock(); paintSound(); b.blur(); }));
   paintSound();

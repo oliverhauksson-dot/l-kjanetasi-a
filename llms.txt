@@ -5,7 +5,7 @@
 ## Games
 
 - [Snake](https://pocketarcade.net/games/snake.html): Snake is the classic arcade game where you steer a growing snake around the board. Every fruit you eat makes the snake longer, so the board gets more crowded the better you do.
-- [Runner](https://pocketarcade.net/games/runner.html): Runner is an endless running game. Your runner moves on its own and you jump over blocks as the speed keeps rising. After 400 m, low-flying birds join in.
+- [Ski Runner](https://pocketarcade.net/games/runner.html): Ski Runner is an endless skiing game. Your skier heads down a zig-zag mountain, jumping icebergs and trees, and flies off a ramp at the end of every slope to land on the one below. After 400 m, snowballs fall from the sky.
 - [Breakout](https://pocketarcade.net/games/breakout.html): Breakout is a brick breaker game. Bounce the ball off your paddle to smash a wall of bricks. Clear the wall and a new, faster one appears. You get 3 balls.
 - [Memory](https://pocketarcade.net/games/memory.html): Memory is a card matching game. Flip two cards at a time and try to find all 8 matching pairs in as few moves as possible.
 - [Pong](https://pocketarcade.net/games/pong.html): Pong is the classic paddle game. You are the left paddle and play against the computer. Score as many points as you can before the computer reaches 5.
