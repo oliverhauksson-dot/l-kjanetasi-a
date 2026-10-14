@@ -417,16 +417,19 @@
       } else {
         // Icebergs: jagged blue-white ice with a shaded side and a shine.
         const bergs = o.kind === 'bergs' ? [[-o.w / 2 + 11, 11, o.h], [o.w / 2 - 11, 11, o.h - 4]] : [[0, o.w / 2, o.h]];
+        // Each iceberg stands on the snow right under it, with its base following the slope
+        // and sunk a little into the snow, so neither of a pair floats.
+        const ground = (px) => s.y + (px - s.x) * s.d * s.slope + 4;
         for (const [dx, hw, hh] of bergs) {
-          const cx = x + dx;
+          const cx = x + dx, y = ground(cx), yl = ground(cx - hw - 1), yr = ground(cx + hw + 1);
           ctx.fillStyle = '#4f8fb8';
-          ctx.beginPath(); ctx.moveTo(cx - hw - 1, y); ctx.lineTo(cx - hw * 0.7, y - hh * 0.6); ctx.lineTo(cx - hw * 0.3, y - hh - 1); ctx.lineTo(cx + hw * 0.1, y - hh * 0.75);
-          ctx.lineTo(cx + hw * 0.45, y - hh * 0.95); ctx.lineTo(cx + hw + 1, y); ctx.closePath(); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(cx - hw - 1, yl); ctx.lineTo(cx - hw * 0.7, y - hh * 0.6); ctx.lineTo(cx - hw * 0.3, y - hh - 1); ctx.lineTo(cx + hw * 0.1, y - hh * 0.75);
+          ctx.lineTo(cx + hw * 0.45, y - hh * 0.95); ctx.lineTo(cx + hw + 1, yr); ctx.closePath(); ctx.fill();
           ctx.fillStyle = '#bfeeff';
-          ctx.beginPath(); ctx.moveTo(cx - hw, y); ctx.lineTo(cx - hw * 0.7, y - hh * 0.6 + 1); ctx.lineTo(cx - hw * 0.3, y - hh); ctx.lineTo(cx + hw * 0.1, y - hh * 0.75 + 1);
-          ctx.lineTo(cx + hw * 0.45, y - hh * 0.95 + 1); ctx.lineTo(cx + hw, y); ctx.closePath(); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(cx - hw, yl); ctx.lineTo(cx - hw * 0.7, y - hh * 0.6 + 1); ctx.lineTo(cx - hw * 0.3, y - hh); ctx.lineTo(cx + hw * 0.1, y - hh * 0.75 + 1);
+          ctx.lineTo(cx + hw * 0.45, y - hh * 0.95 + 1); ctx.lineTo(cx + hw, yr); ctx.closePath(); ctx.fill();
           ctx.fillStyle = '#7fc8ea';
-          ctx.beginPath(); ctx.moveTo(cx + hw * 0.1, y - hh * 0.75 + 1); ctx.lineTo(cx + hw * 0.45, y - hh * 0.95 + 1); ctx.lineTo(cx + hw, y); ctx.lineTo(cx, y); ctx.closePath(); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(cx + hw * 0.1, y - hh * 0.75 + 1); ctx.lineTo(cx + hw * 0.45, y - hh * 0.95 + 1); ctx.lineTo(cx + hw, yr); ctx.lineTo(cx, y); ctx.closePath(); ctx.fill();
           ctx.fillStyle = LIGHT; ctx.fillRect(Math.round(cx - hw * 0.45), Math.round(y - hh * 0.7), 2, Math.max(3, Math.round(hh * 0.4)));
           ctx.fillRect(Math.round(cx - hw * 0.3), Math.round(y - hh), 2, 2);
         }
