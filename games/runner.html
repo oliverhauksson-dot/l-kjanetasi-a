@@ -1,12 +1,13 @@
+---
+---
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
-<meta name="referrer" content="strict-origin-when-cross-origin">
+{% include head-top.html %}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Play Ski Runner Online Free · Pocket Arcade</title>
 <meta name="description" content="Play Ski Runner free in your browser. Ski down an endless zig-zag mountain, jump the icebergs and trees, and fly off a ramp at every turn. It gets faster, steeper and tighter the further you go, and after 400 m snowballs fall from the sky. No download, works on phones and computers.">
+<meta name="robots" content="index, follow, max-image-preview:large">
 <meta property="og:site_name" content="Pocket Arcade">
 <meta property="og:title" content="Play Ski Runner Online Free · Pocket Arcade">
 <meta property="og:description" content="Play Ski Runner free in your browser. Ski down an endless zig-zag mountain, jump the icebergs and trees, and fly off a ramp at every turn. It gets faster, steeper and tighter the further you go, and after 400 m snowballs fall from the sky. No download, works on phones and computers.">
@@ -14,9 +15,7 @@
 <meta property="og:url" content="https://pocketarcade.net/games/runner.html">
 <meta property="og:image" content="https://pocketarcade.net/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2315111f'/%3E%3Crect x='3' y='4' width='10' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='7' width='12' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='12' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='5' y='8' width='2' height='1' fill='%2315111f'/%3E%3Crect x='9' y='8' width='2' height='1' fill='%2315111f'/%3E%3C/svg%3E">
-<link rel="preload" href="../fonts/press-start-2p.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../fonts/fonts.css">
+{% include head-end.html root="../" %}
 <link rel="stylesheet" href="../page.css">
 <link rel="canonical" href="https://pocketarcade.net/games/runner.html">
 <script type="application/ld+json">
@@ -27,11 +26,18 @@
     "name": "Ski Runner",
     "url": "https://pocketarcade.net/games/runner.html",
     "description": "Ski down an endless zig-zag mountain, jump the icebergs and trees, and fly off a ramp at every turn. It gets faster, steeper and tighter the further you go, and after 400 m snowballs fall from the sky.",
-    "genre": "Arcade",
+    "genre": ["Arcade", "Skiing", "Endless runner"],
     "gamePlatform": "Web browser",
     "applicationCategory": "Game",
     "operatingSystem": "Any",
     "isAccessibleForFree": true,
+    "image": "https://pocketarcade.net/og-image.png",
+    "inLanguage": "en",
+    "playMode": "SinglePlayer",
+    "numberOfPlayers": {"@type": "QuantitativeValue", "value": 1},
+    "keywords": "Ski Runner, ski game, skiing game online, endless runner, jump game, free, browser game, no download",
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+    "potentialAction": {"@type": "PlayAction", "target": "https://pocketarcade.net/?play=runner"},
     "isPartOf": {
       "@type": "WebSite",
       "name": "Pocket Arcade",
@@ -65,9 +71,24 @@
 <h1>Ski Runner</h1>
 <p>Ski down an endless zig-zag mountain, jump the icebergs and trees, and fly off a ramp at every turn. It gets faster, steeper and tighter the further you go, and after 400 m snowballs fall from the sky. Free to play in your browser, with no download and no account.</p>
 <a class="play" href="../?play=runner">▶ PLAY SKI RUNNER</a>
+<h2>About Ski Runner</h2>
+<p>Ski Runner is an endless skiing game. Your skier heads down a zig-zag mountain on their own, and every slope is different. You jump the icebergs and trees, and at the end of each slope you fly off a ramp, turn round in the air and land on the slope below. After 400 m, snowballs start falling from the sky.</p>
+<ul>
+  <li>Free to play, with no download and no account.</li>
+  <li>Works on phones, tablets and computers.</li>
+  <li>Your best score is saved in your browser.</li>
+</ul>
+<h2>Tips</h2>
+<ul>
+  <li>Tap or press quickly for a short hop, and hold for a higher jump.</li>
+  <li>Watch for a shadow on the snow: that's where a falling snowball will land.</li>
+  <li>Trees and wide icebergs need a longer jump.</li>
+  <li>Watch further ahead as the game speeds up, so you can time jumps.</li>
+  <li>Press P to pause.</li>
+</ul>
 <h2>How to play</h2>
 <ul>
-  <li>Your skier goes down the slope on its own. Jump to clear the icebergs and trees.</li>
+  <li>Your skier goes down the slope on their own. Jump to clear the icebergs and trees.</li>
   <li>Hold jump to go higher. Trees and wide icebergs need a longer jump.</li>
   <li>At the end of each slope you fly off the ramp, turn round in the air, and land on the next slope going the other way.</li>
   <li>The further you go, the faster and steeper it gets, the slopes get shorter, and snowballs start rolling down the slope ahead of you.</li>

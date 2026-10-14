@@ -14,7 +14,7 @@
     hint: '<kbd>←</kbd><kbd>→</kbd> move, <kbd>↑</kbd> turn, <kbd>↓</kbd> drop faster, <kbd>Space</kbd> drop. On a phone: drag to move, tap to turn',
     reset() {
       this.board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-      this.score = 0; this.lines = 0; this.level = 1; this.acc = 0; this.next = this.pick(); this.spawn();
+      this.score = 0; this.lines = 0; this.level = 1; this.acc = 0; this.dead = false; this.next = this.pick(); this.spawn();
     },
     pick() { const [m, c] = PIECES[Math.floor(Math.random() * PIECES.length)]; return { m, c }; },
     spawn() {
@@ -53,7 +53,7 @@
       this.spawn();
     },
     key(e, down) {
-      if (!down) return;
+      if (!down || this.dead) return;
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.move(-1);
       else if (e.code === 'ArrowRight' || e.code === 'KeyD') this.move(1);
       else if ((e.code === 'ArrowUp' || e.code === 'KeyW') && !e.repeat) this.turn();
@@ -61,16 +61,18 @@
       else if (e.code === 'Space' && !e.repeat) { let n = 0; while (this.fall()) n++; this.score += n * 2; setScore(this.score); this.acc = 0; }
     },
     swipe(dx, dy) {
+      if (this.dead) return;
       if (Math.abs(dx) > Math.abs(dy)) this.move(Math.sign(dx));
       else if (dy > 0) { this.fall(); this.acc = 0; }
     },
-    tap() { this.turn(); },
+    tap() { if (!this.dead) this.turn(); },
     update(dt) {
-      if (this.dead) return over(this.score, 'The stack hit the top. ' + this.lines + ' rows cleared, score ' + this.score + '.');
-      this.acc += dt;
-      const step = Math.max(0.1, 0.8 - (this.level - 1) * 0.07);
-      while (this.acc >= step) { this.acc -= step; this.fall(); }
-      if (this.dead) return over(this.score, 'The stack hit the top. ' + this.lines + ' rows cleared, score ' + this.score + '.');
+      if (!this.dead) {
+        this.acc += dt;
+        const step = Math.max(0.1, 0.8 - (this.level - 1) * 0.07);
+        while (this.acc >= step && !this.dead) { this.acc -= step; this.fall(); }
+      }
+      if (this.dead) over(this.score, 'The stack hit the top. ' + this.lines + ' rows cleared, score ' + this.score + '.');
     },
     cell(x, y, col, s = CS) {
       ctx.fillStyle = col; ctx.fillRect(x + 1, y + 1, s - 2, s - 2);
