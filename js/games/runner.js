@@ -2,17 +2,17 @@
    An endless zig-zag slope seen from the side. Each slope ends in a kicker that throws the
    skier forward over the edge and down onto the next slope, which sticks out a little further.
    They turn round in the air on the way down and land already heading the other way.
-   After 500 m, snowballs start dropping out of the sky.
+   After 400 m, snowballs start dropping out of the sky.
    Positions on a slope are kept as u (how far along it) and h (height above the snow). */
 (() => {
   const { ctx, C, rand, clamp, cached, sfx, setScore, over } = Arcade;
 
   const LEFT = 46, RIGHT = 354;     // Slopes end between these two x values.
-  const OUT = 32;                   // Each new slope starts this far out past the edge above it, so you land on it.
-  const DROP = 46;                  // How far below a slope's end the next one starts.
+  // Each new slope starts a little way out past the edge above it (so you land on it) and a little
+  // way below it. Both distances are random, see fill().
   const LAND = 12;                  // Where on the new slope a turn jump lands.
   const CARVE = 0.12;               // Seconds of extra snow spray after landing a turn.
-  const FALLS = 5000;               // Distance (500 m) after which snowballs fall from the sky.
+  const FALLS = 4000;               // Distance (400 m) after which snowballs fall from the sky.
   const KICK = 20;                  // Length of the kicker ramp at the end of each slope.
   const SNOW = '#e8eef7', LIGHT = '#ffffff', SHADE = '#b9c6dd', DEEP = '#8f9cc0', ROCK = '#5d5180', ROCK2 = '#463b66', ROCK3 = '#2e2645';
 
@@ -89,23 +89,23 @@
   const ski = {
     W: 400, H: 520, color: 'var(--cyan)', title: 'Ski Runner', label: 'Distance',
     quietScore: true, // The distance goes up every metre, so it gets its own chime every 100 m instead of a beep.
-    intro: 'Ski down the endless mountain. Jump the icebergs and trees. At the end of each slope you fly off the ramp and land on the next one. After 500 m, watch out for snowballs falling from the sky. It keeps getting faster, steeper and tighter.',
+    intro: 'Ski down the endless mountain. Jump the icebergs and trees. At the end of each slope you fly off the ramp and land on the next one. After 400 m, watch out for snowballs falling from the sky. It keeps getting faster, steeper and tighter.',
     hint: '<kbd>Space</kbd> <kbd>↑</kbd> or tap to jump (hold for a higher jump), <kbd>P</kbd> to pause',
 
     reset() {
-      this.t = 0; this.dist = 0; this.score = 0; this.speed = 150;
+      this.t = 0; this.dist = 0; this.score = 0; this.speed = 160;
       this.held = false; this.h = 0; this.vy = 0; this.ground = true;
       this.turn = null; this.turns = 0; this.spray = []; this.carve = 0; this.falls = []; this.nextFall = 2;
       this.slopes = [];
       this.addSlope({ x: LEFT, y: 120, d: 1, L: RIGHT - LEFT, slope: 0.3, obs: [] });
-      this.fill();
       this.seg = 0; this.u = 30;
+      this.fill();
       this.camY = this.pos().y - this.H * 0.36;
       snd.restart();
     },
 
     /* ---------- The mountain ---------- */
-    level() { return clamp(this.dist / 14000, 0, 1); }, // 0 at the top, 1 after 1400 m.
+    level() { return clamp(this.dist / 12000, 0, 1); }, // 0 at the top, 1 after 1200 m.
     endOf(s) { return { x: s.x + s.d * s.L, y: s.y + s.L * s.slope }; },
     addSlope(s) {
       // A ragged rock face under each slope, fixed when the slope is made so it doesn't flicker.
@@ -113,30 +113,37 @@
       this.slopes.push(s); return s;
     },
     fill() {
-      while (this.slopes.length < 5) {
+      // Build well ahead (6 slopes below you), so new slopes are ready long before they come on screen.
+      while (this.slopes.length - this.seg < 7) {
         const prev = this.slopes[this.slopes.length - 1], e = this.endOf(prev), k = this.level();
         const d = -prev.d;
-        // Tighter turns: slopes get shorter as you go.
-        const want = rand(260 - 90 * k, 348 - 150 * k);
-        const x = e.x - d * OUT, end = clamp(x + d * want, LEFT, RIGHT);
-        const s = this.addSlope({ x, y: e.y + DROP, d, L: Math.abs(end - x), slope: 0.3 + 0.16 * k + rand(-0.03, 0.03), obs: [] });
+        // Every slope is different: short, medium or long, gentle or steep, small or big drop.
+        // Tighter turns as you go: slopes get shorter on average.
+        const kind = Math.random();
+        const want = kind < 0.25 ? rand(150, 210) : kind < 0.8 ? rand(230 - 60 * k, 320 - 90 * k) : rand(330 - 60 * k, 360);
+        const x = e.x - d * rand(26, 44), end = clamp(x + d * want, LEFT, RIGHT);
+        const s = this.addSlope({ x, y: e.y + rand(34, 84), d, L: Math.abs(end - x), slope: rand(0.22, 0.4) + 0.14 * k, obs: [] });
         this.addObstacles(s, k);
       }
     },
     addObstacles(s, k) {
-      // Leave enough room after each obstacle to land and jump again at the speed you'll have by then.
-      const v = this.speed + 30;
+      // Leave enough room after each obstacle to land and jump again at the speed you'll have by then
+      // (slopes are built well ahead, so allow for some speeding up on the way).
+      const v = this.speed + 50;
+      // Each slope gets its own mix: a forest, an ice field, a busy run, or now and then a clear one.
+      const mix = Math.random(), forest = mix < 0.22 && k > 0.05, ice = !forest && mix < 0.44, clear = mix > 0.93;
+      if (clear) return;
       // Keep the landing and the carve after it clear.
-      let u = LAND + v * CARVE + rand(60 - 25 * k, 110 - 40 * k);
+      let u = LAND + v * CARVE + rand(55 - 25 * k, 110 - 40 * k);
       while (u < s.L - KICK - 26) {
         const r = Math.random();
         let o;
-        if (k > 0.45 && r < 0.18) o = { kind: 'ball', w: 18, h: 18, roll: rand(50, 80) };
-        else if (k > 0.25 && r < 0.38) o = { kind: 'bergs', w: 44, h: 17 };
-        else if (k > 0.1 && r < 0.62) o = { kind: 'tree', w: 20, h: 40 };
+        if (k > 0.4 && r < 0.16) o = { kind: 'ball', w: 18, h: 18, roll: rand(25, 50) };
+        else if ((ice && r < 0.7) || (k > 0.2 && r < 0.36)) o = Math.random() < 0.5 && k > 0.15 ? { kind: 'bergs', w: 44, h: 17 } : { kind: 'berg', w: Math.round(rand(16, 26)), h: Math.round(rand(13, 20)) };
+        else if ((forest && r < 0.85) || (k > 0.08 && r < 0.6)) o = { kind: 'tree', w: 20, h: Math.round(rand(36, 44)) };
         else o = { kind: 'berg', w: Math.round(rand(16, 24)), h: Math.round(rand(13, 19)) };
         o.u = u; s.obs.push(o);
-        u += v * rand(0.62 - 0.12 * k, 1.25 - 0.3 * k) + o.w + 30;
+        u += v * rand(0.56 - 0.12 * k, 1.2 - 0.3 * k) + o.w + 30;
         // Sometimes a second obstacle right behind the first, so one long jump clears both.
         if (k > 0.35 && Math.random() < 0.25 && u < s.L - KICK - 60) { s.obs.push({ kind: 'berg', w: 18, h: 14, u: o.u + o.w / 2 + 34 }); u += 40; }
       }
@@ -161,11 +168,14 @@
     /* ---------- Game loop ---------- */
     update(dt) {
       this.t += dt;
-      this.speed = Math.min(340, 150 + this.dist * 0.016);
+      this.speed = Math.min(360, 160 + this.dist * 0.017);
       this.dist += this.speed * dt;
 
-      // Rolling snowballs come up the slope toward you.
-      for (const s of this.slopes) for (const o of s.obs) if (o.roll) o.u -= o.roll * dt;
+      // Snowballs on your slope roll slowly down it, ahead of you, and drop off the ramp at the end.
+      // Only the slope you are on moves, so nothing rolls into the spot where you land after a jump.
+      const here = this.slopes[this.turn ? this.seg + 1 : this.seg];
+      for (const o of here.obs) if (o.roll) o.u += o.roll * dt;
+      here.obs = here.obs.filter((o) => o.u < here.L + 10);
 
       if (this.turn) this.updateTurn(dt);
       else {
@@ -229,7 +239,7 @@
         if (f.y + 9 >= ground) {
           // It lands and keeps rolling toward you.
           f.done = true; snd.plop();
-          f.s.obs.push({ kind: 'ball', w: 18, h: 18, roll: rand(30, 60), u: f.u });
+          f.s.obs.push({ kind: 'ball', w: 18, h: 18, roll: rand(25, 50), u: f.u });
           const p = this.at(f.s, f.u);
           for (let i = 0; i < 10; i++) this.spray.push({ x: p.x, y: p.y - 2, vx: rand(-70, 70), vy: -rand(40, 120), life: rand(0.25, 0.5) });
         }
@@ -411,7 +421,7 @@
       } else if (o.kind === 'ball') {
         const r = o.h / 2;
         ctx.fillStyle = SNOW; ctx.beginPath(); ctx.arc(x, y - r, r, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = SHADE; const a = -o.u / r * s.d;
+        ctx.fillStyle = SHADE; const a = o.u / r * s.d;
         ctx.fillRect(x + Math.cos(a) * r * 0.5 - 2, y - r + Math.sin(a) * r * 0.5 - 2, 4, 4);
         ctx.fillRect(x - Math.cos(a) * r * 0.5 - 2, y - r - Math.sin(a) * r * 0.5 - 2, 4, 4);
       } else {
