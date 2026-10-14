@@ -104,6 +104,31 @@ header.marquee { display: grid; gap: 10px; text-align: left; }
 }
 .ov button:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.45); }
 
+/* Leaderboard under the game screen, shown at game over. */
+.lb {
+  width: 100%; min-width: 0; max-width: 420px; margin: 0 auto; display: grid; gap: 10px; text-align: center;
+  background: var(--panel); border: 2px solid var(--line); border-radius: 6px; padding: 14px;
+}
+.lb h4 { font: 11px/1 var(--display); margin: 0; color: var(--muted); letter-spacing: 1px; }
+.lb p { color: var(--muted); font-size: 13px; margin: 0; }
+.lb ol { list-style: none; margin: 0; padding: 0; text-align: left; }
+.lb li { display: grid; grid-template-columns: 2.5ch 1fr auto; gap: 8px; padding: 2px 6px; border-radius: 3px; }
+.lb li:nth-child(-n+3) span:first-child { color: var(--amber); }
+.lb li.me { background: var(--c); color: #15111f; }
+.lb li.me span:first-child { color: inherit; }
+.lbname { display: flex; gap: 8px; }
+.lbname input {
+  flex: 1; width: 0; min-width: 0; font: 12px/1 var(--display); text-transform: uppercase; color: var(--ink);
+  background: var(--panel); border: 2px solid var(--line); border-radius: 4px; padding: 10px 8px;
+}
+.lbname input:focus-visible { outline: 3px solid var(--amber); outline-offset: 1px; }
+.lbname button {
+  font: 10px/1 var(--display); color: #15111f; background: var(--c); border: 0;
+  border-radius: 4px; padding: 10px 12px; cursor: pointer;
+}
+.lbname button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.lbname button:disabled { opacity: .6; cursor: default; }
+
 .mem { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 14px; aspect-ratio: 1; }
 .mc { all: unset; position: relative; cursor: pointer; perspective: 600px; border-radius: 6px; }
 .mc:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
