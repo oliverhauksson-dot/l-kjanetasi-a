@@ -1,12 +1,13 @@
+---
+---
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://*.googlesyndication.com https://*.google.com https://*.googleadservices.com https://*.googletagservices.com https://*.doubleclick.net https://*.adtrafficquality.google https://*.gstatic.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src https:; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
-<meta name="referrer" content="strict-origin-when-cross-origin">
+{% include head-top.html %}
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pocket Arcade: Free Retro Games to Play Online</title>
 <meta name="description" content="Play 10 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher and Blackjack. No download, works on phones and computers.">
+<meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="theme-color" content="#15111f">
 <meta property="og:site_name" content="Pocket Arcade">
 <meta property="og:title" content="Pocket Arcade: Free Retro Games to Play Online">
@@ -21,24 +22,138 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "Pocket Arcade",
-  "url": "https://pocketarcade.net/",
-  "description": "Play 10 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher and Blackjack."
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://pocketarcade.net/#website",
+      "name": "Pocket Arcade",
+      "url": "https://pocketarcade.net/",
+      "inLanguage": "en",
+      "description": "Play 10 free retro games in your browser: Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher and Blackjack."
+    },
+    {
+      "@type": "ItemList",
+      "name": "Games on Pocket Arcade",
+      "numberOfItems": 10,
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "url": "https://pocketarcade.net/games/snake.html",
+          "name": "Snake"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "url": "https://pocketarcade.net/games/runner.html",
+          "name": "Runner"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "url": "https://pocketarcade.net/games/breakout.html",
+          "name": "Breakout"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "url": "https://pocketarcade.net/games/memory.html",
+          "name": "Memory"
+        },
+        {
+          "@type": "ListItem",
+          "position": 5,
+          "url": "https://pocketarcade.net/games/pong.html",
+          "name": "Pong"
+        },
+        {
+          "@type": "ListItem",
+          "position": 6,
+          "url": "https://pocketarcade.net/games/blocks.html",
+          "name": "Blocks"
+        },
+        {
+          "@type": "ListItem",
+          "position": 7,
+          "url": "https://pocketarcade.net/games/invaders.html",
+          "name": "Invaders"
+        },
+        {
+          "@type": "ListItem",
+          "position": 8,
+          "url": "https://pocketarcade.net/games/flappy.html",
+          "name": "Flappy"
+        },
+        {
+          "@type": "ListItem",
+          "position": 9,
+          "url": "https://pocketarcade.net/games/muncher.html",
+          "name": "Maze Muncher"
+        },
+        {
+          "@type": "ListItem",
+          "position": 10,
+          "url": "https://pocketarcade.net/games/blackjack.html",
+          "name": "Blackjack"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Are the games on Pocket Arcade free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. All 10 games are free to play, with no download, no account and no in-game purchases."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do the games work on phones?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Every game works on phones and tablets with touch controls (tap, swipe and drag), and on computers with the keyboard and mouse."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Where are my scores saved?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Your best score for each game is saved in your own browser on your device. Clearing your browser data resets it."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Blackjack played with real money?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Blackjack on Pocket Arcade uses free play coins only. They have no value and can't be bought."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which games can I play?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher and Blackjack."
+          }
+        }
+      ]
+    }
+  ]
 }
 </script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2315111f'/%3E%3Crect x='3' y='4' width='10' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='7' width='12' height='3' fill='%23b8e65c'/%3E%3Crect x='2' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='12' y='10' width='2' height='3' fill='%23b8e65c'/%3E%3Crect x='5' y='8' width='2' height='1' fill='%2315111f'/%3E%3Crect x='9' y='8' width='2' height='1' fill='%2315111f'/%3E%3C/svg%3E">
-<link rel="preload" href="fonts/press-start-2p.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="fonts/fonts.css">
+{% include head-end.html %}
 <link rel="stylesheet" href="css/arcade.css">
 <script src="js/arcade.js" defer></script>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2098088933955391" crossorigin="anonymous"></script>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
   <div id="home">
     <header class="marquee" id="top">
-      <div class="topbar"><span class="count">10 FREE GAMES</span><button class="sound" id="sound1" aria-pressed="true">SOUND ON</button></div>
       <h1>Pocket Arcade</h1>
       <p>Pick a cabinet. Beat a top 10 score to put your name on the leaderboard.</p>
     </header>
@@ -93,6 +208,20 @@
       <p class="game-links">How to play: <a href="games/snake.html">Snake</a> · <a href="games/runner.html">Runner</a> · <a href="games/breakout.html">Breakout</a> · <a href="games/memory.html">Memory</a> · <a href="games/pong.html">Pong</a> · <a href="games/blocks.html">Blocks</a> · <a href="games/invaders.html">Invaders</a> · <a href="games/flappy.html">Flappy</a> · <a href="games/muncher.html">Maze Muncher</a> · <a href="games/blackjack.html">Blackjack</a></p>
     </section>
 
+    <section class="about" id="faq">
+      <h2>Questions</h2>
+      <h3>Are the games on Pocket Arcade free?</h3>
+      <p>Yes. All 10 games are free to play, with no download, no account and no in-game purchases.</p>
+      <h3>Do the games work on phones?</h3>
+      <p>Yes. Every game works on phones and tablets with touch controls (tap, swipe and drag), and on computers with the keyboard and mouse.</p>
+      <h3>Where are my scores saved?</h3>
+      <p>Your best score for each game is saved in your own browser on your device. Clearing your browser data resets it.</p>
+      <h3>Is Blackjack played with real money?</h3>
+      <p>No. Blackjack on Pocket Arcade uses free play coins only. They have no value and can&#x27;t be bought.</p>
+      <h3>Which games can I play?</h3>
+      <p>Snake, Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher and Blackjack.</p>
+    </section>
+
     <footer class="site-foot" id="foot">
       <span>© 2026 Pocket Arcade</span>
       <a href="about.html">About</a>
@@ -102,8 +231,9 @@
 
   <section class="game" id="game" hidden>
     <div class="hud">
-      <button class="back" id="back">◀ MENU</button>
+      <button class="back" id="back">◀ FRONTPAGE</button>
       <button class="sound" id="sound2" aria-pressed="true">SOUND ON</button>
+      <button class="back" id="full" aria-pressed="false">FULL SCREEN</button>
       <h2 id="gtitle">Snake</h2>
       <div class="stat"><span id="slabel">Score</span><b id="score">0</b></div>
       <div class="stat"><span id="blabel">Best</span><b id="best">—</b></div>
@@ -120,6 +250,6 @@
     <div class="lb" id="lb" hidden></div>
     <p class="hint" id="hint"></p>
   </section>
-</div>
+</main>
 </body>
 </html>

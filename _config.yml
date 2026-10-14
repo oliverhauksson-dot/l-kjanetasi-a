@@ -1,0 +1,5 @@
+# GitHub Pages settings. Files listed here are not published on the site.
+exclude:
+  - serve.py
+  - README.md
+  - leaderboard
