@@ -60,6 +60,8 @@
 
   /* ---------- Loading games ---------- */
   const GAMES = {};
+  // Game files get the same ?v= as this file, so after an update every browser loads the new games right away.
+  const VERSION = document.currentScript ? new URL(document.currentScript.src).search : '';
   const loading = {};
   function load(gid) {
     if (GAMES[gid]) return Promise.resolve(GAMES[gid]);
@@ -67,7 +69,7 @@
     if (!loading[gid]) {
       loading[gid] = new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'js/games/' + gid + '.js';
+        s.src = 'js/games/' + gid + '.js' + VERSION;
         s.onload = () => (GAMES[gid] ? resolve(GAMES[gid]) : reject(new Error('Game did not register: ' + gid)));
         s.onerror = () => { delete loading[gid]; s.remove(); reject(new Error('Could not load ' + gid)); };
         document.head.appendChild(s);
