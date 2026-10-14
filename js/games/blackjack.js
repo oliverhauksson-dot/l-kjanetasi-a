@@ -53,7 +53,7 @@
       if (this.phase === 'bet') {
         if (a.startsWith('bet')) { this.base = a === 'betall' ? 'all' : +a.slice(3); sfx.hit(); this.render(); }
         else if (a === 'deal') this.deal();
-        else if (a === 'cashout') over(this.peak, 'You cashed out with ' + this.coins + ' coins. Most coins: ' + this.peak + '.', 'Cashed out!');
+        else if (a === 'cashout') { clearTimeout(this.timer); over(this.peak, 'You cashed out with ' + this.coins + ' coins. Most coins: ' + this.peak + '.', 'Cashed out!'); }
       } else if (this.phase === 'turn') {
         const h = this.hand();
         if (a === 'hit') {

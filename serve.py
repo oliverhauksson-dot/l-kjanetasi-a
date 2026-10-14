@@ -19,6 +19,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def send_head(self):
         path = self.translate_path(self.path)
         if os.path.isdir(path):
+            if not self.path.split("?", 1)[0].endswith("/"):
+                return super().send_head()  # Sends the browser to the same address with a / at the end.
             path = os.path.join(path, "index.html")
         if not path.endswith(".html") or not os.path.isfile(path):
             return super().send_head()
