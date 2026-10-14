@@ -30,4 +30,4 @@ DELETE FROM scores WHERE game = 'snake' AND name = 'BADNAME';
 
 ## Cheating
 
-There are no accounts, so a determined cheater can still send a fake score. The Worker refuses impossible scores (each game has a maximum), scores sent from other websites, and more than 20 scores from one visitor in 10 minutes. That stops almost everyone.
+There are no accounts, so a determined cheater can still send a fake score. The Worker refuses scores higher than a very good player can reach (each game has a maximum at the top of `worker.js`; raise one if real players hit it), names with rude words, scores sent from other websites, and more than 20 scores from one visitor in 10 minutes. That stops almost everyone.

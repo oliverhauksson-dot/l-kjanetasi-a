@@ -3,19 +3,32 @@
    GET  /api/scores?game=snake          -> { scores: [{ name, score }, ...] } (top 10)
    POST /api/scores { game, name, score } -> { ok: true, rank, scores } */
 
-// The highest (or, for Memory, lowest) score each game can honestly reach. Anything outside is refused.
+// The best score a very good player can really reach in each game (for Memory, the fewest moves).
+// Anything outside is refused, so a faked "Snake: 400" can't take the top spot. Raise a number if real players hit it.
 const GAMES = {
-  snake: { max: 400 },
-  runner: { max: 100000 },
-  breakout: { max: 1000000 },
-  memory: { min: 8, max: 999, lowerWins: true },
-  pong: { max: 10000 },
-  blocks: { max: 10000000 },
-  invaders: { max: 1000000 },
-  flappy: { max: 100000 },
-  muncher: { max: 10000000 },
-  blackjack: { min: 101, max: 10000000 }, // Everyone starts with 100 coins.
+  snake: { max: 397 }, // The 20x20 board is full at 397 fruit.
+  runner: { max: 30000 }, // About 6 minutes at top speed.
+  breakout: { max: 50000 }, // 400 x level points per board, so about 15 boards.
+  memory: { min: 8, max: 999, lowerWins: true }, // 8 moves is a perfect game.
+  pong: { max: 200 },
+  blocks: { max: 500000 },
+  invaders: { max: 50000 }, // 810 points per wave, so about 60 waves.
+  flappy: { max: 1000 },
+  muncher: { max: 200000 },
+  blackjack: { min: 101, max: 100000 }, // Everyone starts with 100 coins.
 };
+
+// Names that are refused. Checked after removing spaces, dashes and look-alike digits (5H1T -> SHIT).
+// LONG words are blocked anywhere in a name; SHORT ones only as the whole name, so a name like CLASS still works.
+const LONG = ['FUCK', 'SHIT', 'CUNT', 'BITCH', 'DICK', 'COCK', 'PUSSY', 'WHORE', 'SLUT', 'FAG', 'NIGG', 'NIGA', 'RETARD',
+  'PENIS', 'VAGINA', 'BOOB', 'PORN', 'NAZI', 'HITLER', 'KKK', 'WANK', 'TWAT', 'BASTARD', 'ASSHOLE', 'DILDO',
+  'KUNTA', 'TYPPI', 'HORA', 'HELVIT', 'DJOFULL', 'FOKK'];
+const SHORT = ['ASS', 'TIT', 'TITS', 'SEX', 'CUM', 'FAP', 'GAY', 'HOMO', 'PISS', 'POO', 'POOP', 'JEW', 'KYS', 'FU', 'STFU', 'WTF', 'RAPE'];
+function rude(name) {
+  const flat = name.replace(/[ _-]/g, '').replace(/0/g, 'O').replace(/1/g, 'I').replace(/3/g, 'E').replace(/4/g, 'A').replace(/5/g, 'S').replace(/7/g, 'T').replace(/8/g, 'B');
+  return SHORT.includes(flat) || LONG.some((w) => flat.includes(w));
+}
+
 const TOP = 10;
 const SITE = 'https://pocketarcade.net';
 const LIMIT = 20; // Score submissions one visitor can make...
@@ -66,6 +79,7 @@ export default {
     const name = cleanName(body.name);
     const score = Number(body.score);
     if (!rules || !name || !Number.isInteger(score) || score < (rules.min ?? 1) || score > rules.max) return json({ error: 'Invalid score' }, 400);
+    if (rude(name)) return json({ error: 'Please pick a different name.' }, 400);
 
     const now = Date.now();
     const who = await visitor(request);
