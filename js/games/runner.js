@@ -16,8 +16,79 @@
   const KICK = 20;                  // Length of the kicker ramp at the end of each slope.
   const SNOW = '#e8eef7', LIGHT = '#ffffff', SHADE = '#b9c6dd', DEEP = '#8f9cc0', ROCK = '#5d5180', ROCK2 = '#463b66', ROCK3 = '#2e2645';
 
+  /* ---------- Sound and music ----------
+     Everything is made on the fly with Web Audio, so there are no sound files to load.
+     Sounds are scheduled a moment ahead from update(), so they all stop by themselves when
+     the game is paused, lost or closed. The SOUND button (sfx.on) mutes all of it. */
+  const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  // A happy four-bar loop in C (C, Am, F, G), one entry per eighth note. 0 is a rest.
+  const LEAD = [72, 0, 76, 79, 76, 0, 72, 74, 76, 0, 72, 69, 72, 0, 0, 69, 77, 0, 76, 72, 69, 0, 72, 74, 76, 74, 72, 71, 74, 0, 79, 0];
+  const BASS = [36, 48, 36, 48, 36, 48, 43, 48, 33, 45, 33, 45, 33, 45, 40, 45, 29, 41, 29, 41, 29, 41, 36, 41, 31, 43, 31, 43, 31, 43, 38, 43];
+  const snd = {
+    noise: null,
+    ready() { return sfx.on && sfx.ac && sfx.ac.state === 'running'; },
+    out(vol, when, dur) {
+      const g = sfx.ac.createGain();
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(vol, when + Math.min(0.02, dur / 3));
+      g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+      g.connect(sfx.ac.destination);
+      return g;
+    },
+    note(f, dur, type, vol, when, to) {
+      if (!this.ready()) return;
+      try {
+        const t = when || sfx.ac.currentTime, o = sfx.ac.createOscillator();
+        o.type = type; o.frequency.setValueAtTime(f, t);
+        if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+        o.connect(this.out(vol, t, dur)); o.start(t); o.stop(t + dur + 0.02);
+      } catch (e) {}
+    },
+    // A burst of filtered noise: skis on snow, whooshes, thumps and crunches.
+    hiss(dur, vol, kind, f, when, to) {
+      if (!this.ready()) return;
+      try {
+        const ac = sfx.ac, t = when || ac.currentTime;
+        if (!this.noise) {
+          this.noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+          const d = this.noise.getChannelData(0);
+          for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        }
+        const src = ac.createBufferSource(), flt = ac.createBiquadFilter();
+        src.buffer = this.noise; src.loop = true;
+        flt.type = kind; flt.frequency.setValueAtTime(f, t);
+        if (to) flt.frequency.exponentialRampToValueAtTime(to, t + dur);
+        src.connect(flt); flt.connect(this.out(vol, t, dur));
+        src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
+      } catch (e) {}
+    },
+    swish(speed, hard) { this.hiss(0.16, (hard ? 0.05 : 0.012) + speed * 0.00004, 'bandpass', hard ? 1500 : 2200 + speed * 3); },
+    jump() { this.hiss(0.22, 0.05, 'bandpass', 700, 0, 2600); this.note(420, 0.14, 'triangle', 0.04, 0, 700); },
+    land() { this.note(150, 0.13, 'sine', 0.12, 0, 55); this.hiss(0.1, 0.05, 'lowpass', 500); },
+    ramp() { this.hiss(0.4, 0.07, 'bandpass', 500, 0, 3000); this.note(520, 0.2, 'square', 0.03, 0, 1040); },
+    chime() { const t = sfx.ac ? sfx.ac.currentTime : 0; this.note(1047, 0.09, 'square', 0.03, t); this.note(1568, 0.14, 'square', 0.03, t + 0.08); },
+    whistle(dur) { this.note(1500, dur, 'sine', 0.035, 0, 420); },
+    plop() { this.hiss(0.18, 0.08, 'lowpass', 900, 0, 200); this.note(220, 0.1, 'sine', 0.06, 0, 90); },
+    crash() { this.hiss(0.45, 0.14, 'lowpass', 1800, 0, 150); this.note(110, 0.3, 'square', 0.05, 0, 45); },
+    // Music: keeps a little ahead of the clock. It speeds up as the game does.
+    music(level) {
+      if (!this.ready()) return;
+      const now = sfx.ac.currentTime, beat = 60 / (132 + 36 * level) / 2;
+      if (!this.next || this.next < now - 0.05) this.next = now + 0.05;
+      while (this.next < now + 0.15) {
+        const i = this.step % 32, t = this.next;
+        if (LEAD[i]) this.note(midi(LEAD[i]), beat * 0.9, 'square', 0.022, t);
+        this.note(midi(BASS[i]), beat * 0.8, 'triangle', 0.06, t);
+        if (i % 2) this.hiss(0.04, 0.012, 'highpass', 7000, t);
+        this.step++; this.next += beat;
+      }
+    },
+    restart() { this.step = 0; this.next = 0; this.swishAt = 0; },
+  };
+
   const ski = {
     W: 400, H: 520, color: 'var(--cyan)', title: 'Ski Runner', label: 'Distance',
+    quietScore: true, // The distance goes up every metre, so it gets its own chime every 100 m instead of a beep.
     intro: 'Ski down the endless mountain. Jump the icebergs and trees. At the end of each slope you fly off the ramp and land on the next one. After 500 m, watch out for snowballs falling from the sky. It keeps getting faster, steeper and tighter.',
     hint: '<kbd>Space</kbd> <kbd>↑</kbd> or tap to jump (hold for a higher jump), <kbd>P</kbd> to pause',
 
@@ -30,6 +101,7 @@
       this.fill();
       this.seg = 0; this.u = 30;
       this.camY = this.pos().y - this.H * 0.36;
+      snd.restart();
     },
 
     /* ---------- The mountain ---------- */
@@ -78,7 +150,7 @@
     kickLift() { const s = this.slopes[this.seg]; return this.ground ? clamp((this.u - (s.L - KICK)) / KICK, 0, 1) * 9 : 0; },
 
     /* ---------- Input ---------- */
-    jump() { if (this.ground && !this.turn) { this.vy = 470; this.ground = false; sfx.hop(); } },
+    jump() { if (this.ground && !this.turn) { this.vy = 470; this.ground = false; snd.jump(); } },
     key(e, down) {
       if (!['Space', 'ArrowUp', 'KeyW'].includes(e.code)) return;
       if (down && !e.repeat) this.jump();
@@ -102,7 +174,7 @@
         if (!this.ground) {
           this.vy -= (this.held && this.vy > 0 ? 1150 : 2100) * dt;
           this.h += this.vy * dt;
-          if (this.h <= 0) { this.h = 0; this.vy = 0; this.ground = true; this.kick(6, 0.4); }
+          if (this.h <= 0) { this.h = 0; this.vy = 0; this.ground = true; this.kick(6, 0.4); snd.land(); }
         }
         if (this.carve > 0) { this.carve = Math.max(0, this.carve - dt); this.kick(1, 0.9); }
         else if (this.ground && Math.random() < dt * 40) this.kick(1, 0.5);
@@ -111,6 +183,7 @@
           for (const o of s.obs) {
             if (Math.abs(o.u - this.u) < o.w / 2 + 6 && this.h < o.h - 3) {
               const what = o.kind === 'tree' ? 'a tree' : o.kind === 'ball' ? 'a snowball' : 'an iceberg';
+              snd.crash();
               return over(this.score, 'You hit ' + what + ' after ' + this.score + ' m.');
             }
           }
@@ -125,7 +198,13 @@
       const target = this.pos().y - this.H * 0.36;
       this.camY += (target - this.camY) * Math.min(1, dt * 5);
       const sc = Math.floor(this.dist / 10);
-      if (sc !== this.score) { this.score = sc; setScore(sc); }
+      if (sc !== this.score) {
+        if (Math.floor(sc / 100) > Math.floor(this.score / 100)) snd.chime();
+        this.score = sc; setScore(sc);
+      }
+      snd.music(this.level());
+      // Skis on snow: short overlapping bursts while you are on the ground.
+      if (!this.turn && this.ground && this.t >= snd.swishAt) { snd.swish(this.speed, this.carve > 0); snd.swishAt = this.t + 0.1; }
     },
     /* ---------- Snowballs from the sky ---------- */
     // Returns true if one lands on the skier.
@@ -143,12 +222,13 @@
         f.vy += 520 * dt; f.y += f.vy * dt;
         const ground = this.at(f.s, f.u).y;
         if (!this.turn && f.s === cur && Math.abs(f.u - this.u) < 13 && f.y + 8 > me.y - 40 && f.y - 8 < me.y) {
+          snd.crash();
           over(this.score, 'A falling snowball knocked you over after ' + this.score + ' m.');
           return true;
         }
         if (f.y + 9 >= ground) {
           // It lands and keeps rolling toward you.
-          f.done = true;
+          f.done = true; snd.plop();
           f.s.obs.push({ kind: 'ball', w: 18, h: 18, roll: rand(30, 60), u: f.u });
           const p = this.at(f.s, f.u);
           for (let i = 0; i < 10; i++) this.spray.push({ x: p.x, y: p.y - 2, vx: rand(-70, 70), vy: -rand(40, 120), life: rand(0.25, 0.5) });
@@ -181,6 +261,7 @@
       // Try again a moment later instead.
       if (!spot.s || spot.u > spot.s.L - KICK - 12 || spot.u < LAND + 30) { this.nextFall = 0.15; return; }
       this.falls.push({ s: spot.s, u: spot.u, y: top, y0: top, vy: 90 });
+      snd.whistle(t);
     },
 
     // Little bits of snow thrown up behind the skis.
@@ -198,7 +279,7 @@
         a0: Math.atan(cur.slope), a1: Math.atan(next.slope), x: from.x, y: from.y,
       };
       this.h = 0; this.vy = 0; this.ground = true;
-      sfx.tone(520, 0.18, 'square', 0.04, 1040);
+      snd.ramp();
     },
     updateTurn(dt) {
       const tr = this.turn;
@@ -210,7 +291,7 @@
       tr.y = q * q * tr.fy + 2 * q * p * tr.cy + p * p * tr.ty;
       if (p >= 1) {
         this.turn = null; this.seg++; this.u = LAND; this.turns++; this.carve = CARVE;
-        sfx.hit(); this.kick(14, 0.7);
+        snd.land(); this.kick(14, 0.7);
         // Forget slopes far above the screen and build more below.
         if (this.seg > 2) { this.slopes.shift(); this.seg--; }
         this.fill();
