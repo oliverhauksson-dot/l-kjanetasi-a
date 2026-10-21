@@ -2,7 +2,7 @@
 
 Ten retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher and Blackjack.
 
-Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 10 leaderboard.
+Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 100 leaderboard that also shows your own place.
 
 ## Run it on your computer (localhost)
 
@@ -33,5 +33,5 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `js/arcade.js`: the shared part (menu, game screen, controls, sound, saved scores).
 - `js/games/*.js`: one file per game. A game file is only downloaded when someone opens that game.
 - `fonts/`: the two fonts, served from this site.
-- `leaderboard/`: the small Cloudflare server that keeps the top 10 scores. See `leaderboard/README.md` for how to set it up.
+- `leaderboard/`: the small Cloudflare server that keeps the leaderboard scores. See `leaderboard/README.md` for how to set it up.
 - `games/*.html`, `about.html`, `privacy.html`: the "how to play" and info pages, styled by `page.css`.
