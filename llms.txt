@@ -1,6 +1,6 @@
 # Pocket Arcade
 
-> Pocket Arcade (https://pocketarcade.net) is a free website with 11 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
+> Pocket Arcade (https://pocketarcade.net) is a free website with 12 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
 
 ## Games
 
@@ -15,10 +15,11 @@
 - [Maze Muncher](https://pocketarcade.net/games/muncher.html): Maze Muncher is a maze chase game. Eat every dot in the maze while four ghosts chase you. Big dots turn the ghosts blue for a few seconds so you can chase them back. You have 3 lives.
 - [Blackjack](https://pocketarcade.net/games/blackjack.html): Blackjack is the classic card game against the dealer, played with free play coins only. Get closer to 21 than the dealer without going over. No real money is used and coins can't be bought.
 - [Cube Rush](https://pocketarcade.net/games/cube.html): Cube Rush is a one-button jumping game. The cube slides on its own; jump over spikes and onto blocks. Play Level 1, 2 or 3 (each about 50 seconds), or Endless, which keeps getting faster.
+- [Police Chase](https://pocketarcade.net/games/chase.html): Police Chase is a top-down driving game in a 3D city of skyscrapers and apartment buildings. Drive a getaway car round the city, grab coins and speed boosts, and don't let the police catch you. More police join the longer you last, and police cars that crash into each other stop for a while. They catch you 3 times and it's over.
 
 ## Play a game directly
 
-Open `https://pocketarcade.net/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, blackjack, cube.
+Open `https://pocketarcade.net/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, blackjack, cube, chase.
 
 ## More
 
