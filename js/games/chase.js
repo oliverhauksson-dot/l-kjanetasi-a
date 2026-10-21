@@ -1,5 +1,5 @@
 /* Police Chase ("Don't let the police catch you"). Loaded on demand by js/arcade.js the first time the game is opened.
-   A city seen from above. You drive the yellow getaway car and the police chase you through the streets.
+   A 3D city seen from above. You drive the yellow getaway car and the police chase you through the streets.
    The police find their way round the buildings with a distance map of the roads that is worked out
    from your position a few times a second. Police that crash into each other or a wall stop for a while. */
 (() => {
@@ -24,35 +24,78 @@
   }
 
   /* ---------- The city ----------
-     A dozen block designs are painted once each and reused all over the map. */
-  const ROOFS = [['#a78bfa', '#7d63c9'], ['#ff6b9a', '#cf4a77'], ['#5ce1e6', '#36b2b8'], ['#ffb347', '#d68a26'],
-    ['#b8e65c', '#8bb83a'], ['#f4ecdc', '#c9bea8'], ['#8f86c4', '#675e9c']];
-  const LAYOUTS = [
-    [[10, 10, 180, 180]],
-    [[10, 10, 86, 180], [104, 10, 86, 180]],
-    [[10, 10, 180, 86], [10, 104, 180, 86]],
-    [[10, 10, 86, 86], [104, 10, 86, 86], [10, 104, 86, 86], [104, 104, 86, 86]],
-    [[10, 10, 180, 100], [10, 118, 86, 72], [104, 118, 86, 72]],
-  ];
-  const DESIGNS = [];
-  for (let k = 0; k < 9; k++) {
-    DESIGNS.push({ park: false, parts: LAYOUTS[k % LAYOUTS.length].map((b) => ({ b, roof: ROOFS[Math.floor(Math.random() * ROOFS.length)], ac: Math.floor(rand(1, 4)), seed: Math.random() })) });
+     The city is drawn in 3D: every building is a box seen from a camera high above the middle of the
+     screen. A point at height z is pushed away from the middle by D / (D - z), so roofs lean out and
+     you see the walls that face you. A dozen block designs are made once and reused all over the map. */
+  const D = 700;
+  const lift = (z) => D / (D - z);
+  const hash = (a, b, c, d) => {
+    let h = Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(c, 1274126177) + Math.imul(d, 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  function shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16), ch = (s) => clamp(Math.round(((n >> s) & 255) * f), 0, 255);
+    return 'rgb(' + ch(16) + ',' + ch(8) + ',' + ch(0) + ')';
   }
-  for (let k = 0; k < 3; k++) {
-    const trees = [];
-    while (trees.length < 9) {
-      const x = rand(28, 172), y = rand(28, 172);
-      if (Math.abs(x - 100) > 26 && Math.abs(y - 100) > 26) trees.push([x, y, rand(11, 17)]);
+  // Apartment colours: [roof, wall].
+  const PAINT = [['#a78bfa', '#8a6fe0'], ['#ff6b9a', '#e0577f'], ['#ffb347', '#e8973a'], ['#b8e65c', '#94c445'],
+    ['#f4ecdc', '#d9ccb4'], ['#5ce1e6', '#3fc2c8'], ['#ff8a65', '#e06d4c']];
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  let nextId = 1;
+  function house(x, y, w, h, kind) {
+    const b = { x, y, w, h, kind, id: nextId++ };
+    if (kind === 'sky') {
+      b.z = rand(270, 360); b.roof = '#9aa8d6'; b.wall = pick(['#34507f', '#2f6f86', '#4a4a8c']); b.glass = pick(['#7fe3f0', '#9fd0ff']);
+      b.fh = 14; b.sp = 12; b.lit = 0.25; b.antenna = Math.random() < 0.6;
+    } else if (kind === 'apt') {
+      const p = pick(PAINT); b.z = rand(80, 170); b.roof = p[0]; b.wall = p[1]; b.glass = '#2a2240';
+      b.fh = 20; b.sp = 17; b.lit = 0.22; b.tank = Math.random() < 0.6; b.garden = Math.random() < 0.3;
+    } else {
+      const p = pick(PAINT); b.z = rand(38, 52); b.roof = p[0]; b.wall = p[1]; b.glass = '#7fe3f0';
+      b.fh = 100; b.sp = 100; b.lit = 0; b.awning = pick([C.pink, C.cyan, C.amber, C.lime]);
     }
-    DESIGNS.push({ park: true, pond: k === 1, trees });
+    b.wallX = shade(b.wall, 0.78); b.wallY = shade(b.wall, 0.95);
+    if (kind !== 'shop') b.z = Math.round(b.z / b.fh) * b.fh + 6;
+    return b;
   }
+  const DESIGNS = [
+    { ground: 'plaza', houses: () => [house(35, 35, 130, 130, 'sky')] },
+    { ground: 'plaza', houses: () => [house(40, 40, 120, 120, 'sky')] },
+    { ground: 'plaza', houses: () => [house(18, 18, 74, 164, 'sky'), house(108, 18, 74, 164, 'sky')] },
+    { ground: 'walk', houses: () => [house(10, 10, 86, 180, 'apt'), house(104, 10, 86, 180, 'apt')] },
+    { ground: 'walk', houses: () => [house(10, 10, 180, 86, 'apt'), house(10, 104, 180, 86, 'apt')] },
+    { ground: 'walk', houses: () => [house(10, 10, 86, 86, 'apt'), house(104, 10, 86, 86, 'apt'), house(10, 104, 86, 86, 'shop'), house(104, 104, 86, 86, 'apt')] },
+    { ground: 'walk', houses: () => [house(10, 10, 180, 100, 'apt'), house(10, 118, 86, 72, 'shop'), house(104, 118, 86, 72, 'shop')] },
+    { ground: 'walk', houses: () => [house(10, 10, 110, 110, 'apt'), house(128, 10, 62, 110, 'shop'), house(10, 128, 180, 62, 'apt')] },
+    { ground: 'plaza', houses: () => [house(14, 14, 90, 90, 'sky'), house(116, 14, 70, 172, 'apt'), house(14, 116, 90, 70, 'shop')] },
+    { ground: 'park', pond: false }, { ground: 'park', pond: true }, { ground: 'park', pond: false },
+  ].map((d, k) => {
+    d.n = k; d.houses = d.houses ? d.houses() : [];
+    if (d.ground === 'park') {
+      d.trees = [];
+      while (d.trees.length < 10) {
+        const x = rand(26, 174), y = rand(26, 174);
+        if (Math.abs(x - 100) > 28 && Math.abs(y - 100) > 28) d.trees.push({ x, y, r: rand(11, 16), z: rand(24, 40) });
+      }
+    }
+    return d;
+  });
   const city = [];
-  for (let j = 0; j < NB; j++) for (let i = 0; i < NB; i++) city.push(Math.random() < 0.16 ? 9 + Math.floor(Math.random() * 3) : Math.floor(Math.random() * 9));
+  for (let j = 0; j < NB; j++) for (let i = 0; i < NB; i++) city.push(Math.random() < 0.14 ? 9 + Math.floor(Math.random() * 3) : Math.floor(Math.random() * 9));
 
-  function paintBlock(g, d) {
+  // The flat part of a block: pavement, plaza tiles or park grass.
+  function paintGround(g, d) {
     g.fillStyle = WALK; g.fillRect(0, 0, BLOCK, BLOCK);
     g.strokeStyle = CURB; g.lineWidth = 3; g.strokeRect(1.5, 1.5, BLOCK - 3, BLOCK - 3);
-    if (d.park) {
+    if (d.ground === 'plaza') {
+      g.fillStyle = '#5c5478'; g.fillRect(6, 6, 188, 188);
+      g.fillStyle = 'rgba(21,17,31,0.18)';
+      for (let k = 6; k < 194; k += 16) { g.fillRect(k, 6, 1, 188); g.fillRect(6, k, 188, 1); }
+      g.fillStyle = '#3f8f5a';
+      for (const [x, y] of [[10, 10], [180, 10], [10, 180], [180, 180]]) g.fillRect(x - 4, y - 4, 18, 18);
+    }
+    if (d.ground === 'park') {
       g.fillStyle = '#2f6e45'; g.fillRect(10, 10, 180, 180);
       g.fillStyle = '#3f8f5a'; g.fillRect(13, 13, 174, 174);
       g.fillStyle = '#d9c39a'; g.fillRect(93, 13, 14, 174); g.fillRect(13, 93, 174, 14);
@@ -61,31 +104,44 @@
         g.fillStyle = '#5ce1e6'; g.beginPath(); g.arc(100, 100, 19, 0, Math.PI * 2); g.fill();
         g.fillStyle = '#f4ecdc'; g.beginPath(); g.arc(100, 100, 5, 0, Math.PI * 2); g.fill();
       }
-      for (const [x, y, r] of d.trees) {
-        g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.arc(x + 4, y + 4, r, 0, Math.PI * 2); g.fill();
-        g.fillStyle = '#24583a'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-        g.fillStyle = '#58a96c'; g.beginPath(); g.arc(x - r * 0.25, y - r * 0.25, r * 0.6, 0, Math.PI * 2); g.fill();
+    }
+    for (const b of d.houses) { g.fillStyle = shade(b.wall, 0.5); g.fillRect(b.x, b.y, b.w, b.h); }
+  }
+  // A roof seen from straight above, painted once per building.
+  function paintRoof(g, b) {
+    const w = b.w, h = b.h, rnd = (k) => hash(b.id, 7, k, 3);
+    g.fillStyle = shade(b.roof, 0.75); g.fillRect(0, 0, w, h);
+    g.fillStyle = b.roof; g.fillRect(4, 4, w - 8, h - 8);
+    if (b.kind === 'sky') {
+      if (w >= 110 && h >= 110) {
+        g.fillStyle = 'rgba(21,17,31,0.3)'; g.beginPath(); g.arc(w / 2, h / 2, 36, 0, Math.PI * 2); g.fill();
+        g.fillStyle = shade(b.roof, 1.1); g.beginPath(); g.arc(w / 2, h / 2, 30, 0, Math.PI * 2); g.fill();
+        g.fillStyle = C.amber;
+        g.fillRect(w / 2 - 13, h / 2 - 15, 6, 30); g.fillRect(w / 2 + 7, h / 2 - 15, 6, 30); g.fillRect(w / 2 - 7, h / 2 - 3, 14, 6);
+      } else {
+        g.fillStyle = '#2a3768';
+        for (let y = 12; y < h - 20; y += 14) for (let x = 10; x < w - 18; x += 18) g.fillRect(x, y, 14, 9);
       }
       return;
     }
-    for (const p of d.parts) {
-      const [x, y, w, h] = p.b, [light, dark] = p.roof;
-      g.fillStyle = dark; g.fillRect(x, y, w, h);
-      g.fillStyle = light; g.fillRect(x + 4, y + 4, w - 8, h - 8);
-      // Rooftop bits: air conditioners, and a helipad on the biggest roofs.
-      if (w > 150 && h > 150) {
-        g.fillStyle = 'rgba(21,17,31,0.25)'; g.beginPath(); g.arc(x + w / 2, y + h / 2, 34, 0, Math.PI * 2); g.fill();
-        g.fillStyle = light; g.beginPath(); g.arc(x + w / 2, y + h / 2, 28, 0, Math.PI * 2); g.fill();
-        g.fillStyle = 'rgba(21,17,31,0.35)';
-        g.fillRect(x + w / 2 - 12, y + h / 2 - 14, 6, 28); g.fillRect(x + w / 2 + 6, y + h / 2 - 14, 6, 28); g.fillRect(x + w / 2 - 6, y + h / 2 - 3, 12, 6);
-      }
-      for (let k = 0; k < p.ac; k++) {
-        const ax = x + 10 + ((p.seed * 97 + k * 31) % 1) * (w - 40), ay = y + 10 + ((p.seed * 53 + k * 47) % 1) * (h - 34);
-        g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(ax + 3, ay + 3, 20, 14);
-        g.fillStyle = '#d8d0e8'; g.fillRect(ax, ay, 20, 14);
-        g.fillStyle = '#8f86a8'; g.beginPath(); g.arc(ax + 10, ay + 7, 5, 0, Math.PI * 2); g.fill();
-      }
+    if (b.garden) {
+      g.fillStyle = '#3f8f5a'; g.fillRect(10, 10, w * 0.45, h * 0.45);
+      g.fillStyle = '#58a96c'; for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(16 + rnd(k) * (w * 0.45 - 12), 16 + rnd(k + 9) * (h * 0.45 - 12), 4, 0, Math.PI * 2); g.fill(); }
     }
+    const n = b.kind === 'shop' ? 1 : 2 + Math.floor(rnd(1) * 2);
+    for (let k = 0; k < n; k++) {
+      const ax = 8 + rnd(k + 20) * (w - 34), ay = 8 + rnd(k + 30) * (h - 26);
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(ax + 3, ay + 3, 18, 12);
+      g.fillStyle = '#d8d0e8'; g.fillRect(ax, ay, 18, 12);
+      g.fillStyle = '#8f86a8'; g.beginPath(); g.arc(ax + 9, ay + 6, 4, 0, Math.PI * 2); g.fill();
+    }
+    if (b.tank) {
+      const tx = w - 20, ty = h - 20;
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.arc(tx + 3, ty + 3, 10, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#8d5a3a'; g.beginPath(); g.arc(tx, ty, 10, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#b07a4f'; g.beginPath(); g.arc(tx, ty, 6, 0, Math.PI * 2); g.fill();
+    }
+    if (b.kind === 'apt') { g.fillStyle = shade(b.roof, 0.6); g.fillRect(w / 2 - 8, 6, 16, 12); }
   }
 
   /* ---------- Cars ---------- */
@@ -404,11 +460,20 @@
         ctx.strokeStyle = 'rgba(12,9,20,' + (Math.min(1, m.life / 2) * 0.55).toFixed(2) + ')';
         ctx.beginPath(); ctx.moveTo(m.x1, m.y1); ctx.lineTo(m.x2, m.y2); ctx.stroke();
       }
-      // Blocks with their shadows
+      // The flat part of each block, then the shadows the buildings throw onto it and the road.
+      const seen = [];
       for (let j = j0; j < Math.min(NB, j1 + 1); j++) for (let i = i0; i < Math.min(NB, i1 + 1); i++) {
-        const bx = ROAD + i * PITCH, by = ROAD + j * PITCH, n = city[j * NB + i];
-        ctx.fillStyle = 'rgba(8,6,14,0.45)'; ctx.fillRect(bx + 10, by + 10, BLOCK, BLOCK);
-        ctx.drawImage(cached('chase-block' + n, BLOCK, BLOCK, (g) => paintBlock(g, DESIGNS[n])), bx, by, BLOCK, BLOCK);
+        const bx = ROAD + i * PITCH, by = ROAD + j * PITCH, d = DESIGNS[city[j * NB + i]];
+        ctx.drawImage(cached('chase-ground' + d.n, BLOCK, BLOCK, (g) => paintGround(g, d)), bx, by, BLOCK, BLOCK);
+        seen.push({ bx, by, d });
+      }
+      ctx.fillStyle = 'rgba(8,6,14,0.35)';
+      for (const { bx, by, d } of seen) {
+        for (const b of d.houses) {
+          const x0 = bx + b.x, y0 = by + b.y, x1 = x0 + b.w, y1 = y0 + b.h, s = Math.min(70, b.z * 0.22);
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1 + s, y0 + s); ctx.lineTo(x1 + s, y1 + s); ctx.lineTo(x0 + s, y1 + s); ctx.lineTo(x0, y1); ctx.closePath(); ctx.fill();
+        }
+        for (const t of d.trees || []) { ctx.beginPath(); ctx.ellipse(bx + t.x + t.z * 0.22, by + t.y + t.z * 0.22, t.r, t.r * 0.8, 0, 0, Math.PI * 2); ctx.fill(); }
       }
       // Edge of the city: a striped barrier.
       ctx.fillStyle = C.amber; ctx.fillRect(-6, -6, WORLD + 12, 6); ctx.fillRect(-6, WORLD, WORLD + 12, 6); ctx.fillRect(-6, 0, 6, WORLD); ctx.fillRect(WORLD, 0, 6, WORLD);
@@ -439,6 +504,7 @@
       for (const c of this.cops) if (this.near(c, 30)) this.car(c, true);
       const pl = this.pl;
       if (!(pl.safe > 0 && Math.floor(pl.safe * 10) % 2)) this.car(pl, false);
+      this.city3d(seen, W / 2 - ox, H / 2 - oy);
 
       for (const p of this.puffs) {
         ctx.globalAlpha = Math.max(0, p.life / p.max) * 0.8; ctx.fillStyle = p.col;
@@ -463,6 +529,74 @@
       }
       this.arrows(ox, oy);
       this.hud();
+    },
+    // Buildings and trees in 3D, furthest from the middle of the screen first so nearer ones cover them.
+    city3d(seen, mx, my) {
+      const things = [];
+      for (const { bx, by, d } of seen) {
+        for (const b of d.houses) things.push({ b, x: bx + b.x, y: by + b.y, far: Math.hypot(bx + b.x + b.w / 2 - mx, by + b.y + b.h / 2 - my) });
+        for (const t of d.trees || []) things.push({ t, x: bx + t.x, y: by + t.y, far: Math.hypot(bx + t.x - mx, by + t.y - my) });
+      }
+      things.sort((a, b) => b.far - a.far);
+      for (const th of things) {
+        if (th.t) this.tree(th.x, th.y, th.t, mx, my);
+        else this.building(th.x, th.y, th.b, mx, my);
+      }
+    },
+    tree(x, y, t, mx, my) {
+      const k = lift(t.z), cx = mx + (x - mx) * k, cy = my + (y - my) * k;
+      ctx.strokeStyle = '#6b3a1f'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cx, cy); ctx.stroke();
+      ctx.fillStyle = '#24583a'; ctx.beginPath(); ctx.arc(cx, cy, t.r * k, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#58a96c'; ctx.beginPath(); ctx.arc(cx - t.r * 0.3 * k, cy - t.r * 0.3 * k, t.r * 0.55 * k, 0, Math.PI * 2); ctx.fill();
+    },
+    building(x0, y0, b, mx, my) {
+      const x1 = x0 + b.w, y1 = y0 + b.h, k = lift(b.z);
+      const X = (x, z) => mx + (x - mx) * lift(z), Y = (y, z) => my + (y - my) * lift(z);
+      // Each wall you can see: its two ground corners, and which way it faces.
+      const walls = [];
+      if (mx < x0) walls.push([x0, y0, x0, y1, 0]);
+      if (mx > x1) walls.push([x1, y0, x1, y1, 0]);
+      if (my < y0) walls.push([x0, y0, x1, y0, 1]);
+      if (my > y1) walls.push([x0, y1, x1, y1, 1]);
+      walls.forEach(([ax, ay, bx, by, side], wi) => {
+        const at = (t, z) => [X(ax + (bx - ax) * t, z), Y(ay + (by - ay) * t, z)];
+        const quad = (t0, t1, z0, z1) => {
+          const a = at(t0, z0), c = at(t1, z0), e = at(t1, z1), f = at(t0, z1);
+          ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(e[0], e[1]); ctx.lineTo(f[0], f[1]); ctx.closePath();
+        };
+        ctx.fillStyle = side ? b.wallY : b.wallX; ctx.beginPath(); quad(0, 1, 0, b.z); ctx.fill();
+        const len = side ? b.w : b.h;
+        if (b.kind === 'shop') {
+          ctx.fillStyle = b.glass; ctx.beginPath(); quad(0.06, 0.94, 5, 24); ctx.fill();
+          ctx.fillStyle = b.awning; ctx.beginPath(); quad(0.03, 0.97, 25, 32); ctx.fill();
+          return;
+        }
+        const cols = Math.max(1, Math.floor(len / b.sp)), floors = Math.floor((b.z - 6) / b.fh);
+        const ww = b.kind === 'sky' ? 0.36 : 0.3, top = b.kind === 'sky' ? 0.8 : 0.6;
+        const lit = [], dark = [];
+        for (let f = 0; f < floors; f++) for (let c = 0; c < cols; c++) {
+          (hash(b.id, wi + side * 5, f, c) < b.lit ? lit : dark).push([(c + 0.5 - ww) / cols, (c + 0.5 + ww) / cols, f * b.fh + b.fh * 0.25, f * b.fh + b.fh * top]);
+        }
+        ctx.fillStyle = b.glass; ctx.beginPath(); for (const q of dark) quad(...q); ctx.fill();
+        ctx.fillStyle = '#ffe08a'; ctx.beginPath(); for (const q of lit) quad(...q); ctx.fill();
+        if (b.kind === 'apt') {
+          // Balconies under every other window.
+          ctx.fillStyle = '#d8d0e8'; ctx.beginPath();
+          for (const q of [...lit, ...dark]) if (Math.round(q[0] * cols) % 2 === 0 && q[2] > b.fh) quad(q[0] - 0.08 / cols, q[1] + 0.08 / cols, q[2] - 4, q[2] - 1);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = shade(b.wall, 1.25); ctx.beginPath(); quad(0, 1, b.z - 8, b.z); ctx.fill();
+        }
+      });
+      // The roof
+      const rx = X(x0, b.z), ry = Y(y0, b.z), rw = b.w * k, rh = b.h * k;
+      ctx.drawImage(cached('chase-roof' + b.id, b.w * 1.3, b.h * 1.3, (g) => { g.scale(1.3, 1.3); paintRoof(g, b); }), rx, ry, rw, rh);
+      if (b.antenna && (b.w < 110 || b.h < 110)) {
+        const cx = x0 + b.w / 2, cy = y0 + b.h / 2, top = b.z + 60;
+        ctx.strokeStyle = '#d8d0e8'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(X(cx, b.z), Y(cy, b.z)); ctx.lineTo(X(cx, top), Y(cy, top)); ctx.stroke();
+        if (Math.floor(this.clock * 2) % 2) { ctx.fillStyle = '#ff3b5c'; ctx.beginPath(); ctx.arc(X(cx, top), Y(cy, top), 3, 0, Math.PI * 2); ctx.fill(); }
+      }
     },
     near(c, pad) { return Math.abs(c.x - this.cam.x) < this.W / 2 + pad && Math.abs(c.y - this.cam.y) < this.H / 2 + pad; },
     // A car seen from above, pointing along its angle.
