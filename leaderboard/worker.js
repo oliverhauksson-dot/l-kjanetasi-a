@@ -16,6 +16,7 @@ const GAMES = {
   flappy: { max: 1000 },
   muncher: { max: 200000 },
   blackjack: { min: 101, max: 100000 }, // Everyone starts with 100 coins.
+  ski: { max: 100000 }, // About 40 minutes at top speed, plus coins and jumps.
 };
 
 // Names that are refused. Checked after removing spaces, dashes and look-alike digits (5H1T -> SHIT).
