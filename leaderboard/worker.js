@@ -19,6 +19,7 @@ const GAMES = {
   blackjack: { min: 101, max: 100000 }, // Everyone starts with 100 coins.
   cube: { max: 30000 }, // Cube Rush Endless, in tiles. About 70 minutes at top speed.
   chase: { max: 60000 }, // 10 points a second plus coins and crashes, so about an hour of play.
+  ski: { max: 100000 }, // About 40 minutes at top speed, plus coins and jumps.
 };
 
 // Names that are refused. Checked after removing spaces, dashes and look-alike digits (5H1T -> SHIT).
