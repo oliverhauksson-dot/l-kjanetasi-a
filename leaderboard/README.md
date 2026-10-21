@@ -1,6 +1,6 @@
 # Leaderboard server
 
-The top 10 scores live on Cloudflare, not on GitHub Pages (GitHub Pages can only serve files, it can't save anything).
+The leaderboard scores live on Cloudflare, not on GitHub Pages (GitHub Pages can only serve files, it can't save anything).
 It is two pieces, both free:
 
 - **D1**: a small database that holds the scores.
@@ -9,6 +9,11 @@ It is two pieces, both free:
 Until this is set up, the games work exactly as before and the leaderboard box just stays hidden.
 
 ## Set it up (one time, all in the Cloudflare dashboard)
+
+0. **Put the domain on Cloudflare first.** The Worker only sees visits that go through Cloudflare.
+   - In Cloudflare, `pocketarcade.net` must be added as a site, and your domain registrar must use Cloudflare's two nameservers.
+   - Under **DNS > Records**, the records for `pocketarcade.net` and `www` (the ones pointing at GitHub Pages) must show an **orange cloud (Proxied)**, not a grey one.
+   - Under **SSL/TLS > Overview**, choose **Full**. ("Flexible" makes the site loop forever between http and https.)
 
 1. **Make the database.** Go to **Storage & Databases > D1 SQL Database > Create**. Name it `arcade-scores` and create it.
 2. **Make the tables.** Open the database, go to **Console**, paste everything in `schema.sql` and press **Execute**.

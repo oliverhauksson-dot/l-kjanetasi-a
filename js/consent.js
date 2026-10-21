@@ -1,6 +1,6 @@
 /* Cookie consent popup.
    Loaded before the AdSense script on every page. Ads wait until the visitor picks Accept or Only necessary.
-   Visitors in Europe get Google's own consent message instead (AdSense > Privacy & messaging), so this popup steps aside when Google says GDPR applies. */
+   Visitors in Europe get Google's own consent message instead (AdSense > Privacy & messaging), so this popup steps aside when that message shows. */
 (function () {
   var KEY = "pa-cookies";
   var ads = (window.adsbygoogle = window.adsbygoogle || []);
@@ -61,13 +61,28 @@
     });
   }
 
-  // Ask Google's consent tool (if it loaded) whether GDPR applies; if so, it shows its own message.
+  // Step aside only when Google's own consent message actually shows (or was already answered).
+  // Google only shows it once the site is approved, so until then visitors in Europe get this popup too.
+  function waitForGoogle() {
+    var done = false;
+    function finish(google) {
+      if (done) return;
+      done = true;
+      if (google) release(); else showBanner();
+    }
+    window.__tcfapi("addEventListener", 2, function (tc, ok) {
+      if (ok && tc && (tc.eventStatus === "cmpuishown" || tc.eventStatus === "useractioncomplete" ||
+          (tc.eventStatus === "tcloaded" && tc.tcString))) finish(true);
+    });
+    setTimeout(function () { finish(false); }, 2500);
+  }
+
   function start() {
     var tries = 0;
     (function check() {
       if (typeof window.__tcfapi === "function") {
         window.__tcfapi("ping", 2, function (p) {
-          if (p && p.gdprApplies) { release(); } else { showBanner(); }
+          if (p && p.gdprApplies) { waitForGoogle(); } else { showBanner(); }
         });
       } else if (++tries < 15) {
         setTimeout(check, 100);
