@@ -1,8 +1,8 @@
 # Pocket Arcade
 
-Eleven retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Blocks, Invaders, Flappy, Maze Muncher, Blackjack and Police Chase.
+Twelve retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher, Blackjack, Cube Rush and Police Chase.
 
-Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 10 leaderboard.
+Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 100 leaderboard that also shows your own place.
 
 ## Run it on your computer (localhost)
 
@@ -34,5 +34,5 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `js/games/*.js`: one file per game. A game file is only downloaded when someone opens that game.
 - `js/vendor/three.module.min.js`: three.js, the 3D engine Police Chase uses (MIT license, see `three-LICENSE.txt`). Only downloaded when that game is opened.
 - `fonts/`: the two fonts, served from this site.
-- `leaderboard/`: the small Cloudflare server that keeps the top 10 scores. See `leaderboard/README.md` for how to set it up.
+- `leaderboard/`: the small Cloudflare server that keeps the leaderboard scores. See `leaderboard/README.md` for how to set it up.
 - `games/*.html`, `about.html`, `privacy.html`: the "how to play" and info pages, styled by `page.css`.

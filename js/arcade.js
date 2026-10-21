@@ -95,44 +95,54 @@
   }
 
   /* ---------- Leaderboard ---------- */
-  // Top 10 for every game, shown under the game screen at game over. The scores are kept by the Cloudflare Worker in
-  // leaderboard/worker.js; if it can't be reached (or you run the site on your own computer), the box just stays hidden.
+  // Top 100 for every game, shown under the game screen at game over, plus the player's own place (even below the top 100).
+  // The scores are kept by the Cloudflare Worker in leaderboard/worker.js; if it can't be reached (or you run the site on
+  // your own computer), the box just stays hidden.
   const board = {
     el: $('#lb'), ask: 0,
     MIN: { blackjack: 101, memory: 8 }, // Scores below this can't go on the board (everyone starts Blackjack with 100 coins).
+    name() { try { return localStorage.getItem('arcade:name') || ''; } catch (e) { return ''; } },
     hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
     async show(gid, g, score) {
       const ask = ++this.ask;
-      let scores;
+      let data;
       try {
-        const r = await fetch('/api/scores?game=' + gid);
+        const r = await fetch('/api/scores?game=' + gid + '&name=' + encodeURIComponent(this.name()));
         if (!r.ok) return;
-        scores = (await r.json()).scores;
+        data = await r.json();
       } catch (e) { return; }
-      if (ask !== this.ask || !Array.isArray(scores)) return;
-      const beats = (s) => (g.lowerWins ? score < s.score : score > s.score);
-      const fits = score >= (this.MIN[gid] ?? 1) && (scores.length < 10 || beats(scores[scores.length - 1]));
-      this.render(scores, null);
+      if (ask !== this.ask || !Array.isArray(data.scores)) return;
+      // Every real score can be saved, so everyone gets a place. Only ask when it beats the name's saved best.
+      const beats = (best) => (g.lowerWins ? score < best : score > best);
+      const fits = score >= (this.MIN[gid] ?? 1) && (!data.me || beats(data.me.score));
+      this.render(data);
       if (fits) this.askName(gid, score, ask);
     },
-    render(scores, mine) {
+    render({ scores, total, me }) {
       const el = this.el; el.textContent = ''; el.hidden = false;
-      const h = document.createElement('h4'); h.textContent = 'Top 10'; el.appendChild(h);
+      const h = document.createElement('h4'); h.textContent = 'Top 100'; el.appendChild(h);
+      if (me) {
+        const p = document.createElement('p'); p.className = 'lbme';
+        p.textContent = 'Your place: #' + me.rank.toLocaleString() + ' of ' + (total || me.rank).toLocaleString() + ' (best ' + me.score + ')';
+        el.appendChild(p);
+      }
       if (!scores.length) { const p = document.createElement('p'); p.textContent = 'No scores yet. Be the first!'; el.appendChild(p); }
       const ol = document.createElement('ol');
+      let mine = null;
       scores.forEach((s, i) => {
         const li = document.createElement('li');
-        if (i + 1 === mine) li.className = 'me';
+        if (me && i + 1 === me.rank) { li.className = 'me'; mine = li; }
         [String(i + 1), s.name, String(s.score)].forEach((t) => { const b = document.createElement('span'); b.textContent = t; li.appendChild(b); });
         ol.appendChild(li);
       });
       el.appendChild(ol);
+      if (mine) ol.scrollTop = mine.offsetTop - ol.clientHeight / 2; // Scroll the list (not the page) to you.
     },
     askName(gid, score, ask) {
       const row = document.createElement('div'); row.className = 'lbname';
       const input = document.createElement('input');
       input.maxLength = 12; input.placeholder = 'YOUR NAME'; input.autocomplete = 'nickname'; input.setAttribute('aria-label', 'Your name for the leaderboard');
-      try { input.value = localStorage.getItem('arcade:name') || ''; } catch (e) {}
+      input.value = this.name();
       const send = document.createElement('button'); send.textContent = 'Save score';
       const msg = document.createElement('p');
       row.append(input, send); this.el.insertBefore(row, this.el.querySelector('ol')); this.el.insertBefore(msg, row.nextSibling);
@@ -146,7 +156,7 @@
           const data = await r.json();
           if (ask !== this.ask) return;
           if (!r.ok) { msg.textContent = data.error || 'Could not save. Try again.'; send.disabled = false; return; }
-          this.render(data.scores, data.rank);
+          this.render(data);
         } catch (e) { if (ask === this.ask) { msg.textContent = 'Could not save. Try again.'; send.disabled = false; } }
       };
       send.addEventListener('click', submit);

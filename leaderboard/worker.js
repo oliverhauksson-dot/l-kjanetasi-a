@@ -1,7 +1,8 @@
 /* Pocket Arcade leaderboard: a Cloudflare Worker that keeps the top scores for every game in a D1 database.
    It runs on pocketarcade.net/api/* so the games can call it without any cross-site setup.
-   GET  /api/scores?game=snake          -> { scores: [{ name, score }, ...] } (top 10)
-   POST /api/scores { game, name, score } -> { ok: true, rank, scores } */
+   GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me }   (top 100)
+   POST /api/scores { game, name, score }  -> { ok: true, scores, total, me }
+   me is { rank, score } for that name's best score (also when it is outside the top 100), or null. */
 
 // The best score a very good player can really reach in each game (for Memory, the fewest moves).
 // Anything outside is refused, so a faked "Snake: 400" can't take the top spot. Raise a number if real players hit it.
@@ -11,11 +12,12 @@ const GAMES = {
   breakout: { max: 50000 }, // 400 x level points per board, so about 15 boards.
   memory: { min: 8, max: 999, lowerWins: true }, // 8 moves is a perfect game.
   pong: { max: 200 },
-  blocks: { max: 500000 },
+  snapgrid: { max: 1000000 },
   invaders: { max: 50000 }, // 810 points per wave, so about 60 waves.
   flappy: { max: 1000 },
   muncher: { max: 200000 },
   blackjack: { min: 101, max: 100000 }, // Everyone starts with 100 coins.
+  cube: { max: 30000 }, // Cube Rush Endless, in tiles. About 70 minutes at top speed.
   chase: { max: 60000 }, // 10 points a second plus coins and crashes, so about an hour of play.
 };
 
@@ -30,7 +32,7 @@ function rude(name) {
   return SHORT.includes(flat) || LONG.some((w) => flat.includes(w));
 }
 
-const TOP = 10;
+const TOP = 100;
 const SITE = 'https://pocketarcade.net';
 const LIMIT = 20; // Score submissions one visitor can make...
 const WINDOW = 10 * 60 * 1000; // ...in this many milliseconds.
@@ -52,6 +54,25 @@ async function top(db, game) {
   return results;
 }
 
+// Where a name stands in a game: 1 + everyone with a better score (or the same score, set earlier).
+async function place(db, game, name) {
+  if (!name) return null;
+  const row = await db.prepare('SELECT score, at FROM scores WHERE game = ? AND name = ?').bind(game, name).first();
+  if (!row) return null;
+  const better = GAMES[game].lowerWins ? 'score < ?' : 'score > ?';
+  const { n } = await db.prepare(`SELECT COUNT(*) AS n FROM scores WHERE game = ? AND (${better} OR (score = ? AND at < ?))`)
+    .bind(game, row.score, row.score, row.at).first();
+  return { rank: n + 1, score: row.score };
+}
+
+async function board(db, game, name) {
+  const [scores, me, { n }] = await Promise.all([
+    top(db, game), place(db, game, name),
+    db.prepare('SELECT COUNT(*) AS n FROM scores WHERE game = ?').bind(game).first(),
+  ]);
+  return { scores, total: n, me };
+}
+
 async function visitor(request) {
   const ip = request.headers.get('cf-connecting-ip') || '';
   const day = new Date().toISOString().slice(0, 10); // The hash changes every day, so it can't follow anyone for long.
@@ -67,7 +88,7 @@ export default {
     if (request.method === 'GET') {
       const game = url.searchParams.get('game');
       if (!GAMES[game]) return json({ error: 'Unknown game' }, 400);
-      return json({ scores: await top(env.DB, game) });
+      return json(await board(env.DB, game, cleanName(url.searchParams.get('name'))));
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -95,8 +116,6 @@ export default {
         ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better}`).bind(body.game, name, score, now),
     ]);
 
-    const scores = await top(env.DB, body.game);
-    const i = scores.findIndex((s) => s.name === name && s.score === score);
-    return json({ ok: true, rank: i < 0 ? null : i + 1, scores });
+    return json(Object.assign({ ok: true }, await board(env.DB, body.game, name)));
   },
 };
