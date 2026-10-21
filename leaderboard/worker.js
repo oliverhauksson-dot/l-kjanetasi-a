@@ -11,7 +11,7 @@ const GAMES = {
   breakout: { max: 50000 }, // 400 x level points per board, so about 15 boards.
   memory: { min: 8, max: 999, lowerWins: true }, // 8 moves is a perfect game.
   pong: { max: 200 },
-  blocks: { max: 500000 },
+  snapgrid: { max: 1000000 },
   invaders: { max: 50000 }, // 810 points per wave, so about 60 waves.
   flappy: { max: 1000 },
   muncher: { max: 200000 },
