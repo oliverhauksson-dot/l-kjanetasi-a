@@ -1,6 +1,6 @@
 # Pocket Arcade
 
-Ten retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher and Blackjack.
+Eleven retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher, Blackjack and Cube Rush.
 
 Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 100 leaderboard that also shows your own place.
 
