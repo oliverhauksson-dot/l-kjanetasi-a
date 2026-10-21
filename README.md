@@ -32,6 +32,7 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `css/arcade.css`: styles for the home page and game screen.
 - `js/arcade.js`: the shared part (menu, game screen, controls, sound, saved scores).
 - `js/games/*.js`: one file per game. A game file is only downloaded when someone opens that game.
+- `js/vendor/three.module.min.js`: the three.js 3D library (MIT licence, see `three-LICENSE.txt`). Only Endless Ski uses it, and it is only downloaded when that game is opened.
 - `fonts/`: the two fonts, served from this site.
 - `leaderboard/`: the small Cloudflare server that keeps the top 10 scores. See `leaderboard/README.md` for how to set it up.
 - `games/*.html`, `about.html`, `privacy.html`: the "how to play" and info pages, styled by `page.css`.

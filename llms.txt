@@ -14,7 +14,7 @@
 - [Flappy](https://pocketarcade.net/games/flappy.html): Flappy is a one-button game. Tap to make the bird flap up and fly through the gaps between pipes. Touch a pipe or the ground and the flight is over.
 - [Maze Muncher](https://pocketarcade.net/games/muncher.html): Maze Muncher is a maze chase game. Eat every dot in the maze while four ghosts chase you. Big dots turn the ghosts blue for a few seconds so you can chase them back. You have 3 lives.
 - [Blackjack](https://pocketarcade.net/games/blackjack.html): Blackjack is the classic card game against the dealer, played with free play coins only. Get closer to 21 than the dealer without going over. No real money is used and coins can't be bought.
-- [Endless Ski](https://pocketarcade.net/games/ski.html): Endless Ski is a 3D downhill skiing game. Steer down a never-ending mountain, dodge trees, rocks and other skiers, grab coins and fly off snow ramps. The sky goes from day to sunset to a night with northern lights.
+- [Endless Ski](https://pocketarcade.net/games/ski.html): Endless Ski is a 3D downhill skiing game. Race down a never-ending mountain valley, dodge trees and rocks, grab coins, catch air off kickers and rollers and spin in the air. The sky goes from day to sunset to a night with northern lights.
 
 ## Play a game directly
 

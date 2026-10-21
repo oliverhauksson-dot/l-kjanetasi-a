@@ -1,194 +1,70 @@
 /* Endless Ski. Loaded on demand by js/arcade.js the first time the game is opened.
-   A 3D-looking run down an endless mountain, seen from just behind the skier.
-   The slope is cut into thin strips that are drawn from near to far, like old racing games,
-   so it can bend left and right and roll over bumps. Trees, rocks and clouds are painted once
-   into small pictures at the start, then drawn bigger or smaller depending on how far away they are.
-   The further you get, the sky goes from day to sunset to a night with northern lights, and back.
-   World units are metres: x is left/right, y is up, z is how far down the mountain. */
-(() => {
-  const { ctx, rand, clamp, font, shuffle, sfx, setScore, over } = Arcade;
+   Real 3D, made with three.js (js/vendor/three.module.min.js), which is only downloaded for this game.
+   The 3D picture is drawn on its own hidden canvas and copied into the game screen every frame,
+   with the score and speed drawn on top, so it works with the shared game screen like every other game.
 
-  const W = 400, H = 600;
-  const SEG = 3;                    // Length of one strip of slope.
-  const DRAW = 100;                 // Strips drawn ahead (300 m).
-  const FAR = SEG * DRAW;
-  const F = 560;                    // Camera lens: how many pixels 1 m is at 1 m away.
-  const HOR = 150;                  // Eye level on screen.
-  const SLOPE = 0.15;               // The mountain drops 15 cm every metre...
-  const VALLEY = HOR + SLOPE * F;   // ...so the valley floor shows up here, below eye level.
-  const BACK = 11, UP = 6;          // Camera position behind and above the skier.
-  const CYCLE = 1800;               // Metres from one morning to the next.
-  const RAMP_EVERY = 280;           // At least this far between snow ramps.
+   The mountain is an endless valley: a wide snowy floor between steep rocky sides, with forest on the
+   lower slopes, and rollers and kickers that throw you into the air. It is built in 60 m long pieces
+   (chunks) that are made just ahead of you and thrown away behind you.
+   Units are metres. d is how far down the mountain, x is left/right. In three.js, z = -d. */
+(() => {
+  const { ctx, rand, clamp, font, sfx, setScore, over } = Arcade;
+  const THREE_URL = new URL('../vendor/three.module.min.js', document.currentScript.src).href;
+  let T = null, failed = false;
+
+  const W = 450, H = 600;
+  const CL = 60, CHUNKS = 11;      // Chunk length, and how many are kept (about 630 m ahead).
+  const NU = 49, ND = 31;          // Terrain grid points across and along a chunk.
+  const SLOPE = 0.22;              // The mountain drops 22 cm every metre.
+  const FLOOR = 27;                // Half the width of the valley floor.
+  const G = 24;                    // Gravity, a bit stronger than real so jumps feel snappy.
+  const CYCLE = 1800;              // Metres from one morning to the next.
+  const RAMP_EVERY = 230;
+  const RAMP = { w: 1.9, len: 7, h: 2 };
+  const rampLift = (s) => RAMP.h * s * s; // Kickers rise in a curve, so they throw you up.
+  const LIP = (2 * RAMP.h) / RAMP.len; // How steep a kicker is at the top.
 
   /* ---------- The mountain ---------- */
-  // The piste winds left and right and rolls over bumps. Each run gets new random bends.
-  let ph = [0, 0, 0, 0];
-  const center = (z) => 40 * Math.sin(z / 180 + ph[0]) + 15 * Math.sin(z / 110 + ph[1]);
-  const ground = (z) => -SLOPE * z + 2.5 * Math.sin(z / 60 + ph[2]) + 1.2 * Math.sin(z / 23 + ph[3]);
-  const halfWidth = (z) => 8 - 2 * clamp(z / 5000, 0, 1) + 1.5 * Math.sin(z / 140);
-  const level = (z) => clamp(z / 5000, 0, 1); // 0 at the top, 1 after 5 km.
-  const cruise = (z) => 14 + 26 * (1 - Math.exp(-z / 2600)); // Speed the skier settles at, in m/s.
+  let ph = [0, 0, 0, 0], SEED = 1;
+  const hash = (i, j) => {
+    let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263) + SEED) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  function noise(x, y) {
+    const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), e = hash(i + 1, j + 1);
+    return (a + (b - a) * sx + (c - a) * sy + (a - b - c + e) * sx * sy) * 2 - 1;
+  }
+  const center = (d) => 30 * Math.sin(d / 260 + ph[0]) + 14 * Math.sin(d / 120 + ph[1]);
+  // Rollers: bumpy stretches that come and go. Hit a crest fast and you take off.
+  const rollers = (d) => { const e = Math.max(0, Math.sin(d / 330 + ph[2])); return e * e * 1.7 * Math.sin(d / 5.6 + ph[3]); };
+  function height(x, d) {
+    const u = x - center(d), t = Math.max(0, Math.abs(u) - FLOOR);
+    const side = t < 60 ? 0.007 * t * t : 25.2 + 0.84 * (t - 60); // The valley sides get steeper, then rise straight on.
+    return -SLOPE * d + rollers(d) + 0.0016 * u * u + side
+      + noise(x * 0.04, d * 0.04) * 1.4 + noise(x * 0.17, d * 0.17) * 0.3 + noise(x * 0.5, d * 0.35) * 0.06 + t * 0.12 * noise(x * 0.02 + 40, d * 0.02);
+  }
+  function normalAt(x, d) {
+    const e = 0.6, hx = (height(x + e, d) - height(x - e, d)) / (2 * e), hd = (height(x, d + e) - height(x, d - e)) / (2 * e);
+    const l = Math.hypot(hx, 1, hd); // In three.js z = -d, so the slope along z is -hd.
+    return [-hx / l, 1 / l, hd / l];
+  }
+  const level = (d) => clamp(d / 5000, 0, 1);
+  const cruise = (d) => 16 + 22 * (1 - Math.exp(-d / 2500));
 
-  /* ---------- Colours ---------- */
-  const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-  const css = (c, a) => (a === undefined ? 'rgb(' : 'rgba(') + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + (a === undefined ? ')' : ',' + a + ')');
-  const PISTE = hex('#f4f8ff'), POWDER = hex('#e1e9f7'), EDGE = hex('#c3cfe6'), TRACK = hex('#b4c2dc');
-
-  // The time of day, as stops along CYCLE. tint picks the picture set for trees and rocks: 0 day, 1 sunset, 2 night.
+  /* ---------- Time of day ----------
+     Stops along CYCLE. elev and az place the sun (or the moon at night). exp is the camera exposure. */
   const SKY = [
-    { at: 0.00, top: '#3a84d6', bot: '#cfe8fb', fog: '#dcebf7', sun: '#fff4cf', far: '#a9bfdc', mid: '#7f9cc8', near: '#4f7198', cap: '#ffffff', light: '#ffffff', sunX: 300, sunY: 60, night: 0, tint: 0 },
-    { at: 0.30, top: '#3a84d6', bot: '#d7ecfb', fog: '#e0edf7', sun: '#fff1c4', far: '#a9bfdc', mid: '#7f9cc8', near: '#4f7198', cap: '#ffffff', light: '#ffffff', sunX: 300, sunY: 105, night: 0, tint: 0 },
-    { at: 0.42, top: '#4a6db5', bot: '#ffd3a1', fog: '#f6dcc4', sun: '#ffd27a', far: '#d4b0b8', mid: '#a587a8', near: '#6b5a86', cap: '#fff0dc', light: '#fff0dd', sunX: 300, sunY: 170, night: 0, tint: 0.6 },
-    { at: 0.52, top: '#2e2f78', bot: '#ff8a5c', fog: '#ee9f8c', sun: '#ff7a45', far: '#9a6a92', mid: '#6f4b7e', near: '#3f3060', cap: '#ffc9b0', light: '#ffc7b3', sunX: 300, sunY: 196, night: 0, tint: 1 },
-    { at: 0.62, top: '#040714', bot: '#14224a', fog: '#1a2647', sun: '#14224a', far: '#1f2b52', mid: '#18213f', near: '#0f1530', cap: '#7f90c0', light: '#6a7db8', sunX: 300, sunY: 320, night: 1, tint: 2 },
-    { at: 0.86, top: '#040714', bot: '#14224a', fog: '#1a2647', sun: '#14224a', far: '#1f2b52', mid: '#18213f', near: '#0f1530', cap: '#7f90c0', light: '#6a7db8', sunX: 100, sunY: 320, night: 1, tint: 2 },
-    { at: 0.94, top: '#3f4d93', bot: '#f7b8b0', fog: '#e8c6c6', sun: '#ffb59a', far: '#b39bbd', mid: '#8a7aa8', near: '#56507e', cap: '#ffe6e0', light: '#ffd9d2', sunX: 100, sunY: 190, night: 0, tint: 1 },
-  ].map((k) => { const o = {}; for (const key in k) o[key] = typeof k[key] === 'string' ? hex(k[key]) : k[key]; return o; });
-  SKY.push({ ...SKY[0], at: 1 });
-  const L = {}; // The current mix of SKY stops, worked out once per frame.
-  function daylight(t) {
-    let i = 0; while (SKY[i + 1].at <= t) i++;
-    const a = SKY[i], b = SKY[i + 1], f = (t - a.at) / (b.at - a.at), e = f * f * (3 - 2 * f);
-    for (const key in a) if (key !== 'at') L[key] = typeof a[key] === 'number' ? a[key] + (b[key] - a[key]) * e : mix(a[key], b[key], e);
-  }
-  const lit = (h, k = 1) => { const c = hexCache[h] || (hexCache[h] = hex(h)); return css([c[0] * L.light[0] / 255 * k, c[1] * L.light[1] / 255 * k, c[2] * L.light[2] / 255 * k]); };
-  const hexCache = {};
-
-  /* ---------- Pictures painted once ---------- */
-  const bake = (w, h, paint) => { const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h); return c; };
-  // Every picture also gets a sunset and a night copy, so the trees match the sky.
-  const TINTS = ['#ffc4ae', '#56689f'];
-  const tinted = (base) => [base, ...TINTS.map((t) => bake(base.width, base.height, (g) => {
-    g.drawImage(base, 0, 0);
-    g.globalCompositeOperation = 'multiply'; g.fillStyle = t; g.fillRect(0, 0, base.width, base.height);
-    g.globalCompositeOperation = 'destination-in'; g.drawImage(base, 0, 0);
-  }))];
-  function shadow(g, x, y, rx, ry, a = 0.45) {
-    g.save(); g.translate(x, y); g.scale(1, ry / rx);
-    const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx);
-    gr.addColorStop(0, 'rgba(60,80,140,' + a + ')'); gr.addColorStop(1, 'rgba(60,80,140,0)');
-    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx, 0, 7); g.fill(); g.restore();
-  }
-  function ellipse(g, x, y, rx, ry) { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); g.fill(); }
-
-  // A snowy pine. The ground is at FOOT of the picture's height.
-  const PINE_FOOT = 318 / 340;
-  function paintPine(g, w, h, tiers, spread) {
-    const cx = w / 2, foot = h - 22, top = 8, fb = foot - 26, hf = fb - top;
-    shadow(g, cx + 14, foot, w * 0.46, 16);
-    g.fillStyle = '#ffffff'; ellipse(g, cx, foot - 3, w * 0.2, 8);
-    const tg = g.createLinearGradient(cx - 8, 0, cx + 8, 0); tg.addColorStop(0, '#80502e'); tg.addColorStop(1, '#3a2213');
-    g.fillStyle = tg; g.fillRect(cx - 7, fb - 24, 14, foot - fb + 20);
-    for (let i = 0; i < tiers; i++) {
-      const p = i / tiers, yb = fb - hf * p * 0.8, yt = i === tiers - 1 ? top : yb - hf * (0.45 - 0.1 * p);
-      const hw = w * spread * (1 - 0.75 * p), mid = (t) => yt + (yb - yt) * t;
-      // Needles: a cone with a notch on each side and a ragged bottom edge.
-      g.beginPath(); g.moveTo(cx, yt);
-      g.lineTo(cx + hw * 0.52, mid(0.46)); g.lineTo(cx + hw * 0.38, mid(0.52)); g.lineTo(cx + hw, yb);
-      const n = 7;
-      for (let j = 1; j <= n; j++) { const x = cx + hw - (2 * hw * j) / n; g.lineTo(x + hw / n, yb - rand(5, 11)); g.lineTo(x, yb + rand(-1, 3)); }
-      g.lineTo(cx - hw * 0.38, mid(0.52)); g.lineTo(cx - hw * 0.52, mid(0.46)); g.closePath();
-      const ng = g.createLinearGradient(cx - hw, yt, cx + hw, yb);
-      ng.addColorStop(0, '#428f63'); ng.addColorStop(0.5, '#245f40'); ng.addColorStop(1, '#10321f');
-      g.fillStyle = ng; g.fill();
-      // Snow lying on the upper part of the branches, drooping in little drips.
-      const lx = cx - hw * 0.66, ly = mid(0.68), rx = cx + hw * 0.46, ry = mid(0.42), m = 6;
-      g.beginPath(); g.moveTo(cx, yt - 1); g.lineTo(cx - hw * 0.5, mid(0.44) - 1); g.lineTo(lx, ly);
-      for (let j = 1; j <= m; j++) {
-        const x = lx + ((rx - lx) * j) / m, y = ly + ((ry - ly) * j) / m;
-        g.lineTo(x - (rx - lx) / m / 2, y + rand(3, 9)); g.lineTo(x, y - rand(0, 3));
-      }
-      g.closePath();
-      const sg = g.createLinearGradient(0, yt, 0, ly + 8); sg.addColorStop(0, '#ffffff'); sg.addColorStop(1, '#d6e2f6');
-      g.fillStyle = sg; g.fill();
-      const shade = g.createLinearGradient(cx - hw * 0.3, 0, rx, 0); shade.addColorStop(0, 'rgba(120,145,205,0)'); shade.addColorStop(1, 'rgba(120,145,205,0.45)');
-      g.fillStyle = shade; g.fill();
-    }
-  }
-  const ROCK_FOOT = 104 / 120;
-  function paintRock(g, w, h) {
-    const cx = w / 2, foot = h - 16, n = 11, pts = [];
-    shadow(g, cx + 10, foot, w * 0.48, 13);
-    for (let i = 0; i < n; i++) { const a = Math.PI + (i / (n - 1)) * Math.PI, r = rand(0.82, 1.05); pts.push([cx + Math.cos(a) * w * 0.4 * r, foot + Math.sin(a) * (h - 32) * r]); }
-    g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath();
-    const rg = g.createLinearGradient(cx - w * 0.3, 12, cx + w * 0.35, foot);
-    rg.addColorStop(0, '#9aa2bd'); rg.addColorStop(0.5, '#555c7c'); rg.addColorStop(1, '#2a2e47');
-    g.fillStyle = rg; g.fill();
-    g.strokeStyle = 'rgba(30,32,55,0.5)'; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(pts[4][0], pts[4][1] + 6); g.lineTo(cx + 6, foot - 30); g.lineTo(cx + 18, foot - 6); g.stroke();
-    // Snow cap.
-    g.beginPath(); g.moveTo(pts[2][0], pts[2][1] + 2);
-    for (let i = 3; i <= n - 3; i++) g.lineTo(pts[i][0], pts[i][1] - 2);
-    for (let i = n - 3; i >= 2; i--) g.lineTo(pts[i][0] + rand(-4, 4), pts[i][1] + rand(9, 20));
-    g.closePath();
-    const sg = g.createLinearGradient(cx - 30, 0, cx + 40, 0); sg.addColorStop(0, '#ffffff'); sg.addColorStop(1, '#c9d6ee');
-    g.fillStyle = sg; g.fill();
-    g.fillStyle = '#f4f8ff'; ellipse(g, cx, foot, w * 0.43, 7);
-  }
-  function paintCloud(g, w, h) {
-    for (let i = 0; i < 9; i++) {
-      const x = rand(w * 0.2, w * 0.8), y = rand(h * 0.45, h * 0.65), r = rand(h * 0.22, h * 0.42) * (1 - Math.abs(x / w - 0.5));
-      const gr = g.createRadialGradient(x, y, 0, x, y, r * 1.6);
-      gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-      g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    }
-    g.globalCompositeOperation = 'source-atop';
-    const sh = g.createLinearGradient(0, h * 0.35, 0, h); sh.addColorStop(0, 'rgba(190,205,235,0)'); sh.addColorStop(1, 'rgba(170,185,225,0.9)');
-    g.fillStyle = sh; g.fillRect(0, 0, w, h);
-  }
-  function paintCoin(g, w) {
-    const r = w / 2 - 3, c = w / 2;
-    const gr = g.createRadialGradient(c - 8, c - 8, 2, c, c, r);
-    gr.addColorStop(0, '#fff7b8'); gr.addColorStop(0.5, '#ffc93c'); gr.addColorStop(1, '#c98410');
-    g.fillStyle = gr; g.beginPath(); g.arc(c, c, r, 0, 7); g.fill();
-    g.strokeStyle = '#9c6408'; g.lineWidth = 2; g.stroke();
-    g.strokeStyle = '#e8a521'; g.lineWidth = 3; g.beginPath(); g.arc(c, c, r * 0.72, 0, 7); g.stroke();
-    g.fillStyle = '#fff0a0'; g.beginPath();
-    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.25 : r * 0.55; g.lineTo(c + Math.cos(a) * rr, c + Math.sin(a) * rr); }
-    g.fill();
-  }
-  const dot = (rgb) => bake(32, 32, (g) => {
-    const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gr.addColorStop(0, 'rgba(' + rgb + ',1)'); gr.addColorStop(0.4, 'rgba(' + rgb + ',0.8)'); gr.addColorStop(1, 'rgba(' + rgb + ',0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
-  });
-
-  let ART = null; // Painted the first time the game is drawn.
-  function paintArt() {
-    ART = {
-      pines: [[5, 0.44], [6, 0.4], [4, 0.47]].map(([t, s]) => tinted(bake(200, 340, (g, w, h) => paintPine(g, w, h, t, s)))),
-      rocks: [0, 1].map(() => tinted(bake(180, 120, paintRock))),
-      clouds: [0, 1, 2].map(() => tinted(bake(260, 100, paintCloud))),
-      coin: bake(64, 64, paintCoin),
-      snow: dot('255,255,255'), gold: dot('255,214,90'),
-    };
-  }
-
-  /* ---------- Background ---------- */
-  // Mountain ridges made of sharp sine peaks. P is how wide a ridge is before it repeats.
-  const P = 1200;
-  function ridge(parts, jag) {
-    const ph2 = parts.map(() => rand(0, 6.3)), out = new Float32Array(P / 4);
-    for (let i = 0; i < out.length; i++) {
-      const x = i * 4; let h = 0;
-      parts.forEach(([m, a], j) => { h += a * (1 - Math.abs(Math.sin((Math.PI * m * x) / P + ph2[j]))); });
-      if (jag) h += (i % 2) * jag + Math.random() * jag; // Little spikes look like a forest on the ridge.
-      out[i] = h;
-    }
-    return out;
-  }
-  const RIDGES = [
-    { h: ridge([[2, 58], [3, 34], [5, 18], [9, 8]]), lift: 38, move: 0.3, key: 'far', snow: true },
-    { h: ridge([[3, 34], [5, 22], [8, 12], [13, 5]]), lift: 18, move: 0.6, key: 'mid', snow: true },
-    { h: ridge([[2, 10], [5, 8], [11, 4]], 3), lift: 6, move: 1.2, key: 'near', snow: false },
+    { at: 0.00, top: '#5f92d4', hor: '#e2ecf5', fog: '#d9e4ef', sun: '#fff1dc', sunI: 3.2, hs: '#d2e2ff', hg: '#8d93a6', hI: 1.25, elev: 0.5, az: 0.95, night: 0, exp: 1.0 },
+    { at: 0.30, top: '#5f92d4', hor: '#e6eef6', fog: '#dde7f1', sun: '#fff0d6', sunI: 3.0, hs: '#d2e2ff', hg: '#8d93a6', hI: 1.2, elev: 0.36, az: 0.9, night: 0, exp: 1.0 },
+    { at: 0.42, top: '#5a6fae', hor: '#ffd2a6', fog: '#efd3bf', sun: '#ffc285', sunI: 2.7, hs: '#ffdcc4', hg: '#7a6a80', hI: 1.0, elev: 0.18, az: 0.6, night: 0, exp: 1.0 },
+    { at: 0.52, top: '#2c3070', hor: '#ff8a58', fog: '#c78b88', sun: '#ff7840', sunI: 2.0, hs: '#c48aa6', hg: '#4a3a5a', hI: 0.85, elev: 0.04, az: 0.4, night: 0, exp: 1.05 },
+    { at: 0.62, top: '#03050f', hor: '#13204a', fog: '#111a38', sun: '#a9bcff', sunI: 0.7, hs: '#3c4d7e', hg: '#12141f', hI: 0.55, elev: 0.6, az: -0.5, night: 1, exp: 1.2 },
+    { at: 0.86, top: '#03050f', hor: '#13204a', fog: '#111a38', sun: '#a9bcff', sunI: 0.7, hs: '#3c4d7e', hg: '#12141f', hI: 0.55, elev: 0.6, az: -0.5, night: 1, exp: 1.2 },
+    { at: 0.94, top: '#3f4d93', hor: '#f6b8b0', fog: '#d9c1c6', sun: '#ffb59a', sunI: 1.8, hs: '#e5c2d0', hg: '#5a5070', hI: 0.9, elev: 0.08, az: -0.6, night: 0, exp: 1.05 },
   ];
-  const STARS = Array.from({ length: 70 }, () => ({ x: rand(0, W), y: rand(0, VALLEY - 50), s: Math.random() < 0.2 ? 2 : 1, p: rand(0, 6.3) }));
-  const vignette = (() => {
-    const g = ctx.createRadialGradient(W / 2, H * 0.55, H * 0.32, W / 2, H * 0.55, H * 0.85);
-    g.addColorStop(0, 'rgba(6,8,30,0)'); g.addColorStop(1, 'rgba(6,8,30,1)');
-    return g;
-  })();
+  SKY.push({ ...SKY[0], at: 1 });
 
   /* ---------- Sound ----------
      Short bursts made with Web Audio, scheduled from update(), so they stop by themselves on pause or game over. */
@@ -230,106 +106,308 @@
       } catch (e) {}
     },
     coin() { if (!this.ready()) return; const t = sfx.ac.currentTime; this.note(988, 0.08, 'square', 0.03, t); this.note(1319, 0.18, 'square', 0.03, t + 0.07); },
-    jump() { this.hiss(0.35, 0.07, 'bandpass', 500, 2800); this.note(440, 0.2, 'triangle', 0.04, 0, 880); },
-    land() { this.note(140, 0.14, 'sine', 0.12, 0, 55); this.hiss(0.14, 0.06, 'lowpass', 600); },
-    crash() { this.hiss(0.5, 0.15, 'lowpass', 1800, 150); this.note(110, 0.35, 'square', 0.05, 0, 40); },
+    jump() { this.hiss(0.35, 0.06, 'bandpass', 500, 2800); },
+    land() { this.note(130, 0.16, 'sine', 0.13, 0, 50); this.hiss(0.18, 0.07, 'lowpass', 700); },
+    crash() { this.hiss(0.6, 0.16, 'lowpass', 1800, 150); this.note(110, 0.35, 'square', 0.05, 0, 40); },
     trick() { if (!this.ready()) return; const t = sfx.ac.currentTime; [784, 988, 1175, 1568].forEach((f, i) => this.note(f, 0.1, 'square', 0.025, t + i * 0.06)); },
+    sketchy() { this.note(200, 0.25, 'sawtooth', 0.04, 0, 90); },
   };
 
-  /* ---------- Drawing helpers ---------- */
-  // proj() turns a world point into screen x, y and the size of 1 m there (PS).
-  let cam = { x: 0, y: 0, z: 0 }, PX = 0, PY = 0, PS = 0;
-  function proj(x, y, z) { PS = F / Math.max(z - cam.z, 0.3); PX = W / 2 + (x - cam.x) * PS; PY = HOR + (cam.y - y) * PS; }
-  let TA = 0, TM = 0; // Which tinted copies to draw, and how much of the second one.
-  function sprite(set, x, z, hm, foot, clipY, alpha) {
-    proj(x, ground(z), z);
-    const img = set[0], hp = hm * PS;
-    if (hp < 1.2) return;
-    const wp = (hp * img.width) / img.height, top = PY - hp * foot, left = PX - wp / 2;
-    if (left > W || left + wp < 0 || top > H) return;
-    let frac = 1;
-    if (top + hp > clipY) { frac = (clipY - top) / hp; if (frac <= 0) return; } // Partly hidden behind a nearer bump.
-    const sh = img.height * frac;
-    if (TM < 0.99) { ctx.globalAlpha = alpha; ctx.drawImage(set[TA], 0, 0, img.width, sh, left, top, wp, hp * frac); }
-    if (TM > 0.01) { ctx.globalAlpha = alpha * (TM < 0.99 ? TM : 1); ctx.drawImage(set[TA + 1], 0, 0, img.width, sh, left, top, wp, hp * frac); }
-    ctx.globalAlpha = 1;
-  }
-  const fade = (z) => 1 - clamp((z - cam.z - FAR * 0.7) / (FAR * 0.3), 0, 1); // Far things fade in instead of popping up.
+  /* ---------- 3D scene ---------- */
+  let S = null; // Everything three.js, made once when the library has loaded.
+  const glCanvas = document.createElement('canvas');
+  const SHADER_END = '#include <tonemapping_fragment>\n#include <colorspace_fragment>\n';
 
-  // A skier seen from behind. o.lean tips the body into the turn, o.yaw points the skis.
-  function drawSkier(x, y, s, o) {
-    const c = o.col;
-    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
-    if (o.spin) ctx.scale(Math.cos(o.spin), 1);
-    ctx.rotate(o.lean);
-    const k = o.crouch, sp = 0.14, hip = -0.7 + k, sh = -1.18 + k * 1.3;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (const side of [-1, 1]) {
-      const bx = side * sp, tx = bx + o.yaw * 0.4;
-      ctx.fillStyle = lit(c.ski, 0.7);
-      ctx.beginPath(); ctx.moveTo(bx - 0.05, 0.3); ctx.lineTo(bx + 0.05, 0.3); ctx.lineTo(tx + 0.035, -0.55); ctx.quadraticCurveTo(tx, -0.68, tx - 0.035, -0.55); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = lit(c.ski);
-      ctx.beginPath(); ctx.moveTo(bx - 0.03, 0.28); ctx.lineTo(bx + 0.02, 0.28); ctx.lineTo(tx + 0.01, -0.55); ctx.lineTo(tx - 0.025, -0.55); ctx.closePath(); ctx.fill();
+  // Several shapes, each with its own colour, glued into one shape so a whole tree is drawn in one go.
+  function merged(parts) {
+    const pos = [], nor = [], col = [];
+    for (const p of parts) {
+      const g = p.geo.toNonIndexed(); g.applyMatrix4(p.m);
+      const c = new T.Color(p.color), P = g.attributes.position.array, N = g.attributes.normal.array;
+      for (let i = 0; i < P.length; i += 3) {
+        pos.push(P[i], P[i + 1], P[i + 2]); nor.push(N[i], N[i + 1], N[i + 2]);
+        const k = p.vary ? 1 + (Math.random() - 0.5) * p.vary : 1;
+        col.push(c.r * k, c.g * k, c.b * k);
+      }
     }
-    // Poles, then legs.
-    ctx.strokeStyle = lit('#c7cbe0'); ctx.lineWidth = 0.025;
-    for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(side * 0.3, hip + 0.02); ctx.lineTo(side * 0.47, 0.16); ctx.stroke(); }
-    ctx.strokeStyle = lit(c.pants); ctx.lineWidth = 0.15;
-    for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(side * sp, -0.08); ctx.lineTo(side * (sp + 0.035), -0.42 + k * 0.6); ctx.lineTo(side * 0.1, hip); ctx.stroke(); }
-    ctx.fillStyle = lit('#2a2d3e');
-    for (const side of [-1, 1]) ctx.fillRect(side * sp - 0.065, -0.16, 0.13, 0.15);
-    // Jacket, with a stripe and a race bib.
-    ctx.beginPath(); ctx.moveTo(-0.17, hip + 0.04); ctx.lineTo(-0.235, sh + 0.06); ctx.quadraticCurveTo(0, sh - 0.08, 0.235, sh + 0.06); ctx.lineTo(0.17, hip + 0.04); ctx.closePath();
-    const jg = ctx.createLinearGradient(-0.24, 0, 0.24, 0); jg.addColorStop(0, lit(c.jacket, 1.15)); jg.addColorStop(1, lit(c.jacket, 0.72));
-    ctx.fillStyle = jg; ctx.fill();
-    ctx.save(); ctx.clip();
-    ctx.fillStyle = lit(c.trim); ctx.fillRect(-0.3, sh + 0.12, 0.6, 0.06);
-    if (o.bib) { ctx.fillStyle = lit('#ffffff', 0.95); ctx.fillRect(-0.1, sh + 0.21, 0.2, 0.17); ctx.fillStyle = lit(c.jacket, 0.6); ctx.fillRect(-0.02, sh + 0.24, 0.04, 0.11); }
-    ctx.restore();
-    // Arms and gloves.
-    ctx.strokeStyle = lit(c.jacket, 0.82); ctx.lineWidth = 0.1;
-    for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(side * 0.2, sh + 0.06); ctx.lineTo(side * 0.34, sh + 0.3); ctx.lineTo(side * 0.3, hip + 0.02); ctx.stroke(); }
-    ctx.fillStyle = lit('#2a2d3e');
-    for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(side * 0.3, hip + 0.02, 0.05, 0, 7); ctx.fill(); }
-    // Head in a bobble hat.
-    ctx.fillStyle = lit('#f0c9a8', 0.85); ctx.fillRect(-0.05, sh - 0.1, 0.1, 0.08);
-    const hy = sh - 0.2;
-    const hg = ctx.createLinearGradient(-0.13, 0, 0.13, 0); hg.addColorStop(0, lit(c.hat, 1.1)); hg.addColorStop(1, lit(c.hat, 0.7));
-    ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(0, hy, 0.13, 0, 7); ctx.fill();
-    ctx.fillStyle = lit(c.trim); ctx.fillRect(-0.13, hy + 0.02, 0.26, 0.06);
-    ctx.fillStyle = lit('#ffffff', 0.95); ctx.beginPath(); ctx.arc(0, hy - 0.15, 0.065, 0, 7); ctx.fill();
-    ctx.restore();
+    const out = new T.BufferGeometry();
+    out.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    out.setAttribute('normal', new T.Float32BufferAttribute(nor, 3));
+    out.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    return out;
   }
-  const ME = { jacket: '#ff6b9a', trim: '#5ce1e6', pants: '#2b2340', hat: '#ffb347', ski: '#5ce1e6' };
-  const OTHERS = [
-    { jacket: '#b8e65c', trim: '#2b2340', pants: '#3a4a6a', hat: '#ff6b9a', ski: '#ffb347' },
-    { jacket: '#a78bfa', trim: '#ffffff', pants: '#1f2335', hat: '#5ce1e6', ski: '#ff6b9a' },
-    { jacket: '#ffb347', trim: '#2b2340', pants: '#26304a', hat: '#a78bfa', ski: '#b8e65c' },
-    { jacket: '#e84a4a', trim: '#ffffff', pants: '#202020', hat: '#ffffff', ski: '#ffd84a' },
-  ];
+  const at = (x, y, z, ry = 0) => new T.Matrix4().compose(new T.Vector3(x, y, z), new T.Quaternion().setFromEuler(new T.Euler(0, ry, 0)), new T.Vector3(1, 1, 1));
+
+  function pineGeo() {
+    const parts = [{ geo: new T.CylinderGeometry(0.11, 0.17, 1.4, 7), m: at(0, 0.7, 0), color: '#4a2f1d' }];
+    for (let i = 0; i < 4; i++) {
+      const r = 1.45 - i * 0.3, h = 2.1 - i * 0.28, y = 1.25 + i * 0.95;
+      parts.push({ geo: new T.ConeGeometry(r, h, 10, 1, true), m: at(0, y + h / 2, 0, i), color: '#1d4a33', vary: 0.25 });
+      parts.push({ geo: new T.ConeGeometry(r * 0.78, h * 0.52, 10, 1, true), m: at(0, y + h * 0.62, 0, i + 0.3), color: '#f1f5fc', vary: 0.08 });
+    }
+    return merged(parts);
+  }
+  function rockGeo() {
+    const g = new T.IcosahedronGeometry(1, 1), p = g.attributes.position, v = new T.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      v.multiplyScalar((0.75 + 0.35 * Math.abs(Math.sin(v.x * 3.1 + v.z * 2.3) + Math.cos(v.y * 4.2))) * 0.55);
+      p.setXYZ(i, v.x, Math.max(v.y * 0.75, -0.2) + 0.25, v.z);
+    }
+    const ng = g.toNonIndexed(); ng.computeVertexNormals();
+    const n = ng.attributes.normal, col = [], snow = new T.Color('#eef3fb'), rock = new T.Color('#4f5566');
+    for (let i = 0; i < n.count; i++) { const c = n.getY(i) > 0.55 ? snow : rock; col.push(c.r, c.g, c.b); }
+    ng.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    return ng;
+  }
+  function dotTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return new T.CanvasTexture(c);
+  }
+
+  // The skier: simple shapes, posed every frame. Limbs are capsules stretched between two points.
+  function makeSkier() {
+    const mat = (c, r = 0.55) => new T.MeshStandardMaterial({ color: c, roughness: r });
+    const jacket = mat('#ffb020', 0.5), pants = mat('#1f2740', 0.7), dark = mat('#1a1c24', 0.4), white = mat('#f4f6fa', 0.35);
+    const root = new T.Group(), lean = new T.Group(); root.add(lean);
+    const capsule = new T.CapsuleGeometry(1, 1, 4, 10);
+    const add = (geo, m) => { const o = new T.Mesh(geo, m); o.castShadow = true; lean.add(o); return o; };
+    return {
+      root, lean,
+      skis: [0, 1].map(() => add(new T.BoxGeometry(0.11, 0.035, 1.75), mat('#ff5a36', 0.35))),
+      boots: [0, 1].map(() => add(new T.BoxGeometry(0.15, 0.2, 0.3), dark)),
+      shins: [0, 1].map(() => add(capsule, pants)),
+      thighs: [0, 1].map(() => add(capsule, pants)),
+      torso: add(capsule, jacket),
+      arms: [0, 1].map(() => add(capsule, jacket)),
+      poles: [0, 1].map(() => add(new T.CylinderGeometry(0.012, 0.012, 1, 5), mat('#c9cdd8', 0.3))),
+      head: add(new T.SphereGeometry(0.15, 16, 12), white),
+      goggles: add(new T.BoxGeometry(0.2, 0.07, 0.08), new T.MeshStandardMaterial({ color: '#ff8a20', roughness: 0.15, metalness: 0.6 })),
+      pack: add(new T.BoxGeometry(0.26, 0.3, 0.12), mat('#30343f', 0.8)),
+    };
+  }
+  const UP = { x: 0, y: 1, z: 0 };
+  let vA = null, vB = null;
+  function placeLimb(o, a, b, r, stretch) {
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, len = Math.hypot(dx, dy, dz);
+    o.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    vA.set(UP.x, UP.y, UP.z); vB.set(dx / len, dy / len, dz / len);
+    o.quaternion.setFromUnitVectors(vA, vB);
+    if (stretch) o.scale.set(1, len, 1); else o.scale.set(r, len / 3, r); // A capsule of radius 1 and length 1 is 3 long.
+  }
+  // Pose the skier. c is how low the tuck is (0 to 1), forward is -z.
+  function poseSkier(sk, c, armsUp) {
+    const V = (x, y, z) => ({ x, y, z });
+    const hip = V(0, 0.92 - 0.3 * c, 0.08 + 0.12 * c), bend = 0.3 + 0.75 * c;
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1, x = s * 0.13;
+      sk.skis[i].position.set(x, 0.02, -0.15);
+      sk.boots[i].position.set(x, 0.13, 0);
+      const knee = V(x * 1.05, 0.5 - 0.14 * c, -0.2 - 0.12 * c);
+      placeLimb(sk.shins[i], V(x, 0.18, 0), knee, 0.09);
+      placeLimb(sk.thighs[i], knee, V(s * 0.1, hip.y, hip.z), 0.11);
+    }
+    const neck = V(0, hip.y + 0.55 * Math.cos(bend), hip.z - 0.55 * Math.sin(bend));
+    placeLimb(sk.torso, hip, neck, 0.2);
+    sk.pack.position.set(0, (hip.y + neck.y) / 2 + 0.05 * Math.cos(bend), (hip.z + neck.z) / 2 + 0.2); sk.pack.rotation.x = -bend;
+    sk.head.position.set(0, neck.y + 0.16, neck.z - 0.04);
+    sk.goggles.position.set(0, neck.y + 0.17, neck.z - 0.17);
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1, sh = V(s * 0.22, neck.y - 0.08, neck.z + 0.02);
+      const hand = armsUp ? V(s * 0.55, neck.y + 0.15, neck.z - 0.1) : V(s * 0.26, hip.y + 0.05 + 0.1 * c, hip.z - 0.42 - 0.05 * c);
+      placeLimb(sk.arms[i], sh, hand, 0.07);
+      const tip = armsUp ? V(s * 0.75, hand.y - 0.6, hand.z + 0.9) : V(s * 0.35, 0.05, hand.z + 1.05);
+      placeLimb(sk.poles[i], hand, tip, 0, true);
+    }
+  }
+
+  function initScene() {
+    let renderer;
+    try { renderer = new T.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' }); }
+    catch (e) { failed = true; return; }
+    vA = new T.Vector3(); vB = new T.Vector3();
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+    renderer.toneMapping = T.NeutralToneMapping;
+    const scene = new T.Scene();
+    scene.fog = new T.FogExp2('#d9e4ef', 0.0016);
+    const camera = new T.PerspectiveCamera(66, W / H, 0.2, 1600);
+
+    const hemi = new T.HemisphereLight('#d2e2ff', '#8d93a6', 1.2); scene.add(hemi);
+    const sun = new T.DirectionalLight('#fff1dc', 3);
+    sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 300 });
+    sun.shadow.camera.updateProjectionMatrix();
+    sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04;
+    scene.add(sun, sun.target);
+    const lamp = new T.SpotLight('#ffe7c0', 0, 90, 0.6, 0.9, 1); // Head torch at night.
+    scene.add(lamp, lamp.target);
+
+    // Sky: a big ball around the camera, coloured from the horizon up, with the sun (or moon) painted in.
+    const skyMat = new T.ShaderMaterial({
+      side: T.BackSide, depthWrite: false, toneMapped: false,
+      uniforms: { top: { value: new T.Color() }, hor: { value: new T.Color() }, sunDir: { value: new T.Vector3() }, sunCol: { value: new T.Color() }, size: { value: 1 } },
+      vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w; }',
+      fragmentShader: `uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; uniform vec3 sunCol; uniform float size; varying vec3 vDir;
+        void main(){ vec3 c = mix(hor, top, pow(max(vDir.y, 0.0), 0.55));
+          float s = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
+          c += sunCol * (smoothstep(1.0 - 0.0009 * size, 1.0 - 0.0006 * size, s) * 4.0 + pow(s, 14.0) * 0.4 * size);
+          gl_FragColor = vec4(c, 1.0);
+          #include <colorspace_fragment>
+        }`,
+    });
+    const sky = new T.Mesh(new T.SphereGeometry(1000, 32, 16), skyMat); sky.renderOrder = -2; sky.frustumCulled = false; scene.add(sky);
+    const starPos = [];
+    for (let i = 0; i < 1400; i++) { const a = rand(0, Math.PI * 2), y = rand(0.05, 1), r = Math.sqrt(1 - y * y); starPos.push(Math.cos(a) * r * 900, y * 900, Math.sin(a) * r * 900); }
+    const starGeo = new T.BufferGeometry(); starGeo.setAttribute('position', new T.Float32BufferAttribute(starPos, 3));
+    const stars = new T.Points(starGeo, new T.PointsMaterial({ color: '#ffffff', size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    stars.renderOrder = -1; stars.frustumCulled = false; scene.add(stars);
+    // Northern lights: wavy curtains far ahead, glowing on top of the sky.
+    const auroraMat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending,
+      uniforms: { time: { value: 0 }, night: { value: 0 } },
+      vertexShader: `uniform float time; varying vec2 vUv; void main(){ vUv = uv; vec3 p = position;
+          p.z += sin(p.x * 0.004 + time * 0.12) * 160.0 + sin(p.x * 0.011 - time * 0.2) * 50.0; p.y += sin(p.x * 0.006 + time * 0.15) * 30.0;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+      fragmentShader: `uniform float time; uniform float night; varying vec2 vUv;
+        void main(){ float v = vUv.y; vec3 c = mix(vec3(0.15, 1.0, 0.55), vec3(0.6, 0.35, 1.0), smoothstep(0.35, 1.0, v));
+          float rays = 0.55 + 0.45 * sin(vUv.x * 160.0 + sin(vUv.x * 23.0 + time * 0.7) * 3.0 + time * 0.5);
+          float a = smoothstep(0.0, 0.18, v) * pow(1.0 - v, 1.4) * rays * night * 0.75;
+          gl_FragColor = vec4(c * a, a);
+          ${SHADER_END} }`,
+    });
+    const aurora = new T.Group();
+    [[0, 0], [180, 120]].forEach(([dz, dy]) => { const m = new T.Mesh(new T.PlaneGeometry(2200, 260, 120, 1), auroraMat); m.position.set(0, 150 + dy * 0.6, -620 + dz); m.frustumCulled = false; aurora.add(m); });
+    scene.add(aurora);
+
+    // Big peaks at the far end of the valley, faded by the haze.
+    const peaks = (() => {
+      const g = new T.PlaneGeometry(3200, 700, 160, 30), p = g.attributes.position, col = [];
+      const snow = new T.Color('#f2f6fc'), rock = new T.Color('#6f7a92'), c = new T.Color();
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i) + 350;
+        let h = 60; [[0.0021, 260], [0.0047, 120], [0.011, 45], [0.027, 14]].forEach(([f, a], j) => { h += a * (1 - Math.abs(Math.sin(x * f + j * 1.7))) * (0.55 + 0.9 * Math.abs(x) / 1600); });
+        const yy = (y / 700) * h;
+        p.setXYZ(i, x, yy, -Math.abs(x) * 0.25);
+        c.copy(rock).lerp(snow, clamp((yy / h - 0.4) * 3 + noise(x * 0.02, yy * 0.02) * 0.6, 0, 1));
+        col.push(c.r, c.g, c.b);
+      }
+      g.setAttribute('color', new T.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
+      const m = new T.Mesh(g, new T.MeshLambertMaterial({ vertexColors: true })); m.frustumCulled = false;
+      scene.add(m); return m;
+    })();
+
+    // Terrain tiles, one per chunk, all sharing one list of triangles.
+    const idx = [];
+    for (let j = 0; j < ND - 1; j++) for (let i = 0; i < NU - 1; i++) { const a = j * NU + i; idx.push(a, a + 1, a + NU, a + 1, a + NU + 1, a + NU); }
+    const index = new T.Uint32BufferAttribute(idx, 1);
+    const groundMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 });
+    const tiles = [];
+    for (let k = 0; k < CHUNKS + 3; k++) {
+      const g = new T.BufferGeometry();
+      g.setIndex(index);
+      for (const a of ['position', 'normal', 'color']) g.setAttribute(a, new T.BufferAttribute(new Float32Array(NU * ND * 3), 3));
+      const m = new T.Mesh(g, groundMat); m.receiveShadow = true; m.frustumCulled = false; m.visible = false; m.chunk = null;
+      scene.add(m); tiles.push(m);
+    }
+
+    const trees = new T.InstancedMesh(pineGeo(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), 2000);
+    const rocks = new T.InstancedMesh(rockGeo(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }), 400);
+    const coins = new T.InstancedMesh(new T.CylinderGeometry(0.42, 0.42, 0.08, 20).rotateX(Math.PI / 2),
+      new T.MeshStandardMaterial({ color: '#ffc531', metalness: 0.35, roughness: 0.3, emissive: '#ff9d00', emissiveIntensity: 0.45 }), 400);
+    for (const m of [trees, rocks, coins]) { m.count = 0; m.frustumCulled = false; m.castShadow = m !== coins; m.receiveShadow = true; scene.add(m); }
+
+    const skier = makeSkier(); scene.add(skier.root);
+    const blob = new T.Mesh(new T.CircleGeometry(0.7, 20).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#1b2140', transparent: true, opacity: 0.25, depthWrite: false }));
+    scene.add(blob);
+
+    // Ski tracks: two ribbons lying on the snow behind you.
+    const tracks = [0, 1].map(() => {
+      const g = new T.BufferGeometry(), id = [];
+      g.setAttribute('position', new T.BufferAttribute(new Float32Array(TRACK * 2 * 3), 3));
+      g.setAttribute('normal', new T.BufferAttribute(new Float32Array(TRACK * 2 * 3).map((v, i) => (i % 3 === 1 ? 1 : 0)), 3));
+      for (let i = 0; i < TRACK - 1; i++) { const a = i * 2; id.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+      g.setIndex(id);
+      const m = new T.Mesh(g, new T.MeshStandardMaterial({ color: '#b9c7e2', roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+      m.frustumCulled = false; m.receiveShadow = true; scene.add(m); return m;
+    });
+
+    const dot = dotTexture();
+    const points = (n, size, color, opacity) => {
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(new Float32Array(n * 3), 3));
+      const m = new T.Points(g, new T.PointsMaterial({ map: dot, size, color, transparent: true, opacity, depthWrite: false }));
+      m.frustumCulled = false; scene.add(m); return m;
+    };
+    const spray = points(500, 0.32, '#ffffff', 0.9), sparks = points(120, 0.35, '#ffd65a', 1), flakes = points(900, 0.12, '#ffffff', 0.85);
+    const rampMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: T.DoubleSide });
+
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, rocks, coins, rampMat, ramps: [], skier, blob, tracks, spray, sparks, flakes, built: '' };
+  }
+  const TRACK = 90;
+
+  /* ---------- Turning chunks into 3D ---------- */
+  function fillTile(tile, ch) {
+    const g = tile.geometry, P = g.attributes.position.array, N = g.attributes.normal.array, C = g.attributes.color.array;
+    const snow = new T.Color('#f5f8fd'), blue = new T.Color('#d3def2'), rock = new T.Color('#545a6a'), rock2 = new T.Color('#7a8192'), c = new T.Color(), r = new T.Color();
+    for (let j = 0; j < ND; j++) {
+      const d = ch.d0 + (j * CL) / (ND - 1), cx = center(d);
+      for (let i = 0; i < NU; i++) {
+        // Points are packed close together on the valley floor and spread out up the sides.
+        const s = (i / (NU - 1)) * 2 - 1, x = cx + 170 * Math.sign(s) * Math.pow(Math.abs(s), 1.7), k = (j * NU + i) * 3;
+        const n = normalAt(x, d);
+        P[k] = x; P[k + 1] = height(x, d); P[k + 2] = -d;
+        N[k] = n[0]; N[k + 1] = n[1]; N[k + 2] = n[2];
+        // Snow everywhere, with bare rock where it is too steep for snow to stay.
+        const steep = clamp((0.78 - n[1]) / 0.2 + noise(x * 0.08, d * 0.08) * 0.35, 0, 1);
+        c.copy(snow).lerp(blue, clamp(0.45 + noise(x * 0.03, d * 0.03) * 0.7 + noise(x * 0.3, d * 0.12) * 0.35, 0, 1) * 0.8);
+        if (steep > 0) c.lerp(r.copy(rock2).lerp(rock, clamp(0.5 + noise(x * 0.2, d * 0.2), 0, 1)), steep);
+        C[k] = c.r; C[k + 1] = c.g; C[k + 2] = c.b;
+      }
+    }
+    g.attributes.position.needsUpdate = g.attributes.normal.needsUpdate = g.attributes.color.needsUpdate = true;
+    tile.chunk = ch; tile.visible = true;
+  }
+  function rampMesh(rp) {
+    // A curved wedge of snow lying on the slope, with blue sides and an orange lip.
+    const pos = [], col = [], top = new T.Color('#f7f9ff'), side = new T.Color('#9fb5dc'), edge = new T.Color('#ff6a2c'), n = 10;
+    const quad = (a, b, c, e, cl) => { for (const p of [a, b, c, a, c, e]) { pos.push(p[0], p[1], p[2]); col.push(cl.r, cl.g, cl.b); } };
+    const pt = (s, sd, up) => { const d = rp.d + s * RAMP.len, x = rp.x + sd * RAMP.w; return [x, height(x, d) + (up ? rampLift(s) : -0.3), -d]; };
+    for (let i = 0; i < n; i++) {
+      const s0 = i / n, s1 = (i + 1) / n;
+      quad(pt(s0, -1, 1), pt(s0, 1, 1), pt(s1, 1, 1), pt(s1, -1, 1), i === n - 1 ? edge : top);
+      quad(pt(s0, -1, 0), pt(s0, -1, 1), pt(s1, -1, 1), pt(s1, -1, 0), side);
+      quad(pt(s0, 1, 1), pt(s0, 1, 0), pt(s1, 1, 0), pt(s1, 1, 1), side);
+    }
+    quad(pt(1, -1, 1), pt(1, 1, 1), pt(1, 1, 0), pt(1, -1, 0), side);
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    const m = new T.Mesh(g, S.rampMat); m.castShadow = m.receiveShadow = true; m.ramp = rp;
+    return m;
+  }
 
   /* ---------- The game ---------- */
-  const strip = { x: new Float32Array(DRAW + 1), y: new Float32Array(DRAW + 1), w: new Float32Array(DRAW + 1), g: new Float32Array(DRAW + 1), clip: new Float32Array(DRAW + 1) };
-
   const ski = {
     W, H, color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
-    quietScore: true, // The score goes up every metre, so coins get their own chime instead.
-    intro: 'Steer down an endless mountain. Dodge the trees, rocks and other skiers, grab the coins and fly off the snow ramps.',
-    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer. On a phone, hold the left or right side of the screen. <kbd>P</kbd> to pause',
+    quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
+    intro: 'Ski down an endless 3D valley. Dodge the trees and rocks, grab coins and fly off kickers and rollers.',
+    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, and hold one in the air to spin. On a phone, hold the left or right side of the screen. <kbd>P</kbd> to pause',
 
     reset() {
-      ph = ph.map(() => rand(0, 6.3));
-      this.pz = 0; this.px = center(0); this.vx = 0; this.v = 10;
-      this.h = 0; this.vy = 0; this.air = false; this.airT = 0; this.spin = 0; this.ramp = null;
-      cam = { x: this.px, y: ground(0) + UP, z: -BACK };
-      this.objs = []; this.riders = []; this.parts = []; this.pops = []; this.trail = []; this.trailZ = -1;
-      this.genStrip = Math.floor(-BACK / SEG); this.nextRow = 70; this.lastRamp = 0; this.riderT = 6;
+      ph = ph.map(() => rand(0, 6.3)); SEED = (Math.random() * 1e9) | 0;
+      this.d = 0; this.x = center(0); this.vx = 0; this.v = 12;
+      this.y = height(this.x, 0); this.vy = 0; this.air = false; this.airT = 0; this.spin = 0;
+      this.chunks = []; this.nextChunk = -CL; this.nextRamp = 150;
+      this.lastG = this.y;
+      this.parts = []; this.sparks = []; this.pops = []; this.trail = []; this.trailD = -1;
       this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
-      this.flakes = Array.from({ length: 90 }, () => this.flake({}, rand(1, 45)));
-      this.gen(FAR + 20);
+      this.cam = null; this.lean = 0; this.crouch = 0.3;
+      this.gen();
+      if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.ramps.forEach((m) => { S.scene.remove(m); m.geometry.dispose(); }); S.ramps = []; S.built = ''; }
     },
-    flake(f, z) { f.x = rand(-16, 16); f.y = rand(-6, 12); f.z = z; f.s = rand(0.03, 0.07); return f; },
 
     key(e, down) {
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.left = down;
@@ -338,477 +416,354 @@
     press(down) { this.touch = down; },
     point(p) { this.tx = p.x; },
 
-    /* ----- Building the mountain ahead ----- */
-    add(kind, x, z) {
-      if (kind === 'pine') { const v = (Math.random() * 3) | 0, sc = rand(0.8, 1.3); this.objs.push({ kind, x, z, v, hm: [5.6, 6.4, 4.8][v] * sc, r: 0.75 * sc, tall: 5 }); }
-      else if (kind === 'rock') { const sc = rand(0.75, 1.3); this.objs.push({ kind, x, z, v: (Math.random() * 2) | 0, hm: 1.35 * sc, r: 0.8 * sc, tall: 1.05 * sc }); }
+    /* ----- The mountain ahead ----- */
+    gen() {
+      while (this.nextChunk < this.d + CL * (CHUNKS - 1)) { this.chunks.push(this.makeChunk(this.nextChunk)); this.nextChunk += CL; }
+      while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
     },
-    gen(upto) {
-      let added = false;
-      while (this.genStrip * SEG < upto) {
-        const i = this.genStrip++, z = i * SEG, c = center(z), hw = halfWidth(z);
-        for (const side of [-1, 1]) {
-          if (Math.random() < 0.8) this.add('pine', c + side * (hw + 1.8 + Math.pow(Math.random(), 1.6) * 30), z + rand(0, SEG));
-          if (Math.random() < 0.35) this.add('pine', c + side * (hw + 8 + Math.random() * 40), z + rand(0, SEG));
-          if (i % 8 === 0) this.objs.push({ kind: 'pole', x: c + side * (hw + 0.5), z, side });
+    makeChunk(d0) {
+      const ch = { d0, trees: [], rocks: [], coins: [], ramps: [] }, lv = level(d0);
+      const put = (list, x, d, s) => list.push({ x, d, s, y: height(x, d), r: rand(0, 6.3), h: rand(0.9, 1.15) });
+      // A kicker, with coins up in the air where the jump goes.
+      if (d0 >= this.nextRamp) {
+        const rd = d0 + rand(5, 40), ru = rand(-12, 12), rp = { x: center(rd) + ru, d: rd };
+        ch.ramps.push(rp); this.nextRamp = rd + RAMP_EVERY * rand(0.8, 1.3);
+        const v = cruise(rd);
+        for (let s = 4; s < 44; s += 4) {
+          const up = RAMP.h + (LIP + SLOPE) * s - ((G / 2) * s * s) / (v * v); // Height above the snow where the jump goes.
+          if (up < 0.8) break;
+          const dd = rd + RAMP.len + s, x = center(dd) + ru;
+          ch.coins.push({ x, d: dd, y: height(x, dd) + up });
         }
-        if (z >= this.nextRow) this.row(z);
-        added = true;
       }
-      if (added) this.objs.sort((a, b) => a.z - b.z);
+      const inLane = (x, d) => ch.ramps.some((rp) => Math.abs(x - rp.x) < 7 && d > rp.d - 8 && d < rp.d + 55);
+      // Forest on the lower valley sides.
+      for (let k = 0; k < 90; k++) {
+        const u = (Math.random() < 0.5 ? -1 : 1) * (FLOOR - 4 + Math.pow(Math.random(), 1.4) * 90), d = d0 + rand(0, CL), x = center(d) + u;
+        if (normalAt(x, d)[1] > 0.74) put(ch.trees, x, d, rand(0.8, 1.7));
+      }
+      // Trees and rocks to dodge on the valley floor, more and more of them the further you go.
+      if (d0 > 50) {
+        const n = Math.floor(2 + lv * 9 + rand(0, 2.5));
+        for (let k = 0; k < n; k++) {
+          const d = d0 + rand(0, CL), x = center(d) + rand(-FLOOR + 2, FLOOR - 2);
+          if (inLane(x, d)) continue;
+          if (Math.random() < 0.7) { const m = 1 + ((Math.random() * 2.4) | 0); for (let q = 0; q < m; q++) put(ch.trees, x + rand(-2.2, 2.2), d + rand(-2.2, 2.2), rand(0.7, 1.25)); }
+          else put(ch.rocks, x, d, rand(0.8, 1.8));
+        }
+        if (Math.random() < 0.55) {
+          const ru = rand(-FLOOR + 4, FLOOR - 4), d = d0 + rand(0, CL - 30);
+          for (let q = 0; q < 7; q++) { const dd = d + q * 4, x = center(dd) + ru; if (!inLane(x, dd)) ch.coins.push({ x, d: dd, y: height(x, dd) + 0.9 }); }
+        }
+      }
+      return ch;
     },
-    row(z) {
-      const d = level(z), c = center(z), hw = halfWidth(z), r = Math.random();
-      this.nextRow = z + rand(1, 1.4) * (36 - 20 * d);
-      if (z - this.lastRamp > RAMP_EVERY && r < 0.3) {
-        // A snow ramp, with a line of coins up in the air where the jump goes.
-        const off = rand(-hw + 2.5, hw - 2.5), v = cruise(z), up = 5 + v * 0.12;
-        this.objs.push({ kind: 'ramp', x: c + off, z, w: 1.6, len: 4, hgt: 1.1 });
-        for (let j = 0; j < 8; j++) {
-          const dz = 3 + j * 4.5, t = dz / v, hh = 1.1 + up * t - 11 * t * t;
-          if (hh < 0.5) break;
-          this.objs.push({ kind: 'coin', x: center(z + 4 + dz) + off, z: z + 4 + dz, y: hh });
-        }
-        this.lastRamp = z; this.nextRow = z + 50;
-        return;
+    // The snow height under a point, kickers included.
+    ground(x, d) {
+      let y = height(x, d);
+      for (const ch of this.chunks) {
+        if (d < ch.d0 - RAMP.len || d > ch.d0 + CL + RAMP.len) continue;
+        for (const rp of ch.ramps) if (d >= rp.d && d <= rp.d + RAMP.len && Math.abs(x - rp.x) < RAMP.w) y += rampLift((d - rp.d) / RAMP.len);
       }
-      if (r < 0.32 - d * 0.12) {
-        const off = rand(-hw + 1.2, hw - 1.2);
-        for (let j = 0; j < 6; j++) { const zz = z + j * 4; this.objs.push({ kind: 'coin', x: center(zz) + off, z: zz, y: 0.7 }); }
-        return;
-      }
-      // A row of trees and rocks across the piste, always with a gap wide enough to get through.
-      const n = Math.max(4, Math.floor((hw * 2) / 2.2)), want = 1 + Math.floor(Math.random() * (1 + d * 2.6));
-      const taken = shuffle([...Array(n).keys()]).slice(0, Math.min(want, n - 2));
-      const free = (s) => !taken.includes(s);
-      while (taken.length && ![...Array(n - 1).keys()].some((s) => free(s) && free(s + 1))) taken.pop();
-      for (const s of taken) this.add(Math.random() < 0.55 ? 'pine' : 'rock', c - hw + (s + 0.5) * ((2 * hw) / n) + rand(-0.3, 0.3), z + rand(-1, 1));
-      if (Math.random() < 0.3) {
-        const s = [...Array(n).keys()].find(free);
-        if (s !== undefined) this.objs.push({ kind: 'coin', x: c - hw + (s + 0.5) * ((2 * hw) / n), z, y: 0.7 });
-      }
+      return y;
     },
 
     /* ----- Moving ----- */
-    spray(n, side, power) {
+    pop(text, col) { this.pops.push({ text, col, life: 1.6 }); },
+    puff(n, x, y, d, speed, up, list = this.parts) {
       for (let i = 0; i < n; i++) {
-        this.parts.push({
-          x: this.px + rand(-0.15, 0.15), y: 0.05, z: this.pz - 0.4,
-          vx: side * rand(1, 4) * power + rand(-0.6, 0.6), vy: rand(1, 3.6) * power, vz: this.v * rand(0.45, 0.8),
-          life: rand(0.35, 0.8), max: 0.8, size: rand(0.08, 0.2), img: 'snow',
-        });
+        const a = rand(0, 6.3), sp = rand(0.3, 1) * speed;
+        list.push({ x, y, d, vx: Math.cos(a) * sp, vy: rand(0.5, 1) * up, vd: this.v * rand(0.4, 0.85) + Math.sin(a) * sp, life: rand(0.4, 1), max: 1 });
       }
     },
-    burst(x, y, z, n, img, speed) {
-      for (let i = 0; i < n; i++) {
-        const a = rand(0, 6.3), sp = rand(0.5, 1) * speed;
-        this.parts.push({ x, y, z, vx: Math.cos(a) * sp, vy: rand(1, 4), vz: this.v * 0.9 + Math.sin(a) * sp, life: rand(0.4, 0.9), max: 0.9, size: rand(0.08, 0.22), img });
-      }
-    },
-    pop(text, col) { this.pops.push({ text, col, life: 1.2 }); },
     hit(what) {
-      this.crash = { t: 0, what, m: Math.floor(this.pz) }; this.shake = 1;
-      snd.crash();
-      this.burst(this.px, 0.6, this.pz, 40, 'snow', 5);
+      this.crash = { t: 0, what, m: Math.floor(this.d), vx: this.vx };
+      this.shake = 1; snd.crash();
+      this.puff(60, this.x, this.y + 0.5, this.d, 5, 5);
     },
 
     update(dt) {
       this.t += dt;
-      const prevZ = this.pz;
       if (this.crash) {
-        this.crash.t += dt; this.v *= Math.exp(-4 * dt); this.vx *= Math.exp(-4 * dt);
-        this.pz += this.v * dt; this.px += this.vx * dt;
-        this.follow(dt); this.move(dt);
-        if (this.crash.t > 1.1) {
+        this.crash.t += dt; this.v *= Math.exp(-3 * dt); this.vx *= Math.exp(-3 * dt);
+        this.d += this.v * dt; this.x += this.vx * dt;
+        this.vy -= G * dt; this.y = Math.max(this.y + this.vy * dt, this.ground(this.x, this.d));
+        this.moveBits(dt);
+        if (this.crash.t > 1.4) {
           const msg = 'You hit ' + this.crash.what + ' after ' + this.crash.m + ' m';
           return over(this.score, msg + (this.coins ? ' and grabbed ' + this.coins + (this.coins === 1 ? ' coin.' : ' coins.') : '.'));
         }
         return;
       }
-      const c = center(this.pz), hw = halfWidth(this.pz), powder = Math.abs(this.px - c) > hw && !this.air;
-
-      // Speed: it creeps up the further you go. Deep snow off the piste slows you down.
-      const want = cruise(this.pz) * (powder ? 0.7 : 1);
-      this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.6 : 1.5));
-
-      // Steering.
       let dir = (this.right ? 1 : 0) - (this.left ? 1 : 0);
       if (this.touch) dir = clamp((this.tx - W / 2) / 70, -1, 1);
-      const maxSide = 4 + 0.35 * this.v;
-      if (!this.air) this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 7);
-      // The piste bends under you. You drift with most of a bend by yourself, but have to steer for the rest.
-      const bend = (center(this.pz + 1) - center(this.pz - 1)) / 2;
-      this.pz += this.v * dt; this.px += (this.vx + bend * this.v * 0.65) * dt;
+      const u = this.x - center(this.d), wall = Math.max(0, Math.abs(u) - FLOOR), maxSide = 5 + 0.3 * this.v;
 
-      // Ramps and jumps.
-      if (this.ramp) {
-        const r = this.ramp;
-        if (Math.abs(this.px - r.x) > r.w) { this.ramp = null; this.air = true; this.vy = 0; }
-        else if (this.pz > r.z + r.len) { this.ramp = null; this.air = true; this.vy = 5 + this.v * 0.12; this.h = r.hgt; this.airT = 0; snd.jump(); }
-        else this.h = ((this.pz - r.z) / r.len) * r.hgt;
+      // Speed creeps up the further you go. Climbing the valley side slows you and pushes you back down.
+      if (!this.air) {
+        const want = cruise(this.d) * (wall > 0 ? 0.75 : 1);
+        this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
+        this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 5);
+        this.vx -= Math.sign(u) * wall * 1.6 * dt;
+      } else if (dir && this.airT > 0.2) this.spin += dir * 11 * dt; // Hold a direction in the air to spin.
+
+      // The valley bends under you. You follow half of a bend by yourself and steer for the rest.
+      const bend = (center(this.d + 1) - center(this.d - 1)) / 2;
+      this.d += this.v * dt; this.x += (this.vx + bend * this.v * 0.5) * dt;
+
+      // Stay on the snow, or fly when it drops away faster than gravity can pull you down.
+      const g = this.ground(this.x, this.d), gv = (g - this.lastG) / dt; this.lastG = g;
+      if (!this.air) {
+        if (gv < this.vy - G * dt * 1.2) { this.air = true; this.airT = 0; if (this.vy > 2) snd.jump(); }
+        else { this.y = g; this.vy = gv; }
       }
       if (this.air) {
-        this.airT += dt; this.vy -= 22 * dt; this.h += this.vy * dt;
-        if (this.airT > 0.15) this.spin = Math.min(this.spin + dt * 11.5, Math.PI * 2); // A helicopter spin.
-        if (this.h <= 0) {
-          this.h = 0; this.air = false; snd.land(); this.spray(18, 1, 1); this.spray(18, -1, 1); this.shake = Math.max(this.shake, 0.25);
-          if (this.airT > 0.5) {
-            const pts = this.spin >= Math.PI * 2 ? 100 : 50;
-            this.bonus += pts; snd.trick(); this.pop((pts === 100 ? '360! +' : 'BIG AIR +') + pts, '#5ce1e6');
+        this.airT += dt; this.vy -= G * dt; this.y += this.vy * dt;
+        if (this.y <= g) this.land(g, gv);
+      }
+
+      // Coins, trees and rocks near you.
+      for (const ch of this.chunks) {
+        if (ch.d0 > this.d + 3 || ch.d0 + CL < this.d - 3) continue;
+        for (const c of ch.coins) {
+          if (!c.got && Math.abs(c.d - this.d) < 1.2 && Math.abs(c.x - this.x) < 1.2 && Math.abs(c.y - this.y - 0.8) < 1.5) {
+            c.got = true; this.coins++; snd.coin(); this.puff(14, c.x, c.y, c.d, 3, 3, this.sparks);
           }
-          this.spin = 0; this.airT = 0;
         }
+        for (const o of ch.trees) if (Math.abs(o.d - this.d) < 0.7 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.75 * o.s + 0.3 && this.y - o.y < 4.5 * o.s) return this.hit('a tree');
+        for (const o of ch.rocks) if (Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3 && this.y - o.y < 0.8 * o.s) return this.hit('a rock');
       }
 
-      // What is near the skier this step?
-      for (const o of this.objs) {
-        if (o.z > this.pz + 1) break;
-        if (o.z < prevZ - 1 || o.got) continue;
-        const dx = Math.abs(o.x - this.px), near = o.z > prevZ - 0.6 && o.z < this.pz + 0.6;
-        if (!near) continue;
-        if (o.kind === 'coin') {
-          if (dx < 1.1 && Math.abs(o.y - this.h) < 1.3) {
-            o.got = true; this.coins++; snd.coin();
-            this.burst(o.x, o.y, o.z, 12, 'gold', 3);
-          }
-        } else if (o.kind === 'ramp') {
-          if (!this.air && !this.ramp && dx < o.w && this.pz < o.z + o.len) this.ramp = o;
-        } else if (o.kind !== 'pole' && dx < o.r + 0.3 && this.h < o.tall * 0.85) {
-          o.got = true;
-          return this.hit(o.kind === 'pine' ? 'a tree' : 'a rock');
-        }
-      }
-      for (const r of this.riders) {
-        if (Math.abs(r.z - this.pz) < 0.8 && Math.abs(r.x - this.px) < 0.75 && this.h < 1.4) return this.hit('another skier');
-      }
-
-      // Other skiers start to show up once you get going.
-      this.riderT -= dt;
-      if (this.riderT <= 0) {
-        this.riderT = rand(5, 10) - level(this.pz) * 3;
-        if (this.v > 18 && this.riders.length < 3) {
-          const z = this.pz + 220;
-          this.riders.push({ z, off: rand(-halfWidth(z) + 1.5, halfWidth(z) - 1.5), v: rand(9, 14), amp: rand(1, 2.5), w: rand(0.6, 1.2), p: rand(0, 6.3), col: OTHERS[(Math.random() * OTHERS.length) | 0], x: 0, lean: 0 });
-        }
-      }
-
-      // Snow spray when carving hard or ploughing through deep snow.
+      // Snow spray when carving hard or ploughing up the side.
       const carve = Math.abs(this.vx) / maxSide;
-      if (!this.air && Math.random() < dt * (carve * 60 + (powder ? 45 : 0) + 4)) this.spray(1 + (powder ? 1 : 0), -Math.sign(this.vx || 1), 0.6 + carve);
-
+      if (!this.air && Math.random() < dt * (carve * 90 + wall * 6 + 6)) {
+        const s = -Math.sign(this.vx || 1);
+        this.parts.push({ x: this.x + rand(-0.2, 0.2), y: this.y + 0.05, d: this.d - 0.5, vx: s * rand(1, 5) * (0.5 + carve), vy: rand(1, 4) * (0.5 + carve), vd: this.v * rand(0.5, 0.85), life: rand(0.4, 0.9), max: 0.9 });
+      }
       // Ski hiss and wind, louder the faster you go.
       this.sndT -= dt;
       if (this.sndT <= 0) {
         this.sndT = 0.1;
-        if (!this.air) snd.hiss(0.18, 0.006 + carve * 0.02 + (powder ? 0.02 : 0), 'bandpass', 1800 + this.v * 30);
-        snd.hiss(0.18, 0.004 + this.v * 0.0005, 'lowpass', 300 + this.v * 12);
+        if (!this.air) snd.hiss(0.18, 0.006 + carve * 0.02, 'bandpass', 1800 + this.v * 30);
+        snd.hiss(0.18, 0.004 + this.v * 0.0005 + (this.air ? 0.01 : 0), 'lowpass', 300 + this.v * 12);
+      }
+      // Tracks in the snow.
+      if (this.d - this.trailD > 0.5) {
+        this.trailD = this.d;
+        this.trail.unshift(this.air ? null : { x: this.x, d: this.d, h: Math.atan2(this.vx + bend * this.v * 0.5, this.v) });
+        if (this.trail.length > TRACK) this.trail.pop();
       }
 
-      // Tracks in the snow behind you.
-      if (this.pz - this.trailZ > 0.6) {
-        this.trailZ = this.pz;
-        this.trail.push(this.air || this.ramp ? null : { x: this.px, z: this.pz });
-        if (this.trail.length > 28) this.trail.shift();
-      }
-
-      const s = Math.floor(this.pz) + this.coins * 10 + this.bonus;
-      if (s !== this.score) { this.score = s; setScore(s); }
-      this.follow(dt); this.move(dt);
+      const sc = Math.floor(this.d) + this.coins * 10 + this.bonus;
+      if (sc !== this.score) { this.score = sc; setScore(sc); }
+      this.moveBits(dt);
+      this.gen();
     },
-    follow(dt) {
-      cam.x += (this.px - cam.x) * Math.min(1, dt * 4);
-      cam.z = this.pz - BACK;
-      cam.y = ground(this.pz) + UP + this.h * 0.3;
-      this.shake = Math.max(0, this.shake - dt * 1.6);
+    land(g, gv) {
+      this.y = g; this.vy = gv; this.air = false;
+      const t = this.airT;
+      if (t > 0.25) { snd.land(); this.puff(26, this.x, g + 0.1, this.d, 3, 2.5); this.shake = Math.max(this.shake, Math.min(0.5, t * 0.3)); }
+      // A spin only counts if you land facing down the hill again.
+      const turns = this.spin / (Math.PI * 2), n = Math.round(turns), off = Math.abs(turns - n);
+      if (Math.abs(this.spin) > 0.3 && off > 0.14) { this.v *= 0.6; this.pop('SKETCHY!', '#ff6b9a'); snd.sketchy(); }
+      else if (n !== 0) { const pts = 200 * Math.abs(n); this.bonus += pts; this.pop(Math.abs(n) * 360 + '!  +' + pts, '#5ce1e6'); snd.trick(); }
+      if (t > 0.55) { const pts = Math.round(t * 100); this.bonus += pts; this.pop('AIR TIME ' + t.toFixed(1) + 's  +' + pts, '#ffffff'); }
+      this.spin = 0; this.airT = 0;
     },
-    move(dt) {
-      // Things that move on their own: other skiers, snow spray, falling snow, score popups.
-      for (const r of this.riders) {
-        r.z += r.v * dt;
-        const wob = Math.sin(this.t * r.w + r.p);
-        r.x = center(r.z) + clamp(r.off + wob * r.amp, -halfWidth(r.z) + 0.8, halfWidth(r.z) - 0.8);
-        r.lean = Math.cos(this.t * r.w + r.p) * 0.3;
+    moveBits(dt) {
+      for (const list of [this.parts, this.sparks]) {
+        for (const p of list) {
+          p.life -= dt; p.vy -= 9 * dt; p.vx *= 1 - dt * 1.5; p.vd *= 1 - dt * 1.2;
+          p.x += p.vx * dt; p.y += p.vy * dt; p.d += p.vd * dt;
+        }
       }
-      this.riders = this.riders.filter((r) => r.z > cam.z + 1);
-      for (const p of this.parts) {
-        p.life -= dt; p.vy -= 9 * dt; p.vx *= 1 - dt * 1.5;
-        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vz *= 1 - dt * 2;
-        if (p.y < 0) { p.y = 0; p.vy = 0; p.life -= dt * 3; }
-      }
-      this.parts = this.parts.filter((p) => p.life > 0 && p.z > cam.z + 0.5);
-      for (const f of this.flakes) {
-        f.z -= (this.v + 1.5) * dt; f.y -= 1.3 * dt; f.x += Math.sin(this.t * 0.8 + f.z) * 0.4 * dt;
-        if (f.z < 0.8 || f.y < -7) this.flake(f, rand(38, 45));
-      }
+      this.parts = this.parts.filter((p) => p.life > 0).slice(-500);
+      this.sparks = this.sparks.filter((p) => p.life > 0).slice(-120);
       for (const p of this.pops) p.life -= dt;
       this.pops = this.pops.filter((p) => p.life > 0);
-      while (this.objs.length && this.objs[0].z < cam.z) this.objs.shift();
-      this.gen(this.pz + FAR + 20);
+      this.shake = Math.max(0, this.shake - dt * 1.5);
+
+      // Camera: behind and above, swinging round with your direction.
+      const head = Math.atan2(this.vx, this.v) * 0.6, k = Math.min(1, dt * 4);
+      const tx = this.x - Math.sin(head) * 4.6, td = this.d - Math.cos(head) * 4.6, ty = Math.max(this.y, height(tx, td)) + 2.1;
+      if (!this.cam) this.cam = { x: tx, y: ty, d: td, h: head };
+      const c = this.cam;
+      c.x += (tx - c.x) * k; c.d = td; c.y += (ty - c.y) * Math.min(1, dt * 6); c.h += (head - c.h) * k;
+      this.lean += (clamp(this.vx / (5 + 0.3 * this.v), -1, 1) - this.lean) * Math.min(1, dt * 8);
+      const tuck = this.air ? 0.85 : 0.25 + 0.55 * clamp((this.v - 14) / 24, 0, 1);
+      this.crouch += (tuck - this.crouch) * Math.min(1, dt * 4);
     },
 
     /* ----- Drawing ----- */
     draw() {
-      if (!ART) paintArt();
-      daylight((((this.pz + CYCLE * 0.05) % CYCLE) + CYCLE) % CYCLE / CYCLE); // Starts on a sunny morning.
-      TA = Math.min(1, Math.floor(L.tint)); TM = L.tint - TA;
+      if (T && !S && !failed) initScene();
+      if (!S) { this.drawLoading(failed ? 'SORRY, YOUR BROWSER' : 'LOADING 3D...', failed ? 'CAN\'T SHOW 3D GAMES' : ''); return; }
+      if (!this.cam) this.moveBits(0);
+      this.sync();
       ctx.save();
-      if (this.shake > 0) ctx.translate(rand(-1, 1) * this.shake * 9, rand(-1, 1) * this.shake * 7);
-      this.drawSky();
-      this.drawSlope();
-      this.drawThings();
-      this.drawSnowfall();
+      if (this.shake > 0) ctx.translate(rand(-1, 1) * this.shake * 8, rand(-1, 1) * this.shake * 6);
+      ctx.drawImage(glCanvas, -6, -6, W + 12, H + 12);
       ctx.restore();
-      ctx.fillStyle = vignette; ctx.globalAlpha = 0.2 + 0.35 * L.night; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
       this.drawHud();
     },
-
-    drawSky() {
-      const t = this.t, night = L.night;
-      const sg = ctx.createLinearGradient(0, 0, 0, VALLEY);
-      sg.addColorStop(0, css(L.top)); sg.addColorStop(1, css(L.bot));
-      ctx.fillStyle = sg; ctx.fillRect(-20, -20, W + 40, VALLEY + 30);
-      if (night > 0.02) {
-        // Stars, the moon and the northern lights.
-        ctx.fillStyle = '#ffffff';
-        for (const s of STARS) { ctx.globalAlpha = night * (0.55 + 0.45 * Math.sin(t * 2 + s.p)); ctx.fillRect(s.x, s.y, s.s, s.s); }
-        ctx.globalAlpha = night;
-        const mg = ctx.createRadialGradient(84, 70, 4, 84, 70, 70);
-        mg.addColorStop(0, 'rgba(220,230,255,0.35)'); mg.addColorStop(1, 'rgba(220,230,255,0)');
-        ctx.fillStyle = mg; ctx.fillRect(14, 0, 140, 140);
-        ctx.fillStyle = '#eef2ff'; ctx.beginPath(); ctx.arc(84, 70, 15, 0, 7); ctx.fill();
-        ctx.fillStyle = 'rgba(150,160,200,0.45)'; ctx.beginPath(); ctx.arc(79, 66, 4, 0, 7); ctx.arc(90, 75, 3, 0, 7); ctx.arc(88, 63, 2, 0, 7); ctx.fill();
-        ctx.globalCompositeOperation = 'lighter';
-        const AUR = [['80,255,170', 0], ['120,170,255', 2.1], ['200,120,255', 4.3]];
-        AUR.forEach(([rgb, o], i) => {
-          const top = (x) => 30 + i * 14 + 26 * Math.sin(x * 0.009 + t * 0.18 + o) + 12 * Math.sin(x * 0.027 - t * 0.4 + o);
-          const ag = ctx.createLinearGradient(0, 0, 0, 200);
-          ag.addColorStop(0, 'rgba(' + rgb + ',0)'); ag.addColorStop(0.45, 'rgba(' + rgb + ',' + (0.3 - i * 0.07) * night + ')'); ag.addColorStop(1, 'rgba(' + rgb + ',0)');
-          const len = (x) => 70 + 30 * Math.sin(x * 0.02 + t * 0.3 + o);
-          ctx.fillStyle = ag; ctx.globalAlpha = night * 0.7;
-          ctx.beginPath(); ctx.moveTo(0, top(0));
-          for (let x = 10; x <= W; x += 10) ctx.lineTo(x, top(x));
-          for (let x = W; x >= 0; x -= 10) ctx.lineTo(x, top(x) + len(x));
-          ctx.fill();
-          // Soft rays make it look like a curtain.
-          for (let x = 0; x < W; x += 3) {
-            ctx.globalAlpha = night * 0.5 * Math.max(0, Math.sin(x * 0.045 + t * 0.6 + o * 3)) * (0.6 + 0.4 * Math.sin(x * 0.13 - t));
-            ctx.fillRect(x, top(x) - 6, 2, len(x) + 12);
-          }
-        });
-        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-      }
-      if (L.sunY < VALLEY + 30) {
-        const x = L.sunX - cam.x * 0.15, y = L.sunY, a = 1 - night;
-        const gg = ctx.createRadialGradient(x, y, 6, x, y, 140);
-        gg.addColorStop(0, css(L.sun, 0.75 * a)); gg.addColorStop(0.3, css(L.sun, 0.25 * a)); gg.addColorStop(1, css(L.sun, 0));
-        ctx.fillStyle = gg; ctx.fillRect(x - 140, y - 140, 280, 280);
-        ctx.fillStyle = css(mix(L.sun, [255, 255, 255], 0.6), a); ctx.beginPath(); ctx.arc(x, y, 17, 0, 7); ctx.fill();
-      }
-      // Clouds drift slowly across.
-      ART.clouds.forEach((set, i) => {
-        const span = W + 320, x = ((((i * 190 + t * (4 + i * 2) - cam.x * 0.1) % span) + span) % span) - 260;
-        const a = 0.9 * (1 - night * 0.65), y = 34 + i * 30, k = 0.8 + i * 0.15;
-        if (TM < 0.99) { ctx.globalAlpha = a; ctx.drawImage(set[TA], x, y, 260 * k, 100 * k); }
-        if (TM > 0.01) { ctx.globalAlpha = a * (TM < 0.99 ? TM : 1); ctx.drawImage(set[TA + 1], x, y, 260 * k, 100 * k); }
-        ctx.globalAlpha = 1;
-      });
-      // Mountain ridges, far to near. Tall peaks get snow because the fill fades to white at the top.
-      RIDGES.forEach((r, i) => {
-        const base = VALLEY + 2, col = mix(L[r.key], L.fog, i === 2 ? 0.25 : 0.1);
-        const mg = ctx.createLinearGradient(0, VALLEY - 170, 0, base);
-        if (r.snow) { mg.addColorStop(0, css(L.cap)); mg.addColorStop(0.28, css(mix(L.cap, col, 0.4))); mg.addColorStop(0.42, css(col)); }
-        else mg.addColorStop(0, css(col));
-        mg.addColorStop(1, css(mix(col, L.fog, 0.55)));
-        ctx.fillStyle = mg; ctx.beginPath(); ctx.moveTo(-20, base);
-        const off = (((-cam.x * r.move * 4 + i * 300) % P) + P) % P;
-        for (let x = -20; x <= W + 20; x += 6) {
-          const u = ((x + off) % P + P) % P / 4, j = Math.floor(u), f = u - j, n = r.h.length;
-          ctx.lineTo(x, base - r.lift - (r.h[j % n] * (1 - f) + r.h[(j + 1) % n] * f));
-        }
-        ctx.lineTo(W + 20, base); ctx.closePath(); ctx.fill();
-        if (i === 1) { // Haze in the valley, between the far peaks and the hills.
-          const hz = ctx.createLinearGradient(0, VALLEY - 70, 0, VALLEY);
-          hz.addColorStop(0, css(L.fog, 0)); hz.addColorStop(1, css(L.fog, 0.8));
-          ctx.fillStyle = hz; ctx.fillRect(-20, VALLEY - 70, W + 40, 70);
-        }
-      });
-      ctx.fillStyle = css(L.fog); ctx.fillRect(-20, VALLEY, W + 40, H - VALLEY + 20);
+    drawLoading(a, b) {
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#5f92d4'); g.addColorStop(1, '#e2ecf5');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#ffffff'; ctx.font = font(12); ctx.textAlign = 'center';
+      ctx.fillText(a, W / 2, H / 2); if (b) ctx.fillText(b, W / 2, H / 2 + 24);
+      ctx.textAlign = 'left';
     },
 
-    drawSlope() {
-      const base = Math.floor(cam.z / SEG) + 1, st = strip, lr = L.light, fog = L.fog;
-      for (let k = 0; k <= DRAW; k++) {
-        const z = (base + k) * SEG;
-        proj(center(z), st.g[k] = ground(z), z);
-        st.x[k] = PX; st.y[k] = PY; st.w[k] = halfWidth(z) * PS;
+    // Copy the game into the 3D scene, then render it.
+    sync() {
+      const s = S, scene = s.scene, cam = s.camera;
+      // Match the game screen's size, but stay under about a million pixels so phones keep up.
+      const cw = ctx.canvas.width, chh = ctx.canvas.height, k = Math.min(1, Math.sqrt(1e6 / (cw * chh)));
+      const rw = Math.round(cw * k), rh = Math.round(chh * k);
+      if (glCanvas.width !== rw || glCanvas.height !== rh) s.renderer.setSize(rw, rh, false);
+
+      // Light and sky for this time of day.
+      const tod = ((((this.d + CYCLE * 0.05) % CYCLE) + CYCLE) % CYCLE) / CYCLE;
+      let i = 0; while (SKY[i + 1].at <= tod) i++;
+      const A = SKY[i], B = SKY[i + 1], f0 = (tod - A.at) / (B.at - A.at), f = f0 * f0 * (3 - 2 * f0);
+      const col = (key, out) => out.set(A[key]).lerp(new T.Color(B[key]), f), num = (key) => A[key] + (B[key] - A[key]) * f;
+      const night = num('night'), elev = num('elev'), az = num('az'), u = s.skyMat.uniforms;
+      col('fog', scene.fog.color); col('top', u.top.value); col('hor', u.hor.value);
+      col('sun', u.sunCol.value); u.size.value = night > 0.5 ? 0.45 : 1;
+      if (night > 0.5) u.sunCol.value.multiplyScalar(0.5);
+      const sd = u.sunDir.value.set(Math.sin(az), Math.sin(elev), -Math.cos(az) * Math.cos(elev)).normalize();
+      col('sun', s.sun.color); s.sun.intensity = num('sunI');
+      col('hs', s.hemi.color); col('hg', s.hemi.groundColor); s.hemi.intensity = num('hI');
+      s.renderer.toneMappingExposure = num('exp');
+      s.stars.material.opacity = night; s.auroraMat.uniforms.night.value = night; s.auroraMat.uniforms.time.value = this.t;
+      s.lamp.intensity = Math.max(0, night - 0.4) * 25;
+
+      // Give every new chunk a terrain tile.
+      for (const t of s.tiles) if (t.chunk && !this.chunks.includes(t.chunk)) { t.chunk = null; t.visible = false; }
+      for (const ch of this.chunks) {
+        if (s.tiles.some((t) => t.chunk === ch)) continue;
+        const t = s.tiles.find((q) => !q.chunk); if (t) fillTile(t, ch);
       }
-      const shade = (c, kf, f) => {
-        const r = c[0] * lr[0] / 255 * kf, g = c[1] * lr[1] / 255 * kf, b = c[2] * lr[2] / 255 * kf;
-        return 'rgb(' + ((r + (fog[0] - r) * f) | 0) + ',' + ((g + (fog[1] - g) * f) | 0) + ',' + ((b + (fog[2] - b) * f) | 0) + ')';
+      // Trees, rocks and kickers only change when the chunks do.
+      const key = this.chunks.map((c) => c.d0).join(',');
+      if (key !== s.built) {
+        s.built = key;
+        const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), sc = new T.Vector3();
+        let n = 0, r = 0;
+        for (const ch of this.chunks) {
+          for (const o of ch.trees) { if (n >= 2000) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.15, -o.d); sc.set(o.s, o.s * o.h, o.s); s.trees.setMatrixAt(n++, m.compose(p, q, sc)); }
+          for (const o of ch.rocks) { if (r >= 400) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.1, -o.d); sc.set(o.s, o.s, o.s); s.rocks.setMatrixAt(r++, m.compose(p, q, sc)); }
+        }
+        s.trees.count = n; s.rocks.count = r; s.trees.instanceMatrix.needsUpdate = s.rocks.instanceMatrix.needsUpdate = true;
+        const all = this.chunks.flatMap((c) => c.ramps);
+        s.ramps = s.ramps.filter((mesh) => { if (all.includes(mesh.ramp)) return true; scene.remove(mesh); mesh.geometry.dispose(); return false; });
+        for (const rp of all) if (!s.ramps.some((mesh) => mesh.ramp === rp)) { const mesh = rampMesh(rp); scene.add(mesh); s.ramps.push(mesh); }
+      }
+      // Coins spin and bob.
+      {
+        const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), one = new T.Vector3(1, 1, 1);
+        let n = 0;
+        for (const ch of this.chunks) for (const c of ch.coins) {
+          if (c.got || n >= 400) continue;
+          q.setFromEuler(e.set(0, this.t * 3 + c.d * 0.2, 0)); p.set(c.x, c.y + Math.sin(this.t * 3 + c.d) * 0.1, -c.d);
+          s.coins.setMatrixAt(n++, m.compose(p, q, one));
+        }
+        s.coins.count = n; s.coins.instanceMatrix.needsUpdate = true;
+      }
+
+      // The skier.
+      const sk = s.skier, heading = Math.atan2(this.vx, this.v);
+      sk.root.position.set(this.x, this.y, -this.d);
+      sk.root.rotation.set(0, -heading - this.spin, 0);
+      sk.lean.rotation.set(0, 0, -this.lean * 0.45);
+      if (this.crash) {
+        const t = Math.min(this.crash.t * 1.5, 1);
+        sk.lean.rotation.set(-t * 1.4, 0, (this.crash.vx >= 0 ? -1 : 1) * t * 1.2);
+        sk.root.position.y += Math.sin(t * Math.PI) * 0.8;
+      }
+      poseSkier(sk, this.crouch, this.air && this.airT > 0.3 && !this.spin);
+      const gy = this.ground(this.x, this.d);
+      s.blob.position.set(this.x, gy + 0.04, -this.d);
+      s.blob.material.opacity = this.y - gy > 0.4 ? (0.3 / (1 + (this.y - gy) * 0.4)) * (1 - night * 0.4) : 0; // Helps judge a landing.
+
+      // Ski tracks. A gap in the trail (a jump) squeezes the ribbon to nothing.
+      s.tracks.forEach((m, side) => {
+        const P = m.geometry.attributes.position.array, off = side ? 0.13 : -0.13;
+        let last = { x: this.x, d: this.d, h: 0 };
+        for (let j = 0; j < TRACK; j++) {
+          const p = this.trail[j], q = p || last, hw = p ? 0.045 : 0; last = q;
+          const cx = q.x + Math.cos(q.h) * off, cd = q.d - Math.sin(q.h) * off, y = height(cx, cd) + 0.03;
+          P.set([cx - hw, y, -cd, cx + hw, y, -cd], j * 6);
+        }
+        m.geometry.attributes.position.needsUpdate = true;
+      });
+
+      // Snow spray, coin sparkles and falling snow.
+      const fill = (pts, list) => {
+        const P = pts.geometry.attributes.position.array; let n = 0;
+        for (const p of list) { P[n++] = p.x; P[n++] = p.y; P[n++] = -p.d; }
+        pts.geometry.setDrawRange(0, n / 3); pts.geometry.attributes.position.needsUpdate = true;
       };
-      const quad = (ax, ay, bx, by, cx, cy, dx, dy) => { ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx, cy); ctx.lineTo(dx, dy); ctx.closePath(); ctx.fill(); };
-      let maxy = H + 20;
-      for (let k = 0; k < DRAW; k++) {
-        st.clip[k] = maxy;
-        const y1 = st.y[k], y2 = st.y[k + 1];
-        if (y2 >= maxy) continue; // Hidden behind a nearer bump.
-        // Only the part of the strip above what is already drawn shows.
-        let t = 1, bot = y1;
-        if (y1 > maxy) { t = (maxy - y2) / (y1 - y2); bot = maxy; }
-        const nx = st.x[k + 1] + (st.x[k] - st.x[k + 1]) * t, nw = st.w[k + 1] + (st.w[k] - st.w[k + 1]) * t;
-        const fx = st.x[k + 1], fw = st.w[k + 1];
-        // Strips facing up the hill catch more light; every other pair of strips is a touch darker, so you can feel the speed.
-        const grade = (st.g[k + 1] - st.g[k]) / SEG + SLOPE, stripe = ((base + k) >> 1) & 1;
-        const kf = 1 + clamp(grade * 3, -0.22, 0.12) - stripe * 0.03, f = Math.pow(k / DRAW, 1.5) * 0.95;
-        ctx.fillStyle = shade(POWDER, kf, f); ctx.fillRect(-20, y2, W + 40, bot - y2 + 0.7);
-        ctx.fillStyle = shade(PISTE, kf, f); quad(nx - nw, bot + 0.7, nx + nw, bot + 0.7, fx + fw, y2, fx - fw, y2);
-        if (k < 70) {
-          const e = 0.09; // The groomed edge of the piste, a little darker.
-          ctx.fillStyle = shade(EDGE, kf, f);
-          quad(nx - nw, bot + 0.7, nx - nw * (1 - e), bot + 0.7, fx - fw * (1 - e), y2, fx - fw, y2);
-          quad(nx + nw * (1 - e), bot + 0.7, nx + nw, bot + 0.7, fx + fw, y2, fx + fw * (1 - e), y2);
+      fill(s.spray, this.parts); fill(s.sparks, this.sparks);
+      {
+        // Each flake has a fixed spot in a 70 m box that moves with you; the box scrolls as you ski through it.
+        const P = s.flakes.geometry.attributes.position.array, c = this.cam, n = P.length / 3;
+        for (let j = 0; j < n; j++) {
+          const fall = (this.t * (1.2 + hash(j, 4)) + hash(j, 5) * 30) % 30;
+          const ahead = (((hash(j, 3) * 70 - this.d - this.t * 2) % 70) + 70) % 70;
+          P[j * 3] = c.x + hash(j, 1) * 60 - 30 + Math.sin(this.t * 0.7 + j) * 0.6;
+          P[j * 3 + 1] = c.y + hash(j, 2) * 30 + 7 - fall - ahead * SLOPE;
+          P[j * 3 + 2] = -(c.d + ahead - 4);
         }
-        maxy = y2;
+        s.flakes.geometry.attributes.position.needsUpdate = true;
+        s.flakes.material.opacity = 0.8 - night * 0.3;
       }
-      st.clip[DRAW] = maxy;
-      // Your ski tracks.
-      ctx.strokeStyle = shade(TRACK, 1, 0); ctx.lineCap = 'round';
-      for (const side of [-1, 1]) {
-        ctx.beginPath(); let pen = false;
-        for (const p of this.trail) {
-          if (!p || p.z < cam.z + 1) { pen = false; continue; }
-          proj(p.x + side * 0.14, ground(p.z), p.z);
-          if (pen) ctx.lineTo(PX, PY); else { ctx.moveTo(PX, PY); pen = true; }
-        }
-        if (pen && !this.air && !this.ramp && !this.crash) { proj(this.px + side * 0.14, ground(this.pz), this.pz); ctx.lineTo(PX, PY); }
-        ctx.lineWidth = 2.6; ctx.stroke();
-      }
-      // At night a head torch lights up the snow ahead.
-      if (L.night > 0.02) {
-        proj(this.px, ground(this.pz + 7), this.pz + 7);
-        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.translate(PX, PY); ctx.scale(1, 0.42);
-        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 230);
-        g.addColorStop(0, 'rgba(255,232,190,' + 0.42 * L.night + ')'); g.addColorStop(1, 'rgba(255,232,190,0)');
-        ctx.fillStyle = g; ctx.fillRect(-230, -230, 460, 460); ctx.restore();
-      }
+
+      // Camera, the sun's shadow box, and things that follow the camera.
+      const c = this.cam;
+      cam.position.set(c.x, c.y, -c.d);
+      const lookD = this.d + Math.cos(c.h) * 14, lookX = this.x + Math.sin(c.h) * 14;
+      cam.lookAt(lookX, Math.min(this.y, height(lookX, lookD)) + 1.2, -lookD);
+      cam.rotateZ(-this.lean * 0.05);
+      cam.fov = 64 + clamp(this.v - 14, 0, 30) * 0.35; cam.updateProjectionMatrix();
+      s.sun.position.set(this.x + sd.x * 150, this.y + sd.y * 150, -this.d + sd.z * 150);
+      s.sun.target.position.set(this.x, this.y, -this.d - 15);
+      s.lamp.position.set(this.x, this.y + 1.8, -this.d + 0.5);
+      s.lamp.target.position.set(this.x + Math.sin(heading) * 20, this.y - 4, -this.d - 20);
+      s.sky.position.copy(cam.position); s.stars.position.copy(cam.position); s.aurora.position.copy(cam.position);
+      const pd = this.d + 620, pc = center(pd); s.peaks.position.set(pc, height(pc, pd) - 90, -pd);
+      s.renderer.render(scene, cam);
     },
 
-    drawThings() {
-      const list = [], farZ = cam.z + FAR, base = Math.floor(cam.z / SEG) + 1, night = L.night;
-      for (const o of this.objs) { if (o.z > farZ) break; if (!o.got && o.z > cam.z + 1.5) list.push(o); }
-      for (const r of this.riders) if (r.z < farZ) list.push(r);
-      list.push(this);
-      list.sort((a, b) => (b.kind === 'ramp' ? b.z + 2 : b === this ? b.pz : b.z) - (a.kind === 'ramp' ? a.z + 2 : a === this ? a.pz : a.z));
-      const clipAt = (z) => { const k = Math.floor(z / SEG) - base; return k < 0 ? H + 20 : strip.clip[Math.min(k, DRAW)]; };
-      for (const o of list) {
-        if (o === this) { this.drawMe(); continue; }
-        const a = fade(o.z);
-        if (o.kind === 'pine') sprite(ART.pines[o.v], o.x, o.z, o.hm, PINE_FOOT, clipAt(o.z), a);
-        else if (o.kind === 'rock') sprite(ART.rocks[o.v], o.x, o.z, o.hm, ROCK_FOOT, clipAt(o.z), a);
-        else if (o.kind === 'pole') {
-          proj(o.x, ground(o.z), o.z);
-          const hp = 1.5 * PS, wp = Math.max(1, 0.08 * PS), clip = clipAt(o.z);
-          if (PY - hp > clip || hp < 2) continue;
-          const bot = Math.min(PY, clip);
-          ctx.globalAlpha = a;
-          ctx.fillStyle = lit('#ff7a2e'); ctx.fillRect(PX - wp / 2, PY - hp, wp, bot - PY + hp);
-          ctx.fillStyle = lit('#1d1a2b'); ctx.fillRect(PX - wp / 2, PY - hp * 0.62, wp, hp * 0.16);
-          ctx.globalAlpha = 1;
-        } else if (o.kind === 'coin') {
-          const bob = Math.sin(this.t * 3 + o.z) * 0.08;
-          proj(o.x, ground(o.z), o.z); const gy = PY, gs = PS;
-          if (PY > clipAt(o.z) + 4) continue;
-          ctx.fillStyle = 'rgba(60,70,130,' + 0.25 * a + ')'; ctx.beginPath(); ctx.ellipse(PX, gy, 0.3 * gs, 0.08 * gs, 0, 0, 7); ctx.fill();
-          proj(o.x, ground(o.z) + o.y + bob, o.z);
-          const size = 0.62 * PS, sx = Math.max(0.15, Math.abs(Math.cos(this.t * 3.5 + o.z * 0.3)));
-          ctx.globalAlpha = a;
-          if (night > 0.1) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = a * night * 0.6; ctx.drawImage(ART.gold, PX - size, PY - size, size * 2, size * 2); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a; }
-          ctx.drawImage(ART.coin, PX - (size * sx) / 2, PY - size / 2, size * sx, size);
-          ctx.globalAlpha = 1;
-        } else if (o.kind === 'ramp') this.drawRamp(o, a);
-        else if (o.col) { // Another skier.
-          const gy = ground(o.z);
-          proj(o.x, gy, o.z);
-          ctx.fillStyle = 'rgba(40,50,110,' + 0.25 * a + ')'; ctx.beginPath(); ctx.ellipse(PX, PY, 0.5 * PS, 0.13 * PS, 0, 0, 7); ctx.fill();
-          ctx.globalAlpha = a;
-          drawSkier(PX, PY, PS, { lean: o.lean, yaw: o.lean, crouch: 0.12, col: o.col });
-          ctx.globalAlpha = 1;
-        }
-      }
-      // Snow spray and sparkles.
-      for (const p of this.parts) {
-        proj(p.x, ground(p.z) + p.y, p.z);
-        const r = clamp(p.size * PS, 0.8, 26), a = clamp(p.life / p.max, 0, 1);
-        ctx.globalAlpha = a * (p.img === 'gold' ? 1 : 0.85 - night * 0.35);
-        ctx.drawImage(ART[p.img], PX - r, PY - r, r * 2, r * 2);
-      }
-      ctx.globalAlpha = 1;
-    },
-    drawRamp(o, a) {
-      const y0 = ground(o.z), y1 = ground(o.z + o.len) + o.hgt;
-      proj(o.x - o.w, y0, o.z); const ax = PX, ay = PY;
-      proj(o.x + o.w, y0, o.z); const bx = PX;
-      proj(o.x + o.w, y1, o.z + o.len); const cx = PX, cy = PY, cs = PS;
-      proj(o.x - o.w, y1, o.z + o.len); const dx = PX;
-      ctx.globalAlpha = a;
-      // The sides of the ramp, then the slope you ride up.
-      ctx.fillStyle = lit('#9fb0d4');
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(dx, cy); ctx.lineTo(dx, ay - (ay - cy) * 0.25); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(bx, ay); ctx.lineTo(cx, cy); ctx.lineTo(cx, ay - (ay - cy) * 0.25); ctx.closePath(); ctx.fill();
-      const g = ctx.createLinearGradient(0, cy, 0, ay); g.addColorStop(0, lit('#ffffff')); g.addColorStop(1, lit('#cfdcf2'));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, ay); ctx.lineTo(cx, cy); ctx.lineTo(dx, cy); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = lit('#ff7a2e'); ctx.lineWidth = Math.max(1, 0.12 * cs); ctx.beginPath(); ctx.moveTo(dx, cy); ctx.lineTo(cx, cy); ctx.stroke();
-      for (const x of [dx, cx]) { ctx.fillStyle = lit('#ff7a2e'); ctx.fillRect(x - 0.04 * cs, cy - 1.1 * cs, 0.08 * cs, 1.1 * cs); ctx.fillStyle = lit('#5ce1e6'); ctx.fillRect(x, cy - 1.1 * cs, 0.35 * cs, 0.22 * cs); }
-      ctx.globalAlpha = 1;
-    },
-    drawMe() {
-      const gy = ground(this.pz);
-      proj(this.px, gy, this.pz);
-      const sh = 1 / (1 + this.h * 0.4);
-      ctx.fillStyle = 'rgba(40,50,110,' + 0.3 * sh + ')'; ctx.beginPath(); ctx.ellipse(PX, PY, 0.5 * PS * sh, 0.13 * PS * sh, 0, 0, 7); ctx.fill();
-      proj(this.px, gy + this.h, this.pz);
-      const maxSide = 4 + 0.35 * this.v, lean = clamp(this.vx / maxSide, -1, 1);
-      let tumble = 0, y = PY;
-      if (this.crash) { tumble = Math.min(this.crash.t * 7, 1.6) * (this.vx >= 0 ? 1 : -1); y += Math.min(this.crash.t, 0.3) * PS * 0.6; }
-      ctx.save();
-      if (tumble) { ctx.translate(PX, y); ctx.rotate(tumble); ctx.translate(-PX, -y); }
-      drawSkier(PX, y, PS, { lean: lean * 0.38, yaw: lean * 0.7, crouch: 0.04 + 0.16 * clamp((this.v - 10) / 28, 0, 1), spin: this.spin, col: ME, bib: true });
-      ctx.restore();
-    },
-    drawSnowfall() {
-      const night = L.night;
-      for (const f of this.flakes) {
-        const s = F / f.z, x = W / 2 + f.x * s, y = HOR - f.y * s, r = clamp(f.s * s, 0.6, 7);
-        if (x < -10 || x > W + 10 || y < -10 || y > H + 10) continue;
-        ctx.globalAlpha = (0.75 - night * 0.25) * clamp((45 - f.z) / 10, 0, 1);
-        ctx.drawImage(ART.snow, x - r, y - r, r * 2, r * 2);
-      }
-      ctx.globalAlpha = 1;
-    },
     drawHud() {
       ctx.textBaseline = 'top';
-      const text = (s, x, y, size, col, align) => {
+      const text = (str, x, y, size, color, align) => {
         ctx.font = font(size); ctx.textAlign = align;
-        ctx.fillStyle = 'rgba(10,10,30,0.55)'; ctx.fillText(s, x + 2, y + 2);
-        ctx.fillStyle = col; ctx.fillText(s, x, y);
+        ctx.fillStyle = 'rgba(10,12,30,0.5)'; ctx.fillText(str, x + 2, y + 2);
+        ctx.fillStyle = color; ctx.fillText(str, x, y);
       };
-      text(String(Math.round(this.v * 3.6)), 14, 14, 16, '#ffffff', 'left');
-      text('KM/H', 14, 36, 8, '#dfe8ff', 'left');
-      ctx.drawImage(ART.coin, W - 34, 12, 22, 22);
-      text(String(this.coins), W - 40, 16, 14, '#ffd75e', 'right');
+      text(String(this.score).padStart(6, '0'), 14, 14, 18, '#ffffff', 'left');
+      const g = ctx.createRadialGradient(19, 47, 1, 22, 50, 8);
+      g.addColorStop(0, '#fff3a8'); g.addColorStop(0.6, '#ffc531'); g.addColorStop(1, '#b97a0c');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(22, 50, 8, 0, 7); ctx.fill();
+      text('x ' + this.coins, 36, 45, 10, '#ffd75e', 'left');
+      text(String(Math.round(this.v * 3.6)), W - 14, H - 52, 22, '#ffffff', 'right');
+      text('KM/H', W - 14, H - 24, 8, '#e6edff', 'right');
+      if (this.air && this.airT > 0.35 && !this.crash) text('AIR TIME', W / 2, 92, 12, '#ffffff', 'center');
       this.pops.forEach((p, i) => {
         ctx.globalAlpha = clamp(p.life * 2, 0, 1);
-        text(p.text, W / 2, 120 - (1.2 - p.life) * 40 - i * 24, 14, p.col, 'center');
+        text(p.text, W / 2, 118 + i * 24 - (1.6 - p.life) * 18, 12, p.col, 'center');
         ctx.globalAlpha = 1;
       });
-      if (this.t < 3.5 && !this.crash) {
-        ctx.globalAlpha = clamp(3.5 - this.t, 0, 1);
-        text('<  STEER  >', W / 2, H - 46, 12, '#ffffff', 'center');
+      if (this.t < 4 && !this.crash) {
+        ctx.globalAlpha = clamp(4 - this.t, 0, 1);
+        text('<  STEER  >', W / 2, H - 90, 12, '#ffffff', 'center');
         ctx.globalAlpha = 1;
       }
       ctx.textBaseline = 'alphabetic';
     },
   };
 
+  import(THREE_URL).then((m) => { T = m; }).catch(() => { failed = true; });
   Arcade.register('ski', ski);
 })();
