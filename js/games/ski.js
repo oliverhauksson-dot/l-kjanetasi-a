@@ -22,9 +22,18 @@
   const CYCLE = 1800;              // Metres from one morning to the next.
   const RAMP_EVERY = 230;
   const GRABS = ['INDY', 'TWEAKED INDY', 'METHOD', 'MUTE GRAB', 'STALEFISH', 'TAIL GRAB', 'JAPAN', 'MELON'];
-  const RAMP = { w: 1.9, len: 7, h: 2 };
-  const rampLift = (s) => RAMP.h * s * s; // Kickers rise in a curve, so they throw you up.
-  const LIP = (2 * RAMP.h) / RAMP.len; // How steep a kicker is at the top.
+  const RAILS = ['50-50', 'BOARDSLIDE', 'LIPSLIDE', 'NOSE PRESS', 'TAIL PRESS'], BOXES = ['BOX SLIDE', 'BOARDSLIDE', '50-50', 'NOSE PRESS'];
+  const SIDEWAYS = ['BOARDSLIDE', 'LIPSLIDE', 'BOX SLIDE']; // Slides done with the skis across the rail.
+  // A terrain park every PARK_EVERY metres: rails, boxes, kickers and side hits, with no trees on the run.
+  const PARK_AT = 420, PARK_EVERY = 900, PARK_LEN = 260;
+  const inPark = (d) => d >= PARK_AT && (d - PARK_AT) % PARK_EVERY < PARK_LEN;
+  function parkMask(d) { // 1 in a park, 0 outside, fading in between. The park's snow is smoothed flat.
+    const k = d - PARK_AT, m = ((k % PARK_EVERY) + PARK_EVERY) % PARK_EVERY;
+    if (k < -40) return 0;
+    if (m < PARK_LEN) return 1;
+    return clamp(1 - Math.min(m - PARK_LEN, PARK_EVERY - m) / 40, 0, 1);
+  }
+  const HIP_THROW = 7; // How hard a side hit throws you towards the middle.
 
   /* ---------- The mountain ---------- */
   let ph = [0, 0, 0, 0], SEED = 1;
@@ -40,7 +49,7 @@
   }
   const center = (d) => 30 * Math.sin(d / 260 + ph[0]) + 14 * Math.sin(d / 120 + ph[1]);
   // Rollers: bumpy stretches that come and go. Hit a crest fast and you take off.
-  const rollers = (d) => { const e = Math.max(0, Math.sin(d / 330 + ph[2])); return e * e * 1.7 * Math.sin(d / 5.6 + ph[3]); };
+  const rollers = (d) => { const e = Math.max(0, Math.sin(d / 330 + ph[2])); return e * e * 1.7 * Math.sin(d / 5.6 + ph[3]) * (1 - parkMask(d)); };
   function height(x, d) {
     const u = x - center(d), t = Math.max(0, Math.abs(u) - FLOOR);
     const side = t < 40 ? 0.02 * t * t : 32 + 1.6 * (t - 40); // The valley sides get steeper, then rise straight on.
@@ -113,6 +122,7 @@
     crash() { this.hiss(0.6, 0.16, 'lowpass', 1800, 150); this.note(110, 0.35, 'square', 0.05, 0, 40); },
     trick() { if (!this.ready()) return; const t = sfx.ac.currentTime; [784, 988, 1175, 1568].forEach((f, i) => this.note(f, 0.1, 'square', 0.025, t + i * 0.06)); },
     sketchy() { this.note(200, 0.25, 'sawtooth', 0.04, 0, 90); },
+    clank() { this.note(1500, 0.09, 'square', 0.03, 0, 900); this.note(2300, 0.12, 'triangle', 0.03); },
   };
 
   /* ---------- 3D scene ---------- */
@@ -124,7 +134,7 @@
   function merged(parts) {
     const pos = [], nor = [], col = [];
     for (const p of parts) {
-      const g = p.geo.toNonIndexed(); g.applyMatrix4(p.m);
+      const g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone(); g.applyMatrix4(p.m);
       const c = new T.Color(p.color), P = g.attributes.position.array, N = g.attributes.normal.array;
       for (let i = 0; i < P.length; i += 3) {
         pos.push(P[i], P[i + 1], P[i + 2]); nor.push(N[i], N[i + 1], N[i + 2]);
@@ -157,7 +167,7 @@
       v.multiplyScalar((0.75 + 0.35 * Math.abs(Math.sin(v.x * 3.1 + v.z * 2.3) + Math.cos(v.y * 4.2))) * 0.55);
       p.setXYZ(i, v.x, Math.max(v.y * 0.75, -0.2) + 0.25, v.z);
     }
-    const ng = g.toNonIndexed(); ng.computeVertexNormals();
+    const ng = g.index ? g.toNonIndexed() : g; ng.computeVertexNormals();
     const n = ng.attributes.normal, col = [], snow = new T.Color('#eef3fb'), rock = new T.Color('#4f5566');
     for (let i = 0; i < n.count; i++) { const c = n.getY(i) > 0.55 ? snow : rock; col.push(c.r, c.g, c.b); }
     ng.setAttribute('color', new T.Float32BufferAttribute(col, 3));
@@ -351,8 +361,18 @@
     };
     const spray = points(500, 0.32, '#ffffff', 0.9), sparks = points(120, 0.35, '#ffd65a', 1), flakes = points(900, 0.12, '#ffffff', 0.85);
     const rampMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: T.DoubleSide });
+    const railMat = new T.MeshStandardMaterial({ color: '#e8433a', metalness: 0.6, roughness: 0.3 });
+    const legMat = new T.MeshStandardMaterial({ color: '#4a5266', metalness: 0.4, roughness: 0.5 });
+    const bannerMat = new T.MeshStandardMaterial({ map: bannerTexture(), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
+    const bannerSide = new T.MeshStandardMaterial({ color: '#1b2350', roughness: 0.7 });
+    // Little flags along both edges of a park.
+    const flags = new T.InstancedMesh(merged([
+      { geo: new T.CylinderGeometry(0.03, 0.03, 1.6, 5), m: at(0, 0.8, 0), color: '#ffffff' },
+      { geo: new T.ShapeGeometry(new T.Shape([new T.Vector2(0, 1.15), new T.Vector2(0.6, 1.38), new T.Vector2(0, 1.6)])), m: at(0, 0, 0), color: '#ffffff' },
+    ]), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: T.DoubleSide }), 200);
+    flags.setColorAt(0, new T.Color('#ffffff')); flags.count = 0; flags.frustumCulled = false; flags.castShadow = true; scene.add(flags);
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, rampMat, ramps: [], skier, blob, tracks, spray, sparks, flakes, built: '' };
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, feats: [], skier, blob, tracks, spray, sparks, flakes, built: '' };
   }
   const TRACK = 90;
 
@@ -378,24 +398,67 @@
     g.attributes.position.needsUpdate = g.attributes.normal.needsUpdate = g.attributes.color.needsUpdate = true;
     tile.chunk = ch; tile.visible = true;
   }
-  function rampMesh(rp) {
-    // A curved wedge of snow lying on the slope, with blue sides and an orange lip.
-    const pos = [], col = [], top = new T.Color('#f7f9ff'), side = new T.Color('#9fb5dc'), edge = new T.Color('#ff6a2c'), n = 10;
+  // Park features. Kickers are curved wedges of snow with a coloured lip, boxes are flat-topped slides,
+  // and rails are metal bars on legs. All of them follow the slope.
+  const LIPS = { kick: '#ff6a2c', big: '#ff2f55', hip: '#2fb5ff' };
+  function wedge(f, lift, top, side, edge) {
+    const pos = [], col = [], n = 10;
     const quad = (a, b, c, e, cl) => { for (const p of [a, b, c, a, c, e]) { pos.push(p[0], p[1], p[2]); col.push(cl.r, cl.g, cl.b); } };
-    const pt = (s, sd, up) => { const d = rp.d + s * RAMP.len, x = rp.x + sd * RAMP.w; return [x, height(x, d) + (up ? rampLift(s) : -0.3), -d]; };
+    const pt = (s, sd, up) => { const d = f.d + s * f.len, x = (f.type === 'box' ? center(d) + f.u : f.x) + sd * f.w; return [x, height(x, d) + (up ? lift(s) : -0.3), -d]; };
     for (let i = 0; i < n; i++) {
       const s0 = i / n, s1 = (i + 1) / n;
-      quad(pt(s0, -1, 1), pt(s0, 1, 1), pt(s1, 1, 1), pt(s1, -1, 1), i === n - 1 ? edge : top);
+      quad(pt(s0, -1, 1), pt(s0, 1, 1), pt(s1, 1, 1), pt(s1, -1, 1), edge && i === n - 1 ? edge : top);
       quad(pt(s0, -1, 0), pt(s0, -1, 1), pt(s1, -1, 1), pt(s1, -1, 0), side);
       quad(pt(s0, 1, 1), pt(s0, 1, 0), pt(s1, 1, 0), pt(s1, 1, 1), side);
     }
     quad(pt(1, -1, 1), pt(1, 1, 1), pt(1, 1, 0), pt(1, -1, 0), side);
+    quad(pt(0, 1, 1), pt(0, -1, 1), pt(0, -1, 0), pt(0, 1, 0), side);
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
     g.computeVertexNormals();
-    const m = new T.Mesh(g, S.rampMat); m.castShadow = m.receiveShadow = true; m.ramp = rp;
+    const m = new T.Mesh(g, S.rampMat); m.castShadow = m.receiveShadow = true;
     return m;
   }
+  function featMesh(f) {
+    let m;
+    if (f.type === 'box') m = wedge(f, () => f.top, new T.Color('#e8eef8'), new T.Color('#2f6fe0'));
+    else if (f.type === 'rail') {
+      m = new T.Group();
+      const pts = [];
+      for (let s = 0; s <= f.len + 0.01; s += 1) { const d = f.d + s, x = center(d) + f.u; pts.push(new T.Vector3(x, height(x, d) + f.top - 0.05, -d)); }
+      const bar = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 2, 0.07, 8), S.railMat);
+      bar.castShadow = true; m.add(bar);
+      for (let s = 0.3; s < f.len; s += 3) {
+        const d = f.d + Math.min(s, f.len - 0.3), x = center(d) + f.u, y = height(x, d);
+        const leg = new T.Mesh(new T.CylinderGeometry(0.05, 0.07, f.top + 0.3, 6), S.legMat);
+        leg.position.set(x, y + (f.top - 0.3) / 2, -d); leg.castShadow = true; m.add(leg);
+      }
+    } else if (f.type === 'arch') {
+      // The park's entrance: two posts and a banner right across the run.
+      m = new T.Group();
+      const xl = center(f.d) - FLOOR + 1, xr = center(f.d) + FLOOR - 1, top = Math.max(height(xl, f.d), height(xr, f.d)) + 8;
+      for (const x of [xl, xr]) {
+        const y0 = height(x, f.d) - 0.5, post = new T.Mesh(new T.CylinderGeometry(0.35, 0.4, top - y0 + 1.6, 10), S.legMat);
+        post.position.set(x, (top + 1.6 + y0) / 2, -f.d); post.castShadow = true; m.add(post);
+      }
+      const banner = new T.Mesh(new T.BoxGeometry(xr - xl, 3, 0.3), [S.bannerSide, S.bannerSide, S.bannerSide, S.bannerSide, S.bannerMat, S.bannerSide]);
+      banner.position.set((xl + xr) / 2, top, -f.d); banner.castShadow = true; m.add(banner);
+    } else m = wedge(f, (s) => f.h * s * s, new T.Color('#f7f9ff'), new T.Color('#9fb5dc'), new T.Color(LIPS[f.type]));
+    m.feat = f;
+    return m;
+  }
+  function bannerTexture() {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1b2350'; g.fillRect(0, 0, 1024, 64);
+    g.fillStyle = '#ffd23f'; g.fillRect(0, 0, 1024, 5); g.fillRect(0, 59, 1024, 5);
+    g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 3; i++) { g.fillStyle = i === 1 ? '#ffffff' : '#7fe3ff'; g.fillText(i === 1 ? 'TERRAIN PARK' : '★  ★  ★', 170 + i * 342, 34); }
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 4;
+    return t;
+  }
+
+  function dropMesh(m) { S.scene.remove(m); m.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
 
   /* ---------- The game ---------- */
   const ski = {
@@ -411,14 +474,14 @@
       ph = ph.map(() => rand(0, 6.3)); SEED = (Math.random() * 1e9) | 0;
       this.d = 0; this.x = center(0); this.vx = 0; this.v = 12;
       this.y = height(this.x, 0); this.vy = 0; this.air = false; this.airT = 0; this.spin = 0;
-      this.chunks = []; this.nextChunk = -CL; this.nextRamp = 150;
+      this.chunks = []; this.nextChunk = -CL; this.nextRamp = 150; this.grind = null; this.grindT = 0; this.wasPark = false; this.bump = 0;
       this.lastG = this.y;
       this.parts = []; this.sparks = []; this.pops = []; this.trail = []; this.trailD = -1;
       this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
       this.cam = null; this.lean = 0; this.crouch = 0.3; this.mult = 1; this.multT = 0; this.grab = '';
       this.gen();
-      if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.ramps.forEach((m) => { S.scene.remove(m); m.geometry.dispose(); }); S.ramps = []; S.built = ''; }
+      if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.feats.forEach(dropMesh); S.feats = []; S.built = ''; }
     },
 
     stop() { locked = false; },
@@ -436,21 +499,15 @@
       while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
     },
     makeChunk(d0) {
-      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], ramps: [] }, lv = level(d0);
+      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [] }, lv = level(d0);
       const put = (list, x, d, s) => list.push({ x, d, s, y: height(x, d), r: rand(0, 6.3), h: rand(0.9, 1.15) });
-      // A kicker, with coins up in the air where the jump goes.
-      if (d0 >= this.nextRamp) {
-        const rd = d0 + rand(5, 40), ru = rand(-12, 12), rp = { x: center(rd) + ru, d: rd };
-        ch.ramps.push(rp); this.nextRamp = rd + RAMP_EVERY * rand(0.8, 1.3);
-        const v = cruise(rd);
-        for (let s = 4; s < 44; s += 4) {
-          const up = RAMP.h + (LIP + SLOPE) * s - ((G / 2) * s * s) / (v * v); // Height above the snow where the jump goes.
-          if (up < 0.8) break;
-          const dd = rd + RAMP.len + s, x = center(dd) + ru;
-          ch.coins.push({ x, d: dd, y: height(x, dd) + up });
-        }
+      // A kicker now and then between the parks.
+      if (d0 >= this.nextRamp && !inPark(d0 - 60) && !inPark(d0 + CL + 60)) {
+        const rd = d0 + rand(5, 40);
+        this.kicker(ch, rd, rand(-12, 12), 7, 1.9, 2, 'kick'); this.nextRamp = rd + RAMP_EVERY * rand(0.8, 1.3);
       }
-      const inLane = (x, d) => ch.ramps.some((rp) => Math.abs(x - rp.x) < 7 && d > rp.d - 8 && d < rp.d + 55);
+      this.park(ch, d0);
+      const inLane = (x, d) => parkMask(d) > 0 || ch.feats.some((f) => Math.abs(x - f.x) < 7 && d > f.d - 8 && d < f.d + 55);
       // Thick forest up the valley sides.
       for (let k = 0; k < 560; k++) {
         const u = (Math.random() < 0.5 ? -1 : 1) * (FLOOR - 3 + Math.pow(Math.random(), 1.15) * 120), d = d0 + rand(0, CL), x = center(d) + u;
@@ -472,14 +529,66 @@
       }
       return ch;
     },
+    // A kicker, with coins up in the air where the jump goes. Side hits (hips) throw you towards the middle.
+    kicker(ch, d, u, len, w, h, type, noCoins) {
+      const f = { type, x: center(d) + u, u, d, len, w, h };
+      ch.feats.push(f);
+      if (noCoins) return;
+      const v = cruise(d), lip = (2 * h) / len, side = type === 'hip' ? -Math.sign(u) * HIP_THROW : 0;
+      for (let s = 4; s < 60; s += 4) {
+        const up = h + (lip + SLOPE) * s - ((G / 2) * s * s) / (v * v); // Height above the snow where the jump goes.
+        if (up < 0.8) break;
+        const dd = d + len + s, x = center(dd) + u + (side * s) / v;
+        ch.coins.push({ x, d: dd, y: height(x, dd) + up });
+      }
+    },
+    // A rail (with a small kicker to pop onto it) or a box you can ride straight onto.
+    rail(ch, d, u, len, box) {
+      const f = { type: box ? 'box' : 'rail', x: center(d) + u, u, d, len, top: box ? 0.55 : 0.95, w: box ? 0.6 : 0.12 };
+      if (!box) this.kicker(ch, d - 4.4, u, 4, 1.3, 1.05, 'kick', true);
+      ch.feats.push(f);
+      for (let s = 3; s < len; s += 3) { const dd = d + s, x = center(dd) + u; ch.coins.push({ x, d: dd, y: height(x, dd) + f.top + 0.9 }); }
+    },
+    // Fill the part of a terrain park that lies in this chunk: an entrance arch, flags along the edges,
+    // rows of rails, boxes and kickers across the run, and side hits on both edges.
+    park(ch, d0) {
+      const here = (d) => d >= d0 && d < d0 + CL;
+      for (let k = Math.max(0, Math.floor((d0 - PARK_AT) / PARK_EVERY)); PARK_AT + k * PARK_EVERY < d0 + CL; k++) {
+        const p0 = PARK_AT + k * PARK_EVERY;
+        if (p0 + PARK_LEN < d0) continue;
+        if (here(p0)) ch.feats.push({ type: 'arch', x: center(p0), u: 0, d: p0, len: 1 });
+        for (let d = p0; d <= p0 + PARK_LEN; d += 10) if (here(d)) for (const s of [-1, 1]) { const x = center(d) + s * (FLOOR - 1.5); ch.flags.push({ x, d, y: height(x, d), c: (d / 10 + (s > 0 ? 1 : 0)) % 2 }); }
+        for (let i = 0; i < 7; i++) {
+          const d = p0 + 24 + i * 33;
+          if (!here(d)) continue;
+          const lanes = [-9, 0, 9].sort(() => Math.random() - 0.5), n = i === 0 ? 3 : Math.random() < 0.5 ? 2 : 3;
+          for (let j = 0; j < n; j++) {
+            const u = lanes[j] + rand(-1.5, 1.5), r = Math.random();
+            if (r < 0.38) this.rail(ch, d, u, rand(13, 18), false);
+            else if (r < 0.62) this.rail(ch, d, u, rand(10, 14), true);
+            else if (r < 0.82 || lanes[j] !== 0) this.kicker(ch, d, u, 7, 1.9, 2, 'kick');
+            else this.kicker(ch, d, u, 10, 2.6, 3.2, 'big');
+          }
+        }
+        for (let i = 0; i < 5; i++) { const d = p0 + 40 + i * 46; if (here(d)) this.kicker(ch, d, (i % 2 ? 1 : -1) * (FLOOR - 5.5), 6, 2.4, 1.7, 'hip'); }
+      }
+    },
     // The snow height under a point, kickers included.
     ground(x, d) {
       let y = height(x, d);
       for (const ch of this.chunks) {
-        if (d < ch.d0 - RAMP.len || d > ch.d0 + CL + RAMP.len) continue;
-        for (const rp of ch.ramps) if (d >= rp.d && d <= rp.d + RAMP.len && Math.abs(x - rp.x) < RAMP.w) y += rampLift((d - rp.d) / RAMP.len);
+        if (d < ch.d0 - 20 || d > ch.d0 + CL + 20) continue;
+        for (const f of ch.feats) if (f.h && d >= f.d && d <= f.d + f.len && Math.abs(x - f.x) < f.w) { const s = (d - f.d) / f.len; y += f.h * s * s; }
       }
       return y;
+    },
+    kickerAt(x, d) {
+      for (const ch of this.chunks) for (const f of ch.feats) if (f.h && d >= f.d - 0.5 && d <= f.d + f.len + 0.5 && Math.abs(x - f.x) < f.w + 0.3) return f;
+      return null;
+    },
+    railAt(x, d) {
+      for (const ch of this.chunks) for (const f of ch.feats) if (f.top && d >= f.d && d <= f.d + f.len && Math.abs(x - center(d) - f.u) < f.w + 0.5) return f;
+      return null;
     },
 
     /* ----- Moving ----- */
@@ -512,38 +621,70 @@
       let dir = (this.right ? 1 : 0) - (this.left ? 1 : 0);
       if (this.touch) dir = clamp((this.tx - W / 2) / 70, -1, 1);
       const u = this.x - center(this.d), wall = Math.max(0, Math.abs(u) - FLOOR), maxSide = 5 + 0.3 * this.v;
-
-      // Speed creeps up the further you go. Climbing the valley side slows you and pushes you back down.
-      if (!this.air) {
-        const want = cruise(this.d) * (wall > 0 ? 0.75 : 1);
-        this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
-        this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 5);
-        this.vx -= Math.sign(u) * wall * 1.6 * dt;
-      } else if (dir && this.airT > 0.2) this.spin += dir * 11 * dt; // Hold a direction in the air to spin.
-
-      // The valley bends under you. You follow half of a bend by yourself and steer for the rest.
       const bend = (center(this.d + 1) - center(this.d - 1)) / 2;
-      this.d += this.v * dt; this.x += (this.vx + bend * this.v * 0.5) * dt;
+      if (inPark(this.d) && !this.wasPark) this.pop('TERRAIN PARK', 'RAILS, BOXES AND JUMPS', '#7fe3ff');
+      this.wasPark = inPark(this.d);
+      this.bump = Math.max(0, (this.bump || 0) - dt);
 
-      // Stay on the snow, or fly when it drops away faster than gravity can pull you down.
-      const g = this.ground(this.x, this.d), gv = (g - this.lastG) / dt; this.lastG = g;
-      if (!this.air) {
-        if (gv < this.vy - G * dt * 1.2) { this.air = true; this.airT = 0; this.grab = GRABS[(Math.random() * GRABS.length) | 0]; if (this.vy > 2) snd.jump(); }
-        else { this.y = g; if (gv - this.vy < 40) this.vy = gv; } // A sudden step up (the side of a kicker) is not a launch.
-      }
-      if (this.air) {
-        this.airT += dt; this.vy -= G * dt; this.y += this.vy * dt;
-        if (this.y <= g) this.land(g, gv);
+      if (this.grind) {
+        // Sliding along a rail or box. Hold left or right to hop off early.
+        const f = this.grind;
+        this.v = Math.max(12, this.v - dt * 1.2);
+        this.d += this.v * dt;
+        const rx = center(this.d) + f.u, top = height(rx, this.d) + f.top;
+        this.x += (rx - this.x) * Math.min(1, dt * 15); this.vx = 0;
+        this.vy = (top - this.y) / dt; this.y = top; this.grindT += dt;
+        this.lastG = this.ground(this.x, this.d);
+        if (Math.random() < dt * 50) this.parts.push({ x: this.x + rand(-0.3, 0.3), y: this.y, d: this.d, vx: rand(-2, 2), vy: rand(1, 3), vd: this.v * rand(0.6, 0.9), life: rand(0.2, 0.5), max: 0.5 });
+        if (f.type === 'rail' && Math.random() < dt * 40) this.puff(1, this.x, this.y, this.d, 2, 2, this.sparks);
+        if (this.d > f.d + f.len) this.endGrind(0);
+        else if (Math.abs(dir) > 0.5 && this.grindT > 0.45) this.endGrind(Math.sign(dir) * 6);
+      } else {
+        // Speed creeps up the further you go. Climbing the valley side slows you and pushes you back down.
+        if (!this.air) {
+          const want = cruise(this.d) * (wall > 0 ? 0.75 : 1);
+          this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
+          this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 5);
+          this.vx -= Math.sign(u) * wall * 1.6 * dt;
+        } else if (dir && this.airT > 0.2) this.spin += dir * 11 * dt; // Hold a direction in the air to spin.
+
+        // The valley bends under you. You follow half of a bend by yourself and steer for the rest.
+        const y0 = this.y;
+        this.d += this.v * dt; this.x += (this.vx + bend * this.v * 0.5) * dt;
+
+        // Stay on the snow, or fly when it drops away faster than gravity can pull you down.
+        const g = this.ground(this.x, this.d), gv = (g - this.lastG) / dt; this.lastG = g;
+        if (!this.air) {
+          if (gv < this.vy - G * dt * 1.2) {
+            this.air = true; this.airT = 0; this.grab = GRABS[(Math.random() * GRABS.length) | 0]; if (this.vy > 2) snd.jump();
+            const k = this.kickerAt(this.x, this.d - this.v * dt);
+            if (k && k.type === 'hip') this.vx = -Math.sign(k.u) * HIP_THROW;
+          }
+          else { this.y = g; if (gv < this.v * 0.5) this.vy = gv; } // Stepping up the side of a kicker is not a launch.
+        }
+        if (this.air) { this.airT += dt; this.vy -= G * dt; this.y += this.vy * dt; }
+        // Come down on a rail, or ride onto a box, and you start sliding. Ride into a rail and it knocks you aside.
+        const f = this.railAt(this.x, this.d);
+        if (f) {
+          const top = height(center(this.d) + f.u, this.d) + f.top, fromAbove = y0 >= top - (f.type === 'box' ? 0.75 : 0.3);
+          if (fromAbove && this.y <= top + 0.6) this.startGrind(f, top); // Close enough: you pop onto it.
+          else if (!fromAbove && f.type === 'rail' && Math.abs(this.x - center(this.d) - f.u) < 0.3 && this.y < top - 0.3 && !this.bump) {
+            const side = this.x >= center(this.d) + f.u ? 1 : -1;
+            this.x = center(this.d) + f.u + side * 0.45; this.vx = side * 6; this.v *= 0.7; this.bump = 0.5;
+            this.mult = 1; this.multT = 0; this.shake = 0.6; snd.clank(); this.pop('OUCH!', 'SPEED LOST', '#ff6b9a');
+          }
+        }
+        if (this.air && this.y <= g) this.land(g, gv);
       }
 
       // Coins, trees and rocks near you.
       for (const ch of this.chunks) {
-        if (ch.d0 > this.d + 3 || ch.d0 + CL < this.d - 3) continue;
         for (const c of ch.coins) {
           if (!c.got && Math.abs(c.d - this.d) < 1.2 && Math.abs(c.x - this.x) < 1.2 && Math.abs(c.y - this.y - 0.8) < 1.5) {
             c.got = true; this.coins++; snd.coin(); this.puff(14, c.x, c.y, c.d, 3, 3, this.sparks);
           }
         }
+        if (ch.d0 > this.d + 3 || ch.d0 + CL < this.d - 3) continue;
         for (const o of ch.forest) if (Math.abs(o.x - this.x) < 1.6 && Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3) return this.hit('a tree');
         for (const o of ch.trees) if (Math.abs(o.d - this.d) < 0.7 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.75 * o.s + 0.3 && this.y - o.y < 4.5 * o.s) return this.hit('a tree');
         for (const o of ch.rocks) if (Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3 && this.y - o.y < 0.8 * o.s) return this.hit('a rock');
@@ -551,7 +692,7 @@
 
       // Snow spray when carving hard or ploughing up the side.
       const carve = Math.abs(this.vx) / maxSide;
-      if (!this.air && Math.random() < dt * (carve * 90 + wall * 6 + 6)) {
+      if (!this.air && !this.grind && Math.random() < dt * (carve * 90 + wall * 6 + 6)) {
         const s = -Math.sign(this.vx || 1);
         this.parts.push({ x: this.x + rand(-0.2, 0.2), y: this.y + 0.05, d: this.d - 0.5, vx: s * rand(1, 5) * (0.5 + carve), vy: rand(1, 4) * (0.5 + carve), vd: this.v * rand(0.5, 0.85), life: rand(0.4, 0.9), max: 0.9 });
       }
@@ -559,24 +700,41 @@
       this.sndT -= dt;
       if (this.sndT <= 0) {
         this.sndT = 0.1;
-        if (!this.air) snd.hiss(0.18, 0.006 + carve * 0.02, 'bandpass', 1800 + this.v * 30);
+        if (this.grind) snd.hiss(0.18, 0.03, this.grind.type === 'rail' ? 'highpass' : 'bandpass', this.grind.type === 'rail' ? 3500 : 900);
+        else if (!this.air) snd.hiss(0.18, 0.006 + carve * 0.02, 'bandpass', 1800 + this.v * 30);
         snd.hiss(0.18, 0.004 + this.v * 0.0005 + (this.air ? 0.01 : 0), 'lowpass', 300 + this.v * 12);
       }
       // Tracks in the snow.
       if (this.d - this.trailD > 0.5) {
         this.trailD = this.d;
-        this.trail.unshift(this.air ? null : { x: this.x, d: this.d, h: Math.atan2(this.vx + bend * this.v * 0.5, this.v) });
+        this.trail.unshift(this.air || this.grind ? null : { x: this.x, d: this.d, h: Math.atan2(this.vx + bend * this.v * 0.5, this.v) });
         if (this.trail.length > TRACK) this.trail.pop();
       }
 
-      if (this.multT > 0 && !this.air && (this.multT -= dt) <= 0) this.mult = 1;
+      if (this.multT > 0 && !this.air && !this.grind && (this.multT -= dt) <= 0) this.mult = 1;
       const sc = Math.floor(this.d) + this.coins * 10 + this.bonus;
       if (sc !== this.score) { this.score = sc; setScore(sc); }
       this.moveBits(dt);
       this.gen();
     },
+    startGrind(f, top) {
+      const turns = this.spin / (Math.PI * 2), n = Math.round(turns);
+      const names = f.type === 'rail' ? RAILS : BOXES;
+      this.grind = f; this.grindT = 0; this.air = false; this.y = top; this.vy = 0;
+      this.grindName = (n ? Math.abs(n) * 360 + ' ' : '') + names[(Math.random() * names.length) | 0];
+      this.grindBonus = 150 * Math.abs(n) + (this.airT > 0.55 ? Math.round(this.airT * 100) : 0);
+      this.spin = 0; this.airT = 0; snd.clank();
+    },
+    endGrind(push) {
+      // Points for every second on the rail, plus the spin you landed on it with.
+      const pts = (60 + Math.round(this.grindT * 160) + this.grindBonus) * this.mult;
+      this.bonus += pts; this.pop(this.grindName, '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#7fe3ff');
+      snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
+      this.grind = null; this.air = true; this.airT = 0; this.vy += 3; this.vx = push;
+      this.lastG = this.ground(this.x, this.d);
+    },
     land(g, gv) {
-      this.y = g; this.vy = gv; this.air = false;
+      this.y = g; this.vy = Math.min(gv, this.v * 0.5); this.air = false;
       const t = this.airT;
       if (t > 0.25) { snd.land(); this.puff(26, this.x, g + 0.1, this.d, 3, 2.5); this.shake = Math.max(this.shake, Math.min(0.5, t * 0.3)); }
       // A spin only counts if you land facing down the hill again.
@@ -676,10 +834,14 @@
           for (const o of ch.trees) { if (n >= 1200) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.15, -o.d); sc.set(o.s, o.s * o.h, o.s); s.trees.setMatrixAt(n++, m.compose(p, q, sc)); }
           for (const o of ch.rocks) { if (r >= 400) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.1, -o.d); sc.set(o.s, o.s, o.s); s.rocks.setMatrixAt(r++, m.compose(p, q, sc)); }
         }
+        let fl = 0;
+        const flagCol = [new T.Color('#ff6a2c'), new T.Color('#2fb5ff')];
+        for (const ch of this.chunks) for (const o of ch.flags) { if (fl >= 200) break; p.set(o.x, o.y - 0.1, -o.d); s.flags.setMatrixAt(fl, m.compose(p, q.identity(), sc.set(1, 1, 1))); s.flags.setColorAt(fl++, flagCol[o.c]); }
+        s.flags.count = fl; s.flags.instanceMatrix.needsUpdate = true; if (s.flags.instanceColor) s.flags.instanceColor.needsUpdate = true;
         s.trees.count = n; s.rocks.count = r; s.forest.count = f; s.trees.instanceMatrix.needsUpdate = s.rocks.instanceMatrix.needsUpdate = s.forest.instanceMatrix.needsUpdate = true;
-        const all = this.chunks.flatMap((c) => c.ramps);
-        s.ramps = s.ramps.filter((mesh) => { if (all.includes(mesh.ramp)) return true; scene.remove(mesh); mesh.geometry.dispose(); return false; });
-        for (const rp of all) if (!s.ramps.some((mesh) => mesh.ramp === rp)) { const mesh = rampMesh(rp); scene.add(mesh); s.ramps.push(mesh); }
+        const all = this.chunks.flatMap((c) => c.feats);
+        s.feats = s.feats.filter((mesh) => { if (all.includes(mesh.feat)) return true; dropMesh(mesh); return false; });
+        for (const f of all) if (!s.feats.some((mesh) => mesh.feat === f)) { const mesh = featMesh(f); scene.add(mesh); s.feats.push(mesh); }
       }
       // Coins spin and bob.
       {
@@ -696,7 +858,7 @@
       // The skier.
       const sk = s.skier, heading = Math.atan2(this.vx, this.v);
       sk.root.position.set(this.x, this.y, -this.d);
-      sk.root.rotation.set(0, -heading - this.spin, 0);
+      sk.root.rotation.set(0, -heading - this.spin - (this.grind && SIDEWAYS.includes(this.grindName.replace(/^\d+ /, '')) ? Math.PI / 2 : 0), 0);
       sk.lean.rotation.set(0, 0, -this.lean * 0.45);
       if (this.crash) {
         const t = Math.min(this.crash.t * 1.5, 1);
@@ -776,8 +938,9 @@
       if (this.mult > 1) { ctx.fillStyle = 'rgba(255,215,94,0.9)'; ctx.fillRect(W - 14 - 46 * (this.multT / 7), 36, 46 * (this.multT / 7), 3); }
       text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, '#ffd23f', 'center');
       text('KM/H', W / 2, H - 20, 7, '#f4f6fb', 'center');
-      if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H * 0.3, 10, '#ffffff', 'center');
-      this.pops.forEach((p, i) => {
+      if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
+      if (this.grind) text(this.grindName + '  ' + this.grindT.toFixed(1) + 's', W / 2, H - 100, 11, '#7fe3ff', 'center');
+      this.pops.slice(-2).forEach((p, i) => {
         ctx.globalAlpha = clamp(p.life * 2, 0, 1);
         const y = H * 0.12 + i * 40 - (1.8 - p.life) * 10;
         text(p.text, W / 2, y, 14, '#ffffff', 'center');
