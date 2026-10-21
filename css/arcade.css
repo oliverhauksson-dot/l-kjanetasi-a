@@ -118,8 +118,9 @@ html.lock, html.lock body { overflow: hidden; }
 }
 .lb h4 { font: 11px/1 var(--display); margin: 0; color: var(--muted); letter-spacing: 1px; }
 .lb p { color: var(--muted); font-size: 13px; margin: 0; }
-.lb ol { list-style: none; margin: 0; padding: 0; text-align: left; }
-.lb li { display: grid; grid-template-columns: 2.5ch 1fr auto; gap: 8px; padding: 2px 6px; border-radius: 3px; }
+.lb ol { list-style: none; margin: 0; padding: 0; text-align: left; max-height: 260px; overflow-y: auto; position: relative; }
+.lb p.lbme { color: var(--c); }
+.lb li { display: grid; grid-template-columns: 3.5ch 1fr auto; gap: 8px; padding: 2px 6px; border-radius: 3px; }
 .lb li:nth-child(-n+3) span:first-child { color: var(--amber); }
 .lb li.me { background: var(--c); color: #15111f; }
 .lb li.me span:first-child { color: inherit; }
