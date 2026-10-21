@@ -12,14 +12,16 @@
   const THREE_URL = new URL('../vendor/three.module.min.js', document.currentScript.src).href;
   let T = null, failed = false;
 
-  const W = 450, H = 600;
-  const CL = 60, CHUNKS = 11;      // Chunk length, and how many are kept (about 630 m ahead).
+  // Wide on a computer or a sideways phone, tall on an upright phone. Picked when the game opens.
+  let W = 450, H = 600, locked = false;
+  const CL = 60, CHUNKS = 9;       // Chunk length, and how many are kept (about 500 m ahead).
   const NU = 49, ND = 31;          // Terrain grid points across and along a chunk.
   const SLOPE = 0.22;              // The mountain drops 22 cm every metre.
   const FLOOR = 27;                // Half the width of the valley floor.
   const G = 24;                    // Gravity, a bit stronger than real so jumps feel snappy.
   const CYCLE = 1800;              // Metres from one morning to the next.
   const RAMP_EVERY = 230;
+  const GRABS = ['INDY', 'TWEAKED INDY', 'METHOD', 'MUTE GRAB', 'STALEFISH', 'TAIL GRAB', 'JAPAN', 'MELON'];
   const RAMP = { w: 1.9, len: 7, h: 2 };
   const rampLift = (s) => RAMP.h * s * s; // Kickers rise in a curve, so they throw you up.
   const LIP = (2 * RAMP.h) / RAMP.len; // How steep a kicker is at the top.
@@ -41,7 +43,7 @@
   const rollers = (d) => { const e = Math.max(0, Math.sin(d / 330 + ph[2])); return e * e * 1.7 * Math.sin(d / 5.6 + ph[3]); };
   function height(x, d) {
     const u = x - center(d), t = Math.max(0, Math.abs(u) - FLOOR);
-    const side = t < 60 ? 0.007 * t * t : 25.2 + 0.84 * (t - 60); // The valley sides get steeper, then rise straight on.
+    const side = t < 40 ? 0.02 * t * t : 32 + 1.6 * (t - 40); // The valley sides get steeper, then rise straight on.
     return -SLOPE * d + rollers(d) + 0.0016 * u * u + side
       + noise(x * 0.04, d * 0.04) * 1.4 + noise(x * 0.17, d * 0.17) * 0.3 + noise(x * 0.5, d * 0.35) * 0.06 + t * 0.12 * noise(x * 0.02 + 40, d * 0.02);
   }
@@ -56,8 +58,8 @@
   /* ---------- Time of day ----------
      Stops along CYCLE. elev and az place the sun (or the moon at night). exp is the camera exposure. */
   const SKY = [
-    { at: 0.00, top: '#5f92d4', hor: '#e2ecf5', fog: '#d9e4ef', sun: '#fff1dc', sunI: 3.2, hs: '#d2e2ff', hg: '#8d93a6', hI: 1.25, elev: 0.5, az: 0.95, night: 0, exp: 1.0 },
-    { at: 0.30, top: '#5f92d4', hor: '#e6eef6', fog: '#dde7f1', sun: '#fff0d6', sunI: 3.0, hs: '#d2e2ff', hg: '#8d93a6', hI: 1.2, elev: 0.36, az: 0.9, night: 0, exp: 1.0 },
+    { at: 0.00, top: '#aebccd', hor: '#eef1f5', fog: '#e4e9ef', sun: '#fffaf0', sunI: 1.6, hs: '#ffffff', hg: '#9ea7b8', hI: 2.1, elev: 0.5, az: 0.95, night: 0, exp: 1.0 },
+    { at: 0.30, top: '#9fb2c9', hor: '#edf0f4', fog: '#e2e7ee', sun: '#fff4e2', sunI: 1.9, hs: '#f4f7ff', hg: '#9ea7b8', hI: 1.9, elev: 0.36, az: 0.9, night: 0, exp: 1.0 },
     { at: 0.42, top: '#5a6fae', hor: '#ffd2a6', fog: '#efd3bf', sun: '#ffc285', sunI: 2.7, hs: '#ffdcc4', hg: '#7a6a80', hI: 1.0, elev: 0.18, az: 0.6, night: 0, exp: 1.0 },
     { at: 0.52, top: '#2c3070', hor: '#ff8a58', fog: '#c78b88', sun: '#ff7840', sunI: 2.0, hs: '#c48aa6', hg: '#4a3a5a', hI: 0.85, elev: 0.04, az: 0.4, night: 0, exp: 1.05 },
     { at: 0.62, top: '#03050f', hor: '#13204a', fog: '#111a38', sun: '#a9bcff', sunI: 0.7, hs: '#3c4d7e', hg: '#12141f', hI: 0.55, elev: 0.6, az: -0.5, night: 1, exp: 1.2 },
@@ -138,12 +140,13 @@
   }
   const at = (x, y, z, ry = 0) => new T.Matrix4().compose(new T.Vector3(x, y, z), new T.Quaternion().setFromEuler(new T.Euler(0, ry, 0)), new T.Vector3(1, 1, 1));
 
-  function pineGeo() {
-    const parts = [{ geo: new T.CylinderGeometry(0.11, 0.17, 1.4, 7), m: at(0, 0.7, 0), color: '#4a2f1d' }];
-    for (let i = 0; i < 4; i++) {
-      const r = 1.45 - i * 0.3, h = 2.1 - i * 0.28, y = 1.25 + i * 0.95;
-      parts.push({ geo: new T.ConeGeometry(r, h, 10, 1, true), m: at(0, y + h / 2, 0, i), color: '#1d4a33', vary: 0.25 });
-      parts.push({ geo: new T.ConeGeometry(r * 0.78, h * 0.52, 10, 1, true), m: at(0, y + h * 0.62, 0, i + 0.3), color: '#f1f5fc', vary: 0.08 });
+  // A snowy pine: tiers of needles, each with snow lying on top. sides is how round it is.
+  function pineGeo(tiers, sides) {
+    const parts = [{ geo: new T.CylinderGeometry(0.11, 0.17, 1.4, 6), m: at(0, 0.7, 0), color: '#4a2f1d' }];
+    for (let i = 0; i < tiers; i++) {
+      const p = i / tiers, r = 1.5 * (1 - p * 0.8), h = 2.2 - p * 0.9, y = 1.1 + p * 4.3;
+      parts.push({ geo: new T.ConeGeometry(r, h, sides, 1, true), m: at(0, y + h / 2, 0, i), color: '#1a3d2c', vary: 0.3 });
+      parts.push({ geo: new T.ConeGeometry(r * 0.88, h * 0.62, sides, 1, true), m: at(0, y + h * 0.58, 0, i + 0.4), color: '#eef3fa', vary: 0.06 });
     }
     return merged(parts);
   }
@@ -199,7 +202,7 @@
     if (stretch) o.scale.set(1, len, 1); else o.scale.set(r, len / 3, r); // A capsule of radius 1 and length 1 is 3 long.
   }
   // Pose the skier. c is how low the tuck is (0 to 1), forward is -z.
-  function poseSkier(sk, c, armsUp) {
+  function poseSkier(sk, c, armsUp, grab) {
     const V = (x, y, z) => ({ x, y, z });
     const hip = V(0, 0.92 - 0.3 * c, 0.08 + 0.12 * c), bend = 0.3 + 0.75 * c;
     for (let i = 0; i < 2; i++) {
@@ -217,9 +220,11 @@
     sk.goggles.position.set(0, neck.y + 0.17, neck.z - 0.17);
     for (let i = 0; i < 2; i++) {
       const s = i ? 1 : -1, sh = V(s * 0.22, neck.y - 0.08, neck.z + 0.02);
-      const hand = armsUp ? V(s * 0.55, neck.y + 0.15, neck.z - 0.1) : V(s * 0.26, hip.y + 0.05 + 0.1 * c, hip.z - 0.42 - 0.05 * c);
+      // A grab: one hand reaches down to its ski, the other goes up for balance.
+      const reach = grab === s, up = armsUp || (grab && !reach);
+      const hand = reach ? V(s * 0.17, 0.12, 0.05) : up ? V(s * 0.55, neck.y + 0.15, neck.z - 0.1) : V(s * 0.26, hip.y + 0.05 + 0.1 * c, hip.z - 0.42 - 0.05 * c);
       placeLimb(sk.arms[i], sh, hand, 0.07);
-      const tip = armsUp ? V(s * 0.75, hand.y - 0.6, hand.z + 0.9) : V(s * 0.35, 0.05, hand.z + 1.05);
+      const tip = reach ? V(s * 0.3, 0.3, hand.z + 1.1) : up ? V(s * 0.75, hand.y - 0.6, hand.z + 0.9) : V(s * 0.35, 0.05, hand.z + 1.05);
       placeLimb(sk.poles[i], hand, tip, 0, true);
     }
   }
@@ -232,7 +237,7 @@
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.toneMapping = T.NeutralToneMapping;
     const scene = new T.Scene();
-    scene.fog = new T.FogExp2('#d9e4ef', 0.0016);
+    scene.fog = new T.FogExp2('#d9e4ef', 0.0027);
     const camera = new T.PerspectiveCamera(66, W / H, 0.2, 1600);
 
     const hemi = new T.HemisphereLight('#d2e2ff', '#8d93a6', 1.2); scene.add(hemi);
@@ -284,11 +289,11 @@
 
     // Big peaks at the far end of the valley, faded by the haze.
     const peaks = (() => {
-      const g = new T.PlaneGeometry(3200, 700, 160, 30), p = g.attributes.position, col = [];
+      const g = new T.PlaneGeometry(3200, 700, 360, 30), p = g.attributes.position, col = [];
       const snow = new T.Color('#f2f6fc'), rock = new T.Color('#6f7a92'), c = new T.Color();
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), y = p.getY(i) + 350;
-        let h = 60; [[0.0021, 260], [0.0047, 120], [0.011, 45], [0.027, 14]].forEach(([f, a], j) => { h += a * (1 - Math.abs(Math.sin(x * f + j * 1.7))) * (0.55 + 0.9 * Math.abs(x) / 1600); });
+        let h = 40; [[0.0019, 120], [0.0043, 95], [0.0097, 45], [0.021, 18], [0.047, 6]].forEach(([f, a], j) => { h += a * Math.pow(1 - Math.abs(Math.sin(x * f + j * 1.7)), 1.6) * (0.6 + 0.9 * Math.abs(x) / 1600); });
         const yy = (y / 700) * h;
         p.setXYZ(i, x, yy, -Math.abs(x) * 0.25);
         c.copy(rock).lerp(snow, clamp((yy / h - 0.4) * 3 + noise(x * 0.02, yy * 0.02) * 0.6, 0, 1));
@@ -313,7 +318,11 @@
       scene.add(m); tiles.push(m);
     }
 
-    const trees = new T.InstancedMesh(pineGeo(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), 2000);
+    const treeMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+    const trees = new T.InstancedMesh(pineGeo(6, 10), treeMat, 1200);
+    // The forest on the valley sides: lots of lighter trees that don't cast shadows, so phones keep up.
+    const forest = new T.InstancedMesh(pineGeo(5, 6), treeMat, 7000);
+    forest.count = 0; forest.frustumCulled = false; scene.add(forest);
     const rocks = new T.InstancedMesh(rockGeo(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }), 400);
     const coins = new T.InstancedMesh(new T.CylinderGeometry(0.42, 0.42, 0.08, 20).rotateX(Math.PI / 2),
       new T.MeshStandardMaterial({ color: '#ffc531', metalness: 0.35, roughness: 0.3, emissive: '#ff9d00', emissiveIntensity: 0.45 }), 400);
@@ -343,7 +352,7 @@
     const spray = points(500, 0.32, '#ffffff', 0.9), sparks = points(120, 0.35, '#ffd65a', 1), flakes = points(900, 0.12, '#ffffff', 0.85);
     const rampMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: T.DoubleSide });
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, rocks, coins, rampMat, ramps: [], skier, blob, tracks, spray, sparks, flakes, built: '' };
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, rampMat, ramps: [], skier, blob, tracks, spray, sparks, flakes, built: '' };
   }
   const TRACK = 90;
 
@@ -360,7 +369,7 @@
         P[k] = x; P[k + 1] = height(x, d); P[k + 2] = -d;
         N[k] = n[0]; N[k + 1] = n[1]; N[k + 2] = n[2];
         // Snow everywhere, with bare rock where it is too steep for snow to stay.
-        const steep = clamp((0.78 - n[1]) / 0.2 + noise(x * 0.08, d * 0.08) * 0.35, 0, 1);
+        const steep = clamp((0.42 - n[1]) / 0.15 + noise(x * 0.08, d * 0.08) * 0.35, 0, 1);
         c.copy(snow).lerp(blue, clamp(0.45 + noise(x * 0.03, d * 0.03) * 0.7 + noise(x * 0.3, d * 0.12) * 0.35, 0, 1) * 0.8);
         if (steep > 0) c.lerp(r.copy(rock2).lerp(rock, clamp(0.5 + noise(x * 0.2, d * 0.2), 0, 1)), steep);
         C[k] = c.r; C[k + 1] = c.g; C[k + 2] = c.b;
@@ -390,12 +399,15 @@
 
   /* ---------- The game ---------- */
   const ski = {
-    W, H, color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
+    get W() { if (!locked) { const wide = window.innerWidth > window.innerHeight; W = wide ? 640 : 450; H = wide ? 360 : 600; } return W; },
+    get H() { return H; },
+    color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
     intro: 'Ski down an endless 3D valley. Dodge the trees and rocks, grab coins and fly off kickers and rollers.',
     hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, and hold one in the air to spin. On a phone, hold the left or right side of the screen. <kbd>P</kbd> to pause',
 
     reset() {
+      locked = true; // Keep the screen shape until the game is closed.
       ph = ph.map(() => rand(0, 6.3)); SEED = (Math.random() * 1e9) | 0;
       this.d = 0; this.x = center(0); this.vx = 0; this.v = 12;
       this.y = height(this.x, 0); this.vy = 0; this.air = false; this.airT = 0; this.spin = 0;
@@ -404,10 +416,12 @@
       this.parts = []; this.sparks = []; this.pops = []; this.trail = []; this.trailD = -1;
       this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
-      this.cam = null; this.lean = 0; this.crouch = 0.3;
+      this.cam = null; this.lean = 0; this.crouch = 0.3; this.mult = 1; this.multT = 0; this.grab = '';
       this.gen();
       if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.ramps.forEach((m) => { S.scene.remove(m); m.geometry.dispose(); }); S.ramps = []; S.built = ''; }
     },
+
+    stop() { locked = false; },
 
     key(e, down) {
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.left = down;
@@ -422,7 +436,7 @@
       while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
     },
     makeChunk(d0) {
-      const ch = { d0, trees: [], rocks: [], coins: [], ramps: [] }, lv = level(d0);
+      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], ramps: [] }, lv = level(d0);
       const put = (list, x, d, s) => list.push({ x, d, s, y: height(x, d), r: rand(0, 6.3), h: rand(0.9, 1.15) });
       // A kicker, with coins up in the air where the jump goes.
       if (d0 >= this.nextRamp) {
@@ -437,10 +451,10 @@
         }
       }
       const inLane = (x, d) => ch.ramps.some((rp) => Math.abs(x - rp.x) < 7 && d > rp.d - 8 && d < rp.d + 55);
-      // Forest on the lower valley sides.
-      for (let k = 0; k < 90; k++) {
-        const u = (Math.random() < 0.5 ? -1 : 1) * (FLOOR - 4 + Math.pow(Math.random(), 1.4) * 90), d = d0 + rand(0, CL), x = center(d) + u;
-        if (normalAt(x, d)[1] > 0.74) put(ch.trees, x, d, rand(0.8, 1.7));
+      // Thick forest up the valley sides.
+      for (let k = 0; k < 560; k++) {
+        const u = (Math.random() < 0.5 ? -1 : 1) * (FLOOR - 3 + Math.pow(Math.random(), 1.15) * 120), d = d0 + rand(0, CL), x = center(d) + u;
+        if (normalAt(x, d)[1] > 0.45 && noise(x * 0.03, d * 0.03) > -0.45) put(ch.forest, x, d, rand(0.9, 2));
       }
       // Trees and rocks to dodge on the valley floor, more and more of them the further you go.
       if (d0 > 50) {
@@ -469,7 +483,7 @@
     },
 
     /* ----- Moving ----- */
-    pop(text, col) { this.pops.push({ text, col, life: 1.6 }); },
+    pop(text, sub, col) { this.pops.push({ text, sub, col, life: 1.8 }); },
     puff(n, x, y, d, speed, up, list = this.parts) {
       for (let i = 0; i < n; i++) {
         const a = rand(0, 6.3), sp = rand(0.3, 1) * speed;
@@ -514,8 +528,8 @@
       // Stay on the snow, or fly when it drops away faster than gravity can pull you down.
       const g = this.ground(this.x, this.d), gv = (g - this.lastG) / dt; this.lastG = g;
       if (!this.air) {
-        if (gv < this.vy - G * dt * 1.2) { this.air = true; this.airT = 0; if (this.vy > 2) snd.jump(); }
-        else { this.y = g; this.vy = gv; }
+        if (gv < this.vy - G * dt * 1.2) { this.air = true; this.airT = 0; this.grab = GRABS[(Math.random() * GRABS.length) | 0]; if (this.vy > 2) snd.jump(); }
+        else { this.y = g; if (gv - this.vy < 40) this.vy = gv; } // A sudden step up (the side of a kicker) is not a launch.
       }
       if (this.air) {
         this.airT += dt; this.vy -= G * dt; this.y += this.vy * dt;
@@ -530,6 +544,7 @@
             c.got = true; this.coins++; snd.coin(); this.puff(14, c.x, c.y, c.d, 3, 3, this.sparks);
           }
         }
+        for (const o of ch.forest) if (Math.abs(o.x - this.x) < 1.6 && Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3) return this.hit('a tree');
         for (const o of ch.trees) if (Math.abs(o.d - this.d) < 0.7 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.75 * o.s + 0.3 && this.y - o.y < 4.5 * o.s) return this.hit('a tree');
         for (const o of ch.rocks) if (Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3 && this.y - o.y < 0.8 * o.s) return this.hit('a rock');
       }
@@ -554,6 +569,7 @@
         if (this.trail.length > TRACK) this.trail.pop();
       }
 
+      if (this.multT > 0 && !this.air && (this.multT -= dt) <= 0) this.mult = 1;
       const sc = Math.floor(this.d) + this.coins * 10 + this.bonus;
       if (sc !== this.score) { this.score = sc; setScore(sc); }
       this.moveBits(dt);
@@ -565,9 +581,14 @@
       if (t > 0.25) { snd.land(); this.puff(26, this.x, g + 0.1, this.d, 3, 2.5); this.shake = Math.max(this.shake, Math.min(0.5, t * 0.3)); }
       // A spin only counts if you land facing down the hill again.
       const turns = this.spin / (Math.PI * 2), n = Math.round(turns), off = Math.abs(turns - n);
-      if (Math.abs(this.spin) > 0.3 && off > 0.14) { this.v *= 0.6; this.pop('SKETCHY!', '#ff6b9a'); snd.sketchy(); }
-      else if (n !== 0) { const pts = 200 * Math.abs(n); this.bonus += pts; this.pop(Math.abs(n) * 360 + '!  +' + pts, '#5ce1e6'); snd.trick(); }
-      if (t > 0.55) { const pts = Math.round(t * 100); this.bonus += pts; this.pop('AIR TIME ' + t.toFixed(1) + 's  +' + pts, '#ffffff'); }
+      if (Math.abs(this.spin) > 0.3 && off > 0.14) { this.v *= 0.6; this.mult = 1; this.multT = 0; this.pop('SKETCHY LANDING', 'SPEED LOST', '#ff6b9a'); snd.sketchy(); }
+      else if (t > 0.55 || n !== 0) {
+        // A trick: a grab for big air, plus the spin. Tricks in a row raise the multiplier.
+        const pts = (Math.round(t * 100) + 200 * Math.abs(n)) * this.mult;
+        const name = ((n ? Math.abs(n) * 360 + ' ' : '') + (t > 0.55 ? this.grab : '')).trim() || 'SPIN';
+        this.bonus += pts; this.pop(name, '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#ffd75e');
+        snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
+      }
       this.spin = 0; this.airT = 0;
     },
     moveBits(dt) {
@@ -585,7 +606,7 @@
 
       // Camera: behind and above, swinging round with your direction.
       const head = Math.atan2(this.vx, this.v) * 0.6, k = Math.min(1, dt * 4);
-      const tx = this.x - Math.sin(head) * 4.6, td = this.d - Math.cos(head) * 4.6, ty = Math.max(this.y, height(tx, td)) + 2.1;
+      const tx = this.x - Math.sin(head) * 10, td = this.d - Math.cos(head) * 10, ty = Math.max(this.y, height(tx, td)) + 5;
       if (!this.cam) this.cam = { x: tx, y: ty, d: td, h: head };
       const c = this.cam;
       c.x += (tx - c.x) * k; c.d = td; c.y += (ty - c.y) * Math.min(1, dt * 6); c.h += (head - c.h) * k;
@@ -649,12 +670,13 @@
       if (key !== s.built) {
         s.built = key;
         const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), sc = new T.Vector3();
-        let n = 0, r = 0;
+        let n = 0, r = 0, f = 0;
         for (const ch of this.chunks) {
-          for (const o of ch.trees) { if (n >= 2000) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.15, -o.d); sc.set(o.s, o.s * o.h, o.s); s.trees.setMatrixAt(n++, m.compose(p, q, sc)); }
+          for (const o of ch.forest) { if (f >= 7000) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.2, -o.d); sc.set(o.s, o.s * o.h, o.s); s.forest.setMatrixAt(f++, m.compose(p, q, sc)); }
+          for (const o of ch.trees) { if (n >= 1200) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.15, -o.d); sc.set(o.s, o.s * o.h, o.s); s.trees.setMatrixAt(n++, m.compose(p, q, sc)); }
           for (const o of ch.rocks) { if (r >= 400) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.1, -o.d); sc.set(o.s, o.s, o.s); s.rocks.setMatrixAt(r++, m.compose(p, q, sc)); }
         }
-        s.trees.count = n; s.rocks.count = r; s.trees.instanceMatrix.needsUpdate = s.rocks.instanceMatrix.needsUpdate = true;
+        s.trees.count = n; s.rocks.count = r; s.forest.count = f; s.trees.instanceMatrix.needsUpdate = s.rocks.instanceMatrix.needsUpdate = s.forest.instanceMatrix.needsUpdate = true;
         const all = this.chunks.flatMap((c) => c.ramps);
         s.ramps = s.ramps.filter((mesh) => { if (all.includes(mesh.ramp)) return true; scene.remove(mesh); mesh.geometry.dispose(); return false; });
         for (const rp of all) if (!s.ramps.some((mesh) => mesh.ramp === rp)) { const mesh = rampMesh(rp); scene.add(mesh); s.ramps.push(mesh); }
@@ -681,7 +703,8 @@
         sk.lean.rotation.set(-t * 1.4, 0, (this.crash.vx >= 0 ? -1 : 1) * t * 1.2);
         sk.root.position.y += Math.sin(t * Math.PI) * 0.8;
       }
-      poseSkier(sk, this.crouch, this.air && this.airT > 0.3 && !this.spin);
+      const big = this.air && this.airT > 0.3;
+      poseSkier(sk, this.crouch, big && !!this.spin, big && !this.spin ? (GRABS.indexOf(this.grab) % 2 ? 1 : -1) : 0);
       const gy = this.ground(this.x, this.d);
       s.blob.position.set(this.x, gy + 0.04, -this.d);
       s.blob.material.opacity = this.y - gy > 0.4 ? (0.3 / (1 + (this.y - gy) * 0.4)) * (1 - night * 0.4) : 0; // Helps judge a landing.
@@ -722,16 +745,16 @@
       // Camera, the sun's shadow box, and things that follow the camera.
       const c = this.cam;
       cam.position.set(c.x, c.y, -c.d);
-      const lookD = this.d + Math.cos(c.h) * 14, lookX = this.x + Math.sin(c.h) * 14;
-      cam.lookAt(lookX, Math.min(this.y, height(lookX, lookD)) + 1.2, -lookD);
+      const lookD = this.d + Math.cos(c.h) * 26, lookX = this.x + Math.sin(c.h) * 26;
+      cam.lookAt(lookX, this.y - (W > H ? 5.7 : 3.9), -lookD);
       cam.rotateZ(-this.lean * 0.05);
-      cam.fov = 64 + clamp(this.v - 14, 0, 30) * 0.35; cam.updateProjectionMatrix();
+      cam.aspect = W / H; cam.fov = (W > H ? 50 : 64) + clamp(this.v - 14, 0, 30) * 0.3; cam.updateProjectionMatrix();
       s.sun.position.set(this.x + sd.x * 150, this.y + sd.y * 150, -this.d + sd.z * 150);
       s.sun.target.position.set(this.x, this.y, -this.d - 15);
       s.lamp.position.set(this.x, this.y + 1.8, -this.d + 0.5);
       s.lamp.target.position.set(this.x + Math.sin(heading) * 20, this.y - 4, -this.d - 20);
       s.sky.position.copy(cam.position); s.stars.position.copy(cam.position); s.aurora.position.copy(cam.position);
-      const pd = this.d + 620, pc = center(pd); s.peaks.position.set(pc, height(pc, pd) - 90, -pd);
+      const pd = this.d + 470, pc = center(pd); s.peaks.position.set(pc, height(pc, pd) - 60, -pd);
       s.renderer.render(scene, cam);
     },
 
@@ -739,25 +762,31 @@
       ctx.textBaseline = 'top';
       const text = (str, x, y, size, color, align) => {
         ctx.font = font(size); ctx.textAlign = align;
-        ctx.fillStyle = 'rgba(10,12,30,0.5)'; ctx.fillText(str, x + 2, y + 2);
+        ctx.fillStyle = 'rgba(20,24,40,0.45)'; ctx.fillText(str, x + 2, y + 2);
         ctx.fillStyle = color; ctx.fillText(str, x, y);
       };
-      text(String(this.score).padStart(6, '0'), 14, 14, 18, '#ffffff', 'left');
-      const g = ctx.createRadialGradient(19, 47, 1, 22, 50, 8);
+      // Score and coins top left, the trick multiplier top right, speed big at the bottom.
+      text('SCORE', 14, 12, 7, '#f4f6fb', 'left');
+      text(this.score.toLocaleString('en-US'), 14, 24, 16, '#ffffff', 'left');
+      const g = ctx.createRadialGradient(19, 52, 1, 22, 55, 7);
       g.addColorStop(0, '#fff3a8'); g.addColorStop(0.6, '#ffc531'); g.addColorStop(1, '#b97a0c');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(22, 50, 8, 0, 7); ctx.fill();
-      text('x ' + this.coins, 36, 45, 10, '#ffd75e', 'left');
-      text(String(Math.round(this.v * 3.6)), W - 14, H - 52, 22, '#ffffff', 'right');
-      text('KM/H', W - 14, H - 24, 8, '#e6edff', 'right');
-      if (this.air && this.airT > 0.35 && !this.crash) text('AIR TIME', W / 2, 92, 12, '#ffffff', 'center');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(21, 55, 7, 0, 7); ctx.fill();
+      text(String(this.coins), 33, 51, 9, '#ffd75e', 'left');
+      text('x' + this.mult, W - 14, 14, 16, this.mult > 1 ? '#ffd75e' : '#ffffff', 'right');
+      if (this.mult > 1) { ctx.fillStyle = 'rgba(255,215,94,0.9)'; ctx.fillRect(W - 14 - 46 * (this.multT / 7), 36, 46 * (this.multT / 7), 3); }
+      text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, '#ffd23f', 'center');
+      text('KM/H', W / 2, H - 20, 7, '#f4f6fb', 'center');
+      if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H * 0.3, 10, '#ffffff', 'center');
       this.pops.forEach((p, i) => {
         ctx.globalAlpha = clamp(p.life * 2, 0, 1);
-        text(p.text, W / 2, 118 + i * 24 - (1.6 - p.life) * 18, 12, p.col, 'center');
+        const y = H * 0.12 + i * 40 - (1.8 - p.life) * 10;
+        text(p.text, W / 2, y, 14, '#ffffff', 'center');
+        text(p.sub, W / 2, y + 20, 9, p.col, 'center');
         ctx.globalAlpha = 1;
       });
       if (this.t < 4 && !this.crash) {
         ctx.globalAlpha = clamp(4 - this.t, 0, 1);
-        text('<  STEER  >', W / 2, H - 90, 12, '#ffffff', 'center');
+        text('<  STEER  >', W / 2, H - 82, 11, '#ffffff', 'center');
         ctx.globalAlpha = 1;
       }
       ctx.textBaseline = 'alphabetic';
