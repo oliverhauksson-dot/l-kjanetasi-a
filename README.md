@@ -4,6 +4,8 @@ Thirteen retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong,
 
 Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 100 leaderboard that also shows your own place.
 
+Every day one game is the Daily Challenge, with its own top 100 for that day. The site can also be added to a phone's home screen, where it opens like an app and works offline.
+
 ## Run it on your computer (localhost)
 
 The games load as separate files, so the site has to be served by a small local web server. Opening `index.html` straight from the folder won't work properly.
@@ -34,5 +36,6 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `js/games/*.js`: one file per game. A game file is only downloaded when someone opens that game.
 - `js/vendor/three.module.min.js`: three.js, the 3D engine Police Chase and Endless Ski use (MIT license, see `three-LICENSE.txt`). Only downloaded when one of those games is opened.
 - `fonts/`: the two fonts, served from this site.
+- `sw.js`, `manifest.webmanifest`, `icons/`: what makes "Add to home screen" and offline play work.
 - `leaderboard/`: the small Cloudflare server that keeps the leaderboard scores. See `leaderboard/README.md` for how to set it up.
 - `games/*.html`, `about.html`, `privacy.html`: the "how to play" and info pages, styled by `page.css`.

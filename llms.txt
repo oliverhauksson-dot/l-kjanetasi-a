@@ -22,6 +22,14 @@
 
 Open `https://pocketarcade.net/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, blackjack, cube, chase, ski.
 
+## Daily Challenge
+
+Every day one game is the Daily Challenge, the same start for everyone, with its own top 100 that starts empty at midnight (UTC). Open `https://pocketarcade.net/?daily` to play today's challenge.
+
+## App
+
+Pocket Arcade can be added to a phone's home screen and then opens like an app. The games work offline after the first visit.
+
 ## More
 
 - [About Pocket Arcade](https://pocketarcade.net/about.html)

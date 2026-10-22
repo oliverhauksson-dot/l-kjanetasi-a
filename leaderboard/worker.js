@@ -2,7 +2,10 @@
    It runs on pocketarcade.net/api/* so the games can call it without any cross-site setup.
    GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me }   (top 100)
    POST /api/scores { game, name, score }  -> { ok: true, scores, total, me }
-   me is { rank, score } for that name's best score (also when it is outside the top 100), or null. */
+   me is { rank, score } for that name's best score (also when it is outside the top 100), or null.
+   Daily Challenge (one game a day, with a board that starts empty at midnight UTC):
+   GET  /api/daily[?name=BOB]              -> { day, game, scores, total, me }   (today's board)
+   POST /api/daily { day, name, score }    -> { ok: true, day, game, scores, total, me } */
 
 // The best score a very good player can really reach in each game (for Memory, the fewest moves).
 // Anything outside is refused, so a faked "Snake: 400" can't take the top spot. Raise a number if real players hit it.
@@ -21,6 +24,13 @@ const GAMES = {
   chase: { max: 60000 }, // 10 points a second plus coins and crashes, so about an hour of play.
   ski: { max: 100000 }, // About 40 minutes at top speed, plus coins and jumps.
 };
+
+// The Daily Challenge game for a day (YYYY-MM-DD). This list must match DAILY in js/arcade.js.
+const DAILY = ['snake', 'runner', 'breakout', 'memory', 'snapgrid', 'invaders', 'flappy', 'muncher', 'chase', 'ski'];
+const dailyGame = (day) => DAILY[Math.floor(Date.parse(day) / 864e5) % DAILY.length];
+const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
+const GRACE = 30 * 60 * 1000; // A game that ends just after midnight can still go on yesterday's board.
+const KEEP_DAYS = 60; // Older Daily Challenge boards are deleted.
 
 // Names that are refused. Checked after removing spaces, dashes and look-alike digits (5H1T -> SHIT).
 // LONG words are blocked anywhere in a name; SHORT ones only as the whole name, so a name like CLASS still works.
@@ -49,27 +59,31 @@ function cleanName(raw) {
   return name.length ? name : null;
 }
 
-async function top(db, game) {
-  const order = GAMES[game].lowerWins ? 'ASC' : 'DESC';
-  const { results } = await db.prepare(`SELECT name, score FROM scores WHERE game = ? ORDER BY score ${order}, at ASC LIMIT ?`).bind(game, TOP).all();
+// A list is one board of scores: a game's own board (table scores, by game) or one day's Daily Challenge (table daily, by day).
+const gameList = (game) => ({ table: 'scores', col: 'game', key: game, game });
+const dayList = (day) => ({ table: 'daily', col: 'day', key: day, game: dailyGame(day) });
+
+async function top(db, l) {
+  const order = GAMES[l.game].lowerWins ? 'ASC' : 'DESC';
+  const { results } = await db.prepare(`SELECT name, score FROM ${l.table} WHERE ${l.col} = ? ORDER BY score ${order}, at ASC LIMIT ?`).bind(l.key, TOP).all();
   return results;
 }
 
-// Where a name stands in a game: 1 + everyone with a better score (or the same score, set earlier).
-async function place(db, game, name) {
+// Where a name stands on a board: 1 + everyone with a better score (or the same score, set earlier).
+async function place(db, l, name) {
   if (!name) return null;
-  const row = await db.prepare('SELECT score, at FROM scores WHERE game = ? AND name = ?').bind(game, name).first();
+  const row = await db.prepare(`SELECT score, at FROM ${l.table} WHERE ${l.col} = ? AND name = ?`).bind(l.key, name).first();
   if (!row) return null;
-  const better = GAMES[game].lowerWins ? 'score < ?' : 'score > ?';
-  const { n } = await db.prepare(`SELECT COUNT(*) AS n FROM scores WHERE game = ? AND (${better} OR (score = ? AND at < ?))`)
-    .bind(game, row.score, row.score, row.at).first();
+  const better = GAMES[l.game].lowerWins ? 'score < ?' : 'score > ?';
+  const { n } = await db.prepare(`SELECT COUNT(*) AS n FROM ${l.table} WHERE ${l.col} = ? AND (${better} OR (score = ? AND at < ?))`)
+    .bind(l.key, row.score, row.score, row.at).first();
   return { rank: n + 1, score: row.score };
 }
 
-async function board(db, game, name) {
+async function board(db, l, name) {
   const [scores, me, { n }] = await Promise.all([
-    top(db, game), place(db, game, name),
-    db.prepare('SELECT COUNT(*) AS n FROM scores WHERE game = ?').bind(game).first(),
+    top(db, l), place(db, l, name),
+    db.prepare(`SELECT COUNT(*) AS n FROM ${l.table} WHERE ${l.col} = ?`).bind(l.key).first(),
   ]);
   return { scores, total: n, me };
 }
@@ -84,12 +98,18 @@ async function visitor(request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname !== '/api/scores') return json({ error: 'Not found' }, 404);
+    const isDaily = url.pathname === '/api/daily';
+    if (url.pathname !== '/api/scores' && !isDaily) return json({ error: 'Not found' }, 404);
 
     if (request.method === 'GET') {
+      const name = cleanName(url.searchParams.get('name'));
+      if (isDaily) {
+        const day = dayOf(Date.now());
+        return json(Object.assign({ day, game: dailyGame(day) }, await board(env.DB, dayList(day), name)));
+      }
       const game = url.searchParams.get('game');
       if (!GAMES[game]) return json({ error: 'Unknown game' }, 400);
-      return json(await board(env.DB, game, cleanName(url.searchParams.get('name'))));
+      return json(await board(env.DB, gameList(game), name));
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -98,25 +118,43 @@ export default {
 
     let body;
     try { body = await request.json(); } catch (e) { return json({ error: 'Bad request' }, 400); }
+    const now = Date.now();
+    let list = gameList(body.game);
+    if (isDaily) {
+      // Only today's challenge, or yesterday's for a few minutes after midnight.
+      const day = String(body.day);
+      if (day !== dayOf(now) && day !== dayOf(now - GRACE)) return json({ error: 'That Daily Challenge is over.' }, 400);
+      list = dayList(day);
+      if (body.game !== list.game) return json({ error: 'Invalid score' }, 400);
+    }
     const rules = GAMES[body.game];
     const name = cleanName(body.name);
     const score = Number(body.score);
     if (!rules || !name || !Number.isInteger(score) || score < (rules.min ?? 1) || score > rules.max) return json({ error: 'Invalid score' }, 400);
     if (rude(name)) return json({ error: 'Please pick a different name.' }, 400);
 
-    const now = Date.now();
     const who = await visitor(request);
     const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM hits WHERE who = ? AND at > ?').bind(who, now - WINDOW).first();
     if (n >= LIMIT) return json({ error: 'Slow down! Try again in a few minutes.' }, 429);
 
-    const better = rules.lowerWins ? 'excluded.score < scores.score' : 'excluded.score > scores.score';
-    await env.DB.batch([
+    const better = rules.lowerWins ? `excluded.score < ${list.table}.score` : `excluded.score > ${list.table}.score`;
+    const steps = [
       env.DB.prepare('INSERT INTO hits (who, at) VALUES (?, ?)').bind(who, now),
       env.DB.prepare('DELETE FROM hits WHERE at < ?').bind(now - WINDOW),
-      env.DB.prepare(`INSERT INTO scores (game, name, score, at) VALUES (?, ?, ?, ?)
-        ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better}`).bind(body.game, name, score, now),
-    ]);
+    ];
+    if (isDaily) {
+      steps.push(
+        env.DB.prepare(`INSERT INTO daily (day, game, name, score, at) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT (day, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better}`).bind(list.key, list.game, name, score, now),
+        env.DB.prepare('DELETE FROM daily WHERE day < ?').bind(dayOf(now - KEEP_DAYS * 864e5)),
+      );
+    } else {
+      steps.push(env.DB.prepare(`INSERT INTO scores (game, name, score, at) VALUES (?, ?, ?, ?)
+        ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better}`).bind(body.game, name, score, now));
+    }
+    await env.DB.batch(steps);
 
-    return json(Object.assign({ ok: true }, await board(env.DB, body.game, name)));
+    const extra = isDaily ? { ok: true, day: list.key, game: list.game } : { ok: true };
+    return json(Object.assign(extra, await board(env.DB, list, name)));
   },
 };
