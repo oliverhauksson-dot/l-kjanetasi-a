@@ -78,20 +78,80 @@
     return loading[gid];
   }
 
+  /* ---------- Daily challenge ---------- */
+  // One game a day, the same for everyone, with its own top 100 that starts empty at midnight (UTC).
+  // While it is played, the game's random numbers come from the date, so everyone gets the same start.
+  // This list must match DAILY in leaderboard/worker.js.
+  const DAILY = ['snake', 'runner', 'breakout', 'memory', 'snapgrid', 'invaders', 'flappy', 'muncher', 'chase', 'ski'];
+  const today = () => new Date().toISOString().slice(0, 10);
+  const dailyGame = (day) => DAILY[Math.floor(Date.parse(day) / 864e5) % DAILY.length];
+  const realRandom = Math.random;
+  let daily = null; // The day of the challenge being played, or null in a normal game.
+  function seedRandom(day) {
+    let s = 2166136261;
+    for (const ch of day) s = Math.imul(s ^ ch.charCodeAt(0), 16777619) >>> 0;
+    Math.random = () => {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(s ^ (s >>> 15), s | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
   /* ---------- Shell ---------- */
   let id = null, game = null, running = false, phase = 'idle', raf = 0, last = 0, ovAction = null, lastScore = 0;
   const ov = $('#ov'), stage = $('#stage'), screen = $('#game'), home = $('#home'), scoreEl = $('#score'), bestEl = $('#best');
 
   const fmtBest = (gid) => { const v = store.get(gid); return v === null ? '—' : String(v); };
-  function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); }
+  function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); paintDaily(); }
   function setScore(v) { if (phase === 'play' && v > lastScore && !game.quietScore) sfx.point(); lastScore = v; scoreEl.textContent = v; }
   function paintSound() { $$('.sound').forEach((b) => { b.textContent = sfx.on ? 'SOUND ON' : 'SOUND OFF'; b.setAttribute('aria-pressed', String(sfx.on)); }); }
   $$('.sound').forEach((b) => b.addEventListener('click', () => { sfx.on = !sfx.on; store.set('sound', sfx.on ? 1 : 0); sfx.unlock(); paintSound(); b.blur(); }));
   paintSound();
 
-  function showOverlay(title, text, btn, action) {
+  function showOverlay(title, text, btn, action, share) {
     $('#ovt').textContent = title; $('#ovp').textContent = text; $('#ovb').textContent = btn;
-    ovAction = action; ov.hidden = false; board.hide();
+    shareInfo = share || null; shareBtn.hidden = !share; shareBtn.textContent = 'Share';
+    ovAction = action; ov.hidden = false; board.hide(); next.hidden = true;
+  }
+
+  /* ---------- Share ---------- */
+  // At game over, players can send their score to a friend with a link straight into the same game.
+  const shareBtn = $('#ovs');
+  let shareInfo = null;
+  shareBtn.addEventListener('click', async () => {
+    const s = shareInfo; if (!s) return;
+    const what = s.label.toLowerCase();
+    const text = s.day
+      ? 'My ' + what + ' in today\'s Pocket Arcade Daily Challenge (' + s.title + '): ' + s.score + '. Can you beat it?'
+      : 'My ' + what + ' in ' + s.title + ' on Pocket Arcade: ' + s.score + '. Can you beat it?';
+    const url = location.origin + location.pathname + (s.day ? '?daily' : '?play=' + s.id);
+    if (window.track) window.track('share', { game_name: s.id });
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Pocket Arcade', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    // No share sheet (most computers): copy the message so it can be pasted anywhere.
+    try { await navigator.clipboard.writeText(text + ' ' + url); shareBtn.textContent = 'Copied!'; } catch (e) { shareBtn.textContent = 'Could not copy'; }
+    setTimeout(() => { if (shareInfo === s) shareBtn.textContent = 'Share'; }, 2000);
+  });
+
+  /* ---------- Play next ---------- */
+  // At game over, three other games to try, so a player who is done with one finds the next.
+  const next = $('#next');
+  function showNext() {
+    const row = next.querySelector('div'); row.textContent = '';
+    const others = [...$$('.menu [data-game]')].filter((c) => c.dataset.game !== id);
+    for (let i = others.length - 1; i > 0; i--) { const j = Math.floor(realRandom() * (i + 1)); [others[i], others[j]] = [others[j], others[i]]; }
+    others.slice(0, 3).forEach((card) => {
+      const gid = card.dataset.game, b = document.createElement('button');
+      b.className = 'mini'; b.style.setProperty('--c', card.style.getPropertyValue('--c'));
+      const name = document.createElement('span'); name.textContent = card.querySelector('h2').textContent;
+      b.append(card.querySelector('svg').cloneNode(true), name);
+      b.addEventListener('click', () => { if (window.track) window.track('play_next', { game_name: gid, from: id }); switchGame(gid); });
+      b.addEventListener('pointerenter', () => load(gid).catch(() => {}), { once: true });
+      row.appendChild(b);
+    });
+    next.hidden = false;
   }
 
   /* ---------- Leaderboard ---------- */
@@ -103,15 +163,16 @@
     MIN: { blackjack: 101, memory: 8 }, // Scores below this can't go on the board (everyone starts Blackjack with 100 coins).
     name() { try { return localStorage.getItem('arcade:name') || ''; } catch (e) { return ''; } },
     hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
-    async show(gid, g, score) {
+    async show(gid, g, score, day) {
       const ask = ++this.ask;
+      this.day = day; // A Daily Challenge game goes on that day's board instead of the game's.
       let data;
       try {
-        const r = await fetch('/api/scores?game=' + gid + '&name=' + encodeURIComponent(this.name()));
+        const r = await fetch((day ? '/api/daily?' : '/api/scores?game=' + gid + '&') + 'name=' + encodeURIComponent(this.name()));
         if (!r.ok) return;
         data = await r.json();
       } catch (e) { return; }
-      if (ask !== this.ask || !Array.isArray(data.scores)) return;
+      if (ask !== this.ask || !Array.isArray(data.scores) || (day && (data.day !== day || data.game !== gid))) return;
       // Every real score can be saved, so everyone gets a place. Only ask when it beats the name's saved best.
       const beats = (best) => (g.lowerWins ? score < best : score > best);
       const fits = score >= (this.MIN[gid] ?? 1) && (!data.me || beats(data.me.score));
@@ -120,7 +181,7 @@
     },
     render({ scores, total, me }) {
       const el = this.el; el.textContent = ''; el.hidden = false;
-      const h = document.createElement('h4'); h.textContent = 'Top 100'; el.appendChild(h);
+      const h = document.createElement('h4'); h.textContent = this.day ? 'Today\'s top 100' : 'Top 100'; el.appendChild(h);
       if (me) {
         const p = document.createElement('p'); p.className = 'lbme';
         p.textContent = 'Your place: #' + me.rank.toLocaleString() + ' of ' + (total || me.rank).toLocaleString() + ' (best ' + me.score + ')';
@@ -152,7 +213,8 @@
         try { localStorage.setItem('arcade:name', name); } catch (e) {}
         send.disabled = true; msg.textContent = 'Saving...';
         try {
-          const r = await fetch('/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ game: gid, name, score }) });
+          const day = this.day;
+          const r = await fetch(day ? '/api/daily' : '/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ game: gid, name, score, day }) });
           const data = await r.json();
           if (ask !== this.ask) return;
           if (!r.ok) { msg.textContent = data.error || 'Could not save. Try again.'; send.disabled = false; return; }
@@ -176,12 +238,13 @@
   function play() {
     sfx.unlock();
     if (phase !== 'paused' && window.track) window.track('game_start', { game_name: id });
-    ov.hidden = true; phase = 'play'; board.hide();
+    ov.hidden = true; phase = 'play'; board.hide(); next.hidden = true;
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     if (game.dom) return;
     running = true; last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
   }
-  function startGame() { game.reset(); setScore(0); if (!game.dom) game.draw(); play(); }
+  function fresh() { if (daily) seedRandom(daily); game.reset(); setScore(0); } // A daily game starts the same way every time.
+  function startGame() { fresh(); if (!game.dom) game.draw(); play(); }
   function pause() {
     if (phase !== 'play' || game.dom) return;
     running = false; cancelAnimationFrame(raf); phase = 'paused';
@@ -196,19 +259,23 @@
     bestEl.textContent = fmtBest(id);
     const line = msg || (game.label + ': ' + score + '.');
     if (title) sfx.win(); else sfx.lose();
-    showOverlay(title || 'Game over', line + (better && prev !== null ? ' New best!' : ''), 'Play again', startGame);
-    board.show(id, game, score);
+    showOverlay(title || 'Game over', line + (better && prev !== null ? ' New best!' : ''), 'Play again', startGame,
+      { id, title: game.title, label: game.label, score, day: daily });
+    board.show(id, game, score, daily);
+    showNext();
   }
 
   function showScreen(gameOpen) { home.hidden = gameOpen; screen.hidden = !gameOpen; }
 
-  async function openGame(gid) {
+  async function openGame(gid, day) {
     id = gid;
+    daily = day || null;
+    if (!daily) Math.random = realRandom;
     try { game = await load(gid); } catch (e) { game = null; setFull(false); alert('Sorry, that game could not load. Check your connection and try again.'); return; }
     if (id !== gid) return; // Another game was picked while this one was loading.
     showScreen(true);
     screen.style.setProperty('--c', game.color);
-    $('#gtitle').textContent = game.title; $('#slabel').textContent = game.label;
+    $('#gtitle').textContent = game.title + (daily ? ' · Daily' : ''); $('#slabel').textContent = game.label;
     $('#blabel').textContent = game.lowerWins ? 'Fewest' : 'Best';
     bestEl.textContent = fmtBest(gid); $('#hint').innerHTML = game.hint;
     $('#mem').hidden = !game.dom; cv.hidden = !!game.dom;
@@ -219,15 +286,22 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       stage.style.maxWidth = game.W + 'px';
     }
-    game.reset(); setScore(0);
+    fresh();
     fit();
     if (!game.dom) game.draw();
     window.scrollTo(0, 0);
     play(); // Picking a game starts it right away, with no extra Start button.
   }
-  function closeGame() {
+  function stopGame() {
     running = false; cancelAnimationFrame(raf); phase = 'idle';
     if (game && game.stop) game.stop();
+    daily = null; Math.random = realRandom;
+    board.hide(); next.hidden = true;
+  }
+  // From the "Play next" row: the game screen stays open (and in full screen) and the new game starts.
+  function switchGame(gid) { stopGame(); openGame(gid); }
+  function closeGame() {
+    stopGame();
     setFull(false);
     showScreen(false);
     refreshMenu();
@@ -245,6 +319,29 @@
     b.addEventListener('touchstart', warm, { once: true, passive: true });
   });
   $('#back').addEventListener('click', closeGame);
+
+  /* ---------- Daily challenge box on the front page ---------- */
+  const dailyBox = $('#daily');
+  let dailyShown = '';
+  function paintDaily() {
+    const day = today(), gid = dailyGame(day), card = document.querySelector('.menu [data-game="' + gid + '"]');
+    if (!card) return;
+    dailyBox.style.setProperty('--c', card.style.getPropertyValue('--c'));
+    $('#dday').textContent = new Date(day + 'T12:00:00Z').toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase();
+    $('#dname').textContent = card.querySelector('h2').textContent;
+    const art = $('#dart'); art.textContent = ''; art.appendChild(card.querySelector('svg').cloneNode(true));
+    dailyBox.hidden = false;
+    // Today's leader. Stays empty if the leaderboard can't be reached.
+    const lead = $('#dlead');
+    if (dailyShown !== day) lead.textContent = '';
+    dailyShown = day;
+    fetch('/api/daily').then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!d || d.day !== day || !Array.isArray(d.scores)) return;
+      lead.textContent = d.scores.length ? 'Leader: ' + d.scores[0].name + ' with ' + d.scores[0].score : 'No scores yet today. Be the first!';
+    }).catch(() => {});
+  }
+  function openDaily() { setFull(true); const day = today(); openGame(dailyGame(day), day); }
+  $('#dplay').addEventListener('click', openDaily);
 
   /* ---------- Full screen ---------- */
   // Uses the browser's Fullscreen API. Where that is missing (iPhone Safari), the game screen is
@@ -356,8 +453,27 @@
     register(gid, g) { GAMES[gid] = g; },
   };
 
+  /* ---------- Add to home screen ---------- */
+  // sw.js keeps a copy of the site, so it opens like an app from the home screen and works offline after the first visit.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  const installBtn = $('#install'), installTip = $('#itip');
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let installAsk = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installAsk = e; installBtn.hidden = false; });
+  window.addEventListener('appinstalled', () => { installBtn.hidden = true; installTip.hidden = true; if (window.track) window.track('app_installed'); });
+  // iPhones and iPads never offer the install prompt, so there the button shows how to do it by hand.
+  const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (apple && !standalone) installBtn.hidden = false;
+  installBtn.addEventListener('click', async () => {
+    if (!installAsk) { installTip.hidden = !installTip.hidden; return; }
+    installAsk.prompt();
+    try { await installAsk.userChoice; } catch (e) {}
+    installAsk = null; installBtn.hidden = true;
+  });
+
   refreshMenu();
-  // Game pages link here as ?play=<game> so a search visitor lands right in that game.
-  const startId = new URLSearchParams(location.search).get('play');
-  if (startId && document.querySelector('[data-game="' + CSS.escape(startId) + '"]')) { setFull(true); openGame(startId); }
+  // Game pages link here as ?play=<game> so a search visitor lands right in that game. ?daily opens today's Daily Challenge.
+  const params = new URLSearchParams(location.search), startId = params.get('play');
+  if (params.has('daily')) openDaily();
+  else if (startId && document.querySelector('[data-game="' + CSS.escape(startId) + '"]')) { setFull(true); openGame(startId); }
 })();

@@ -25,6 +25,15 @@ Until this is set up, the games work exactly as before and the leaderboard box j
 
 If you change `worker.js` later, repeat step 4.
 
+## Daily Challenge update (one time)
+
+The Daily Challenge has its own board, so the database needs one more table and the Worker needs the new code.
+Until you do this, the Daily Challenge still works, but its top 100 box stays hidden.
+
+1. In the D1 **Console**, paste everything in `schema.sql` again and press **Execute**. (The old tables are left as they are; only the new `daily` table is added.)
+2. In the Worker, click **Edit code**, delete what's there, paste everything in `worker.js`, and click **Deploy**.
+3. Test it: open https://pocketarcade.net/api/daily. You should see today's game, like `{"day":"2026-10-22","game":"chase","scores":[]...}`.
+
 ## Removing a bad name
 
 In the D1 **Console**, run (with the right game and name):
@@ -32,6 +41,8 @@ In the D1 **Console**, run (with the right game and name):
 ```sql
 DELETE FROM scores WHERE game = 'snake' AND name = 'BADNAME';
 ```
+
+For today's Daily Challenge board: `DELETE FROM daily WHERE name = 'BADNAME';`
 
 ## Cheating
 

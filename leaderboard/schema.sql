@@ -16,3 +16,14 @@ CREATE TABLE IF NOT EXISTS hits (
   at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS hits_by_who ON hits (who, at);
+
+-- The Daily Challenge: one row per player name per day, holding that name's best score in that day's game.
+CREATE TABLE IF NOT EXISTS daily (
+  day TEXT NOT NULL,
+  game TEXT NOT NULL,
+  name TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (day, name)
+);
+CREATE INDEX IF NOT EXISTS daily_by_day ON daily (day, score);

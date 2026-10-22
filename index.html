@@ -8,7 +8,6 @@
 <title>Pocket Arcade: Free Retro Games to Play Online</title>
 <meta name="description" content="Play 13 free retro games in your browser: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher, Blackjack, Cube Rush, Police Chase and Endless Ski. No download, works on phones and computers.">
 <meta name="robots" content="index, follow, max-image-preview:large">
-<meta name="theme-color" content="#15111f">
 <meta property="og:site_name" content="Pocket Arcade">
 <meta property="og:title" content="Pocket Arcade: Free Retro Games to Play Online">
 <meta property="og:description" content="13 free retro games you can play right in your browser.">
@@ -124,7 +123,7 @@
           "name": "Are the games on Pocket Arcade free?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. All 11 games are free to play, with no download, no account and no in-game purchases."
+            "text": "Yes. All 13 games are free to play, with no download, no account and no in-game purchases."
           }
         },
         {
@@ -153,6 +152,22 @@
         },
         {
           "@type": "Question",
+          "name": "What is the Daily Challenge?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Every day one game is the Daily Challenge. It starts the same way for everyone, and it has its own top 100 that starts empty again at midnight (UTC)."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I add Pocket Arcade to my home screen?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Tap Add to home screen on the front page (on iPhone: the Share button, then Add to Home Screen). It then opens like an app, and the games you have played work offline too."
+          }
+        },
+        {
+          "@type": "Question",
           "name": "Which games can I play?",
           "acceptedAnswer": {
             "@type": "Answer",
@@ -174,7 +189,20 @@
     <header class="marquee" id="top">
       <h1>Pocket Arcade</h1>
       <p>Pick a cabinet. Save your score to see your place, and make the top 100 to get your name on the leaderboard.</p>
+      <button class="install" id="install" hidden>ADD TO HOME SCREEN</button>
+      <p class="itip" id="itip" hidden>On iPhone or iPad: tap the Share button at the bottom of Safari, then <b>Add to Home Screen</b>. Pocket Arcade then opens like an app.</p>
     </header>
+
+    <section class="daily" id="daily" hidden>
+      <div class="dart" id="dart"></div>
+      <div>
+        <p class="dtag">DAILY CHALLENGE · <span id="dday"></span></p>
+        <h2 id="dname"></h2>
+        <p>One game, the same start for everyone. Get on today's top 100 before midnight (UTC).</p>
+        <p class="dlead" id="dlead"></p>
+      </div>
+      <button id="dplay">▶ PLAY</button>
+    </section>
 
     <section class="menu" id="menu">
       <button class="card" data-game="snake" style="--c: var(--lime)">
@@ -241,13 +269,17 @@
     <section class="about" id="faq">
       <h2>Questions</h2>
       <h3>Are the games on Pocket Arcade free?</h3>
-      <p>Yes. All 11 games are free to play, with no download, no account and no in-game purchases.</p>
+      <p>Yes. All 13 games are free to play, with no download, no account and no in-game purchases.</p>
       <h3>Do the games work on phones?</h3>
       <p>Yes. Every game works on phones and tablets with touch controls (tap, swipe and drag), and on computers with the keyboard and mouse.</p>
       <h3>Where are my scores saved?</h3>
       <p>Your best score for each game is saved in your own browser on your device. Clearing your browser data resets it.</p>
       <h3>Is Blackjack played with real money?</h3>
       <p>No. Blackjack on Pocket Arcade uses free play coins only. They have no value and can&#x27;t be bought.</p>
+      <h3>What is the Daily Challenge?</h3>
+      <p>Every day one game is the Daily Challenge. It starts the same way for everyone, and it has its own top 100 that starts empty again at midnight (UTC).</p>
+      <h3>Can I add Pocket Arcade to my home screen?</h3>
+      <p>Yes. Tap Add to home screen on the front page (on iPhone: the Share button, then Add to Home Screen). It then opens like an app, and the games you have played work offline too.</p>
       <h3>Which games can I play?</h3>
       <p>Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher, Blackjack, Cube Rush, Police Chase and Endless Ski.</p>
     </section>
@@ -274,9 +306,10 @@
       <div class="ov" id="ov">
         <h3 id="ovt"></h3>
         <p id="ovp"></p>
-        <button id="ovb"></button>
+        <div class="ovrow"><button id="ovb"></button><button class="alt" id="ovs" hidden>Share</button></div>
       </div>
     </div>
+    <div class="next" id="next" hidden><h4>Play next</h4><div></div></div>
     <div class="lb" id="lb" hidden></div>
     <p class="hint" id="hint"></p>
   </section>
