@@ -27,3 +27,20 @@ CREATE TABLE IF NOT EXISTS daily (
   PRIMARY KEY (day, name)
 );
 CREATE INDEX IF NOT EXISTS daily_by_day ON daily (day, score);
+
+-- Player names. Each name belongs to whoever used it first, and only works with that player's 4-digit PIN.
+-- Only a hash of the PIN is kept.
+CREATE TABLE IF NOT EXISTS players (
+  name TEXT PRIMARY KEY,
+  pin TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+
+-- Wrong PINs from the last hour, so nobody can try all 10,000. The visitor is hashed like in hits.
+CREATE TABLE IF NOT EXISTS tries (
+  who TEXT NOT NULL,
+  name TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS tries_by_who ON tries (who, at);
+CREATE INDEX IF NOT EXISTS tries_by_name ON tries (name, at);

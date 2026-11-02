@@ -103,7 +103,7 @@
   const ov = $('#ov'), stage = $('#stage'), screen = $('#game'), home = $('#home'), scoreEl = $('#score'), bestEl = $('#best');
 
   const fmtBest = (gid) => { const v = store.get(gid); return v === null ? '—' : String(v); };
-  function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); paintDaily(); }
+  function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); paintDaily(); paintWho(); }
   function setScore(v) { if (phase === 'play' && v > lastScore && !game.quietScore) sfx.point(); lastScore = v; scoreEl.textContent = v; }
   function paintSound() { $$('.sound').forEach((b) => { b.textContent = sfx.on ? 'SOUND ON' : 'SOUND OFF'; b.setAttribute('aria-pressed', String(sfx.on)); }); }
   $$('.sound').forEach((b) => b.addEventListener('click', () => { sfx.on = !sfx.on; store.set('sound', sfx.on ? 1 : 0); sfx.unlock(); paintSound(); b.blur(); }));
@@ -155,76 +155,202 @@
   }
 
   /* ---------- Leaderboard ---------- */
-  // Top 100 for every game, shown under the game screen at game over, plus the player's own place (even below the top 100).
-  // The scores are kept by the Cloudflare Worker in leaderboard/worker.js; if it can't be reached (or you run the site on
-  // your own computer), the box just stays hidden.
+  // Top 100 for every game and for today's Daily Challenge. The scores are kept by the Cloudflare Worker in
+  // leaderboard/worker.js. If it can't be reached (or you run the site on your own computer), the boxes say it is offline.
+  // Every name belongs to one player: the first player to use it claims it with a 4-digit PIN. The name and PIN are kept
+  // on this device, so scores save by themselves; on another device the player types the same name and PIN.
+  const OFFLINE = 'The leaderboard is offline right now. Try again later.';
+  const cleanName = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 12);
+  const player = {
+    get() {
+      try {
+        const name = localStorage.getItem('arcade:name') || '', pin = localStorage.getItem('arcade:pin') || '';
+        return name && /^[0-9]{4}$/.test(pin) ? { name, pin } : null;
+      } catch (e) { return null; }
+    },
+    lastName() { try { return localStorage.getItem('arcade:name') || ''; } catch (e) { return ''; } },
+    set(name, pin) { try { localStorage.setItem('arcade:name', name); localStorage.setItem('arcade:pin', pin); } catch (e) {} },
+    forget() { try { localStorage.removeItem('arcade:pin'); } catch (e) {} }, // The name stays filled in for next time.
+  };
+  // Sends something to the leaderboard. Resolves to { data } or { error, taken }.
+  async function api(path, body) {
+    try {
+      const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+      const data = await r.json().catch(() => null);
+      if (!data) return { error: OFFLINE };
+      if (!r.ok) return { error: data.error || 'Could not save. Try again.', taken: !!data.taken };
+      return { data };
+    } catch (e) { return { error: OFFLINE }; }
+  }
+  // The name + PIN boxes. submit(name, pin) resolves to an error message, or nothing when it worked.
+  function nameForm(button, submit) {
+    const wrap = document.createElement('div'); wrap.className = 'lbform';
+    const row = document.createElement('div'); row.className = 'lbname';
+    const name = document.createElement('input');
+    name.maxLength = 12; name.placeholder = 'NAME'; name.autocomplete = 'nickname'; name.setAttribute('aria-label', 'Your name for the leaderboard');
+    name.value = player.lastName();
+    const pin = document.createElement('input');
+    pin.className = 'pin'; pin.type = 'password'; pin.inputMode = 'numeric'; pin.maxLength = 4; pin.placeholder = 'PIN'; pin.autocomplete = 'off';
+    pin.setAttribute('aria-label', 'Your 4-digit PIN');
+    const send = document.createElement('button'); send.textContent = button;
+    const msg = document.createElement('p'); msg.className = 'lbmsg'; msg.setAttribute('aria-live', 'polite');
+    row.append(name, pin, send); wrap.append(row, msg);
+    const go = async () => {
+      const n = cleanName(name.value), p = pin.value.trim();
+      if (!n) { msg.textContent = 'Type a name first (A-Z, 0-9).'; name.focus(); return; }
+      if (!/^[0-9]{4}$/.test(p)) { msg.textContent = 'The PIN is 4 digits, like 2580.'; pin.focus(); return; }
+      send.disabled = true; msg.textContent = 'Saving...';
+      const err = await submit(n, p);
+      if (err && wrap.isConnected) { msg.textContent = err; send.disabled = false; }
+    };
+    send.addEventListener('click', go);
+    [name, pin].forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }));
+    return wrap;
+  }
+  // Paints a top 100 list into a .lb box.
+  function paintBoard(el, title, { scores, total, me }) {
+    el.textContent = ''; el.hidden = false;
+    const h = document.createElement('h4'); h.textContent = title; el.appendChild(h);
+    if (me) {
+      const p = document.createElement('p'); p.className = 'lbme';
+      p.textContent = 'Your place: #' + me.rank.toLocaleString() + ' of ' + (total || me.rank).toLocaleString() + ' (best ' + me.score + ')';
+      el.appendChild(p);
+    }
+    if (!scores.length) { const p = document.createElement('p'); p.textContent = 'No scores yet. Be the first!'; el.appendChild(p); }
+    const ol = document.createElement('ol');
+    let mine = null;
+    scores.forEach((s, i) => {
+      const li = document.createElement('li');
+      if (me && i + 1 === me.rank) { li.className = 'me'; mine = li; }
+      [String(i + 1), s.name, String(s.score)].forEach((t) => { const b = document.createElement('span'); b.textContent = t; li.appendChild(b); });
+      ol.appendChild(li);
+    });
+    el.appendChild(ol);
+    if (mine) ol.scrollTop = mine.offsetTop - ol.clientHeight / 2; // Scroll the list (not the page) to you.
+  }
+  function paintOffline(el, title) {
+    el.textContent = ''; el.hidden = false;
+    const h = document.createElement('h4'); h.textContent = title;
+    const p = document.createElement('p'); p.textContent = OFFLINE;
+    el.append(h, p);
+  }
+  const boardUrl = (gid, day) => (day ? '/api/daily?' : '/api/scores?game=' + gid + '&') + 'name=' + encodeURIComponent((player.get() || {}).name || '');
+
+  // The box under the game screen at game over.
   const board = {
     el: $('#lb'), ask: 0,
     MIN: { blackjack: 101, memory: 8 }, // Scores below this can't go on the board (everyone starts Blackjack with 100 coins).
-    name() { try { return localStorage.getItem('arcade:name') || ''; } catch (e) { return ''; } },
     hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
+    title() { return this.day ? 'Today\'s top 100' : 'Top 100'; },
     async show(gid, g, score, day) {
       const ask = ++this.ask;
       this.day = day; // A Daily Challenge game goes on that day's board instead of the game's.
-      let data;
-      try {
-        const r = await fetch((day ? '/api/daily?' : '/api/scores?game=' + gid + '&') + 'name=' + encodeURIComponent(this.name()));
-        if (!r.ok) return;
-        data = await r.json();
-      } catch (e) { return; }
-      if (ask !== this.ask || !Array.isArray(data.scores) || (day && (data.day !== day || data.game !== gid))) return;
-      // Every real score can be saved, so everyone gets a place. Only ask when it beats the name's saved best.
+      const { data, error } = await api(boardUrl(gid, day));
+      if (ask !== this.ask) return;
+      if (error || !Array.isArray(data.scores) || (day && (data.day !== day || data.game !== gid))) { paintOffline(this.el, this.title()); return; }
+      // Every real score can be saved, so everyone gets a place. Only save when it beats the name's saved best.
       const beats = (best) => (g.lowerWins ? score < best : score > best);
       const fits = score >= (this.MIN[gid] ?? 1) && (!data.me || beats(data.me.score));
-      this.render(data);
-      if (fits) this.askName(gid, score, ask);
+      paintBoard(this.el, this.title(), data);
+      if (!fits) return;
+      const me = player.get();
+      if (me) this.autoSave(gid, score, me, ask); else this.askName(gid, score, ask);
     },
-    render({ scores, total, me }) {
-      const el = this.el; el.textContent = ''; el.hidden = false;
-      const h = document.createElement('h4'); h.textContent = this.day ? 'Today\'s top 100' : 'Top 100'; el.appendChild(h);
-      if (me) {
-        const p = document.createElement('p'); p.className = 'lbme';
-        p.textContent = 'Your place: #' + me.rank.toLocaleString() + ' of ' + (total || me.rank).toLocaleString() + ' (best ' + me.score + ')';
-        el.appendChild(p);
-      }
-      if (!scores.length) { const p = document.createElement('p'); p.textContent = 'No scores yet. Be the first!'; el.appendChild(p); }
-      const ol = document.createElement('ol');
-      let mine = null;
-      scores.forEach((s, i) => {
-        const li = document.createElement('li');
-        if (me && i + 1 === me.rank) { li.className = 'me'; mine = li; }
-        [String(i + 1), s.name, String(s.score)].forEach((t) => { const b = document.createElement('span'); b.textContent = t; li.appendChild(b); });
-        ol.appendChild(li);
+    save(gid, score, name, pin) {
+      return api(this.day ? '/api/daily' : '/api/scores', { game: gid, name, pin, score, day: this.day });
+    },
+    // Signed in on this device: the score saves by itself.
+    async autoSave(gid, score, me, ask) {
+      const msg = document.createElement('p'); msg.className = 'lbmsg'; msg.textContent = 'Saving as ' + me.name + '...';
+      this.el.insertBefore(msg, this.el.querySelector('ol'));
+      const { data, error, taken } = await this.save(gid, score, me.name, me.pin);
+      if (ask !== this.ask) return;
+      if (!error) { paintBoard(this.el, this.title(), data); return; }
+      msg.remove();
+      if (taken) { player.forget(); paintWho(); this.askName(gid, score, ask, 'The PIN saved on this device is wrong. Type it again.'); return; }
+      const p = document.createElement('p'); p.className = 'lbmsg'; p.textContent = error;
+      this.el.insertBefore(p, this.el.querySelector('ol'));
+    },
+    askName(gid, score, ask, note) {
+      const help = document.createElement('p');
+      help.textContent = note || 'Save your score: pick a name and a 4-digit PIN. Already have a name? Type it with your PIN.';
+      const form = nameForm('Save', async (name, pin) => {
+        const { data, error } = await this.save(gid, score, name, pin);
+        if (ask !== this.ask) return null;
+        if (error) return error;
+        player.set(name, pin); paintWho();
+        paintBoard(this.el, this.title(), data);
+        return null;
       });
-      el.appendChild(ol);
-      if (mine) ol.scrollTop = mine.offsetTop - ol.clientHeight / 2; // Scroll the list (not the page) to you.
-    },
-    askName(gid, score, ask) {
-      const row = document.createElement('div'); row.className = 'lbname';
-      const input = document.createElement('input');
-      input.maxLength = 12; input.placeholder = 'YOUR NAME'; input.autocomplete = 'nickname'; input.setAttribute('aria-label', 'Your name for the leaderboard');
-      input.value = this.name();
-      const send = document.createElement('button'); send.textContent = 'Save score';
-      const msg = document.createElement('p');
-      row.append(input, send); this.el.insertBefore(row, this.el.querySelector('ol')); this.el.insertBefore(msg, row.nextSibling);
-      const submit = async () => {
-        const name = input.value.toUpperCase().replace(/[^A-Z0-9 _-]/g, '').trim();
-        if (!name) { msg.textContent = 'Type a name first (A-Z, 0-9).'; input.focus(); return; }
-        try { localStorage.setItem('arcade:name', name); } catch (e) {}
-        send.disabled = true; msg.textContent = 'Saving...';
-        try {
-          const day = this.day;
-          const r = await fetch(day ? '/api/daily' : '/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ game: gid, name, score, day }) });
-          const data = await r.json();
-          if (ask !== this.ask) return;
-          if (!r.ok) { msg.textContent = data.error || 'Could not save. Try again.'; send.disabled = false; return; }
-          this.render(data);
-        } catch (e) { if (ask === this.ask) { msg.textContent = 'Could not save. Try again.'; send.disabled = false; } }
-      };
-      send.addEventListener('click', submit);
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+      const ol = this.el.querySelector('ol');
+      this.el.insertBefore(help, ol); this.el.insertBefore(form, ol);
     },
   };
+
+  /* ---------- Your name, under the Daily Challenge ---------- */
+  const who = $('#who');
+  let whoNote = '';
+  function paintWho() {
+    if (!who) return;
+    who.textContent = '';
+    const me = player.get();
+    if (me) {
+      const p = document.createElement('p');
+      p.append('Playing as ');
+      const b = document.createElement('b'); b.textContent = me.name; p.append(b, '. Your scores save by themselves.');
+      const change = document.createElement('button'); change.className = 'link'; change.textContent = 'Change name';
+      change.addEventListener('click', () => { player.forget(); whoNote = ''; paintWho(); });
+      who.append(p, change);
+      if (whoNote) { const n = document.createElement('p'); n.className = 'lbmsg'; n.textContent = whoNote; who.appendChild(n); }
+      return;
+    }
+    const tag = document.createElement('p'); tag.className = 'dtag'; tag.textContent = 'YOUR LEADERBOARD NAME';
+    const help = document.createElement('p'); help.className = 'whohelp';
+    help.textContent = 'New name? Make up any 4-digit PIN and remember it. On another phone or computer, type the same name and PIN.';
+    const form = nameForm('Save name', async (name, pin) => {
+      const { data, error } = await api('/api/name', { name, pin });
+      if (error) return error;
+      player.set(data.name, pin);
+      whoNote = data.created ? 'Name saved! Remember your PIN for your other devices.' : 'Welcome back, ' + data.name + '!';
+      paintWho();
+      return null;
+    });
+    who.append(tag, form, help);
+  }
+
+  /* ---------- Leaderboard page ---------- */
+  const boards = $('#boards'), blist = $('#blist'), btabs = $('#btabs');
+  let tab = 'daily', boardAsk = 0;
+  async function loadTab() {
+    const ask = ++boardAsk;
+    const card = tab === 'daily' ? null : document.querySelector('.menu [data-game="' + tab + '"]');
+    const gid = tab === 'daily' ? dailyGame(today()) : tab;
+    const dcard = document.querySelector('.menu [data-game="' + gid + '"]');
+    boards.style.setProperty('--c', (card || dcard) ? (card || dcard).style.getPropertyValue('--c') : 'var(--amber)');
+    $$('#btabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
+    const title = tab === 'daily' ? 'Today\'s top 100 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : 'Top 100 · ' + card.querySelector('h2').textContent;
+    blist.textContent = ''; const h = document.createElement('h4'); h.textContent = title; const p = document.createElement('p'); p.textContent = 'Loading...'; blist.append(h, p);
+    const { data, error } = await api(boardUrl(gid, tab === 'daily'));
+    if (ask !== boardAsk) return;
+    if (error || !Array.isArray(data.scores)) paintOffline(blist, title); else paintBoard(blist, title, data);
+  }
+  function openBoards(start) {
+    if (!btabs.childElementCount) {
+      const tabs = [['daily', 'TODAY']].concat([...$$('.menu [data-game]')].map((c) => [c.dataset.game, c.querySelector('h2').textContent.toUpperCase()]));
+      tabs.forEach(([t, label]) => {
+        const b = document.createElement('button'); b.dataset.tab = t; b.textContent = label;
+        b.addEventListener('click', () => { tab = t; loadTab(); });
+        btabs.appendChild(b);
+      });
+    }
+    if (start && (start === 'daily' || document.querySelector('.menu [data-game="' + CSS.escape(start) + '"]'))) tab = start;
+    home.hidden = true; screen.hidden = true; boards.hidden = false;
+    window.scrollTo(0, 0);
+    loadTab();
+  }
+  function closeBoards() { boardAsk++; boards.hidden = true; home.hidden = false; refreshMenu(); $('#lbopen').focus(); }
+  $('#lbopen').addEventListener('click', () => openBoards('daily'));
+  $('#bback').addEventListener('click', closeBoards);
   $('#ovb').addEventListener('click', () => ovAction && ovAction());
 
   // Physics runs in small steps so a fast ball can't skip through a paddle or brick when a phone drops frames.
@@ -265,7 +391,7 @@
     showNext();
   }
 
-  function showScreen(gameOpen) { home.hidden = gameOpen; screen.hidden = !gameOpen; }
+  function showScreen(gameOpen) { home.hidden = gameOpen; screen.hidden = !gameOpen; boards.hidden = true; }
 
   async function openGame(gid, day) {
     id = gid;
@@ -336,9 +462,10 @@
     if (dailyShown !== day) lead.textContent = '';
     dailyShown = day;
     fetch('/api/daily').then((r) => (r.ok ? r.json() : null)).then((d) => {
-      if (!d || d.day !== day || !Array.isArray(d.scores)) return;
+      if (!d || !Array.isArray(d.scores)) throw new Error('offline');
+      if (d.day !== day) return;
       lead.textContent = d.scores.length ? 'Leader: ' + d.scores[0].name + ' with ' + d.scores[0].score : 'No scores yet today. Be the first!';
-    }).catch(() => {});
+    }).catch(() => { if (dailyShown === day) lead.textContent = OFFLINE; });
   }
   function openDaily() { setFull(true); const day = today(); openGame(dailyGame(day), day); }
   $('#dplay').addEventListener('click', openDaily);
@@ -475,5 +602,6 @@
   // Game pages link here as ?play=<game> so a search visitor lands right in that game. ?daily opens today's Daily Challenge.
   const params = new URLSearchParams(location.search), startId = params.get('play');
   if (params.has('daily')) openDaily();
+  else if (params.has('board')) openBoards(params.get('board') || 'daily');
   else if (startId && document.querySelector('[data-game="' + CSS.escape(startId) + '"]')) { setFull(true); openGame(startId); }
 })();

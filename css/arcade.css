@@ -138,6 +138,23 @@ html.lock, html.lock body { overflow: hidden; }
 }
 .lbname button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
 .lbname button:disabled { opacity: .6; cursor: default; }
+.lbname input.pin { flex: 0 0 9ch; width: 9ch; letter-spacing: 2px; }
+.lbform { display: grid; gap: 6px; }
+.lb p.lbmsg, .who p.lbmsg { color: var(--amber); }
+.lbmsg:empty { display: none; }
+
+/* The Leaderboard page: a tab for today's Daily Challenge and one for every game. */
+.boards { --c: var(--amber); display: grid; gap: 14px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tabs button {
+  font: 9px/1 var(--display); color: var(--ink); background: var(--panel); border: 2px solid var(--line);
+  border-radius: 4px; padding: 9px 10px; cursor: pointer;
+}
+.tabs button:hover { border-color: var(--muted); }
+.tabs button[aria-pressed="true"] { background: var(--c); border-color: var(--c); color: #15111f; }
+.tabs button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.lb.wide { max-width: 560px; }
+.lb.wide ol { max-height: none; }
 
 .mem { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 14px; aspect-ratio: 1; }
 .mc { all: unset; position: relative; cursor: pointer; perspective: 600px; border-radius: 6px; }
@@ -201,6 +218,21 @@ html.lock, html.lock body { overflow: hidden; }
 }
 #dplay:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.45); }
 #dplay:focus-visible, .install:focus-visible, .mini:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+/* Your leaderboard name, along the bottom of the Daily Challenge box. */
+.who {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  border-top: 1px dashed var(--line); padding-top: 14px;
+}
+.who > p { margin: 0; font-size: 14px; }
+.who .dtag { flex-basis: 100%; }
+.who .lbform { flex: 1 1 320px; max-width: 420px; }
+.who .whohelp { flex-basis: 100%; color: var(--muted); font-size: 13px; }
+.who b { color: var(--c); }
+.link { font: 13px var(--body); color: var(--cyan); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.link:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.hbtns { display: flex; flex-wrap: wrap; gap: 10px; }
+.install.lbopen { color: var(--amber); border-color: var(--amber); }
+.install.lbopen:hover { background: rgba(255, 179, 71, .1); }
 @media (max-width: 560px) {
   .daily { grid-template-columns: 64px minmax(0, 1fr); }
   .dart svg { width: 64px; height: 64px; }

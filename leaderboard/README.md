@@ -6,7 +6,7 @@ It is two pieces, both free:
 - **D1**: a small database that holds the scores.
 - **A Worker**: a few lines of code that answer `pocketarcade.net/api/scores`. The code is `worker.js` in this folder.
 
-Until this is set up, the games work exactly as before and the leaderboard box just stays hidden.
+Until this is set up, the games work exactly as before and the leaderboard boxes say "The leaderboard is offline right now".
 
 ## Set it up (one time, all in the Cloudflare dashboard)
 
@@ -34,6 +34,25 @@ Until you do this, the Daily Challenge still works, but its top 100 box stays hi
 2. In the Worker, click **Edit code**, delete what's there, paste everything in `worker.js`, and click **Deploy**.
 3. Test it: open https://pocketarcade.net/api/daily. You should see today's game, like `{"day":"2026-10-22","game":"chase","scores":[]...}`.
 
+## Names and PINs update (one time)
+
+Every name now belongs to one player. The first player to use a name picks a 4-digit PIN for it, and after that the name only works with that PIN. Two players can have the same PIN; it always goes with the name.
+Until you do this, saving scores fails, so do it right after the new site goes live.
+
+1. In the D1 **Console**, paste everything in `schema.sql` again and press **Execute**. (The old tables are left as they are; the new `players` and `tries` tables are added.)
+2. In the Worker, click **Edit code**, delete what's there, paste everything in `worker.js`, and click **Deploy**.
+3. Test it: on the front page, type a name and a PIN under the Daily Challenge and press **Save name**. It should say "Name saved!".
+
+## Someone forgot their PIN
+
+In the D1 **Console**, run (with the right name):
+
+```sql
+DELETE FROM players WHERE name = 'OLIVER';
+```
+
+Their scores stay. The next person to use that name picks a new PIN, so tell the player to do it right away.
+
 ## Removing a bad name
 
 In the D1 **Console**, run (with the right game and name):
@@ -43,7 +62,9 @@ DELETE FROM scores WHERE game = 'snake' AND name = 'BADNAME';
 ```
 
 For today's Daily Challenge board: `DELETE FROM daily WHERE name = 'BADNAME';`
+To also free up the name for someone else: `DELETE FROM players WHERE name = 'BADNAME';`
 
 ## Cheating
 
-There are no accounts, so a determined cheater can still send a fake score. The Worker refuses scores higher than a very good player can reach (each game has a maximum at the top of `worker.js`; raise one if real players hit it), names with rude words, scores sent from other websites, and more than 20 scores from one visitor in 10 minutes. That stops almost everyone.
+Nobody can use someone else's name without its PIN, and one visitor gets only 10 wrong PINs an hour (one name gets 50 from everyone), so guessing a PIN takes days.
+There are no real accounts, so a determined cheater can still send a fake score. The Worker refuses scores higher than a very good player can reach (each game has a maximum at the top of `worker.js`; raise one if real players hit it), names with rude words, scores sent from other websites, and more than 20 scores from one visitor in 10 minutes. That stops almost everyone.
