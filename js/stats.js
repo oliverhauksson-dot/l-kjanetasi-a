@@ -3,7 +3,7 @@
    No analytics cookies are set until the visitor accepts cookies: in our own popup (js/consent.js), or in Google's
    consent message for the EEA, UK and Switzerland. Until then GA only gets anonymous, cookie-free pings. */
 (() => {
-  const GA_ID = 'G-XXXXXXXXXX';
+  const GA_ID = 'G-SXJFTS7EPM';
   window.track = () => {};
   if (GA_ID === 'G-XXXXXXXXXX') return;
 
