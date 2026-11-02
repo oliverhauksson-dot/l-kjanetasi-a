@@ -14,6 +14,7 @@
 
   // Wide on a computer or a sideways phone, tall on an upright phone. Picked when the game opens.
   let W = 450, H = 600, locked = false;
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches; // A phone or tablet: show touch hints.
   const CL = 60, CHUNKS = 9;       // Chunk length, and how many are kept (about 500 m ahead).
   const NU = 49, ND = 31;          // Terrain grid points across and along a chunk.
   const SLOPE = 0.22;              // The mountain drops 22 cm every metre.
@@ -34,6 +35,11 @@
     return clamp(1 - Math.min(m - PARK_LEN, PARK_EVERY - m) / 40, 0, 1);
   }
   const HIP_THROW = 7; // How hard a side hit throws you towards the middle.
+  // Tricks. A jump (ollie) pops you up; spins count in half turns (180, 360, 540...), flips in full turns.
+  const OLLIE = 7.8, SPIN_RATE = 11, FLIP_RATE = 12.5, GRAB_T = 0.75, SWAP_T = 0.35;
+  const SPIN_PTS = [0, 100, 200, 350, 500, 700, 900];
+  const spinPts = (k) => (k < SPIN_PTS.length ? SPIN_PTS[k] : 900 + (k - 6) * 200);
+  const flipName = (n) => { const a = Math.abs(n); return a ? (a === 1 ? '' : ['', '', 'DOUBLE ', 'TRIPLE '][a] || a + 'X ') + (n > 0 ? 'FRONTFLIP' : 'BACKFLIP') : ''; };
 
   /* ---------- The mountain ---------- */
   let ph = [0, 0, 0, 0], SEED = 1;
@@ -185,11 +191,13 @@
   function makeSkier() {
     const mat = (c, r = 0.55) => new T.MeshStandardMaterial({ color: c, roughness: r });
     const jacket = mat('#ffb020', 0.5), pants = mat('#1f2740', 0.7), dark = mat('#1a1c24', 0.4), white = mat('#f4f6fa', 0.35);
-    const root = new T.Group(), lean = new T.Group(); root.add(lean);
+    // root follows your heading, flip tips you head over heels round your middle, turn is the spin, lean leans into turns.
+    const root = new T.Group(), flip = new T.Group(), turn = new T.Group(), lean = new T.Group();
+    root.add(flip); flip.add(turn); turn.add(lean); flip.position.y = 0.7; turn.position.y = -0.7;
     const capsule = new T.CapsuleGeometry(1, 1, 4, 10);
     const add = (geo, m) => { const o = new T.Mesh(geo, m); o.castShadow = true; lean.add(o); return o; };
     return {
-      root, lean,
+      root, flip, turn, lean,
       skis: [0, 1].map(() => add(new T.BoxGeometry(0.11, 0.035, 1.75), mat('#ff5a36', 0.35))),
       boots: [0, 1].map(() => add(new T.BoxGeometry(0.15, 0.2, 0.3), dark)),
       shins: [0, 1].map(() => add(capsule, pants)),
@@ -212,7 +220,7 @@
     if (stretch) o.scale.set(1, len, 1); else o.scale.set(r, len / 3, r); // A capsule of radius 1 and length 1 is 3 long.
   }
   // Pose the skier. c is how low the tuck is (0 to 1), forward is -z.
-  function poseSkier(sk, c, armsUp, grab) {
+  function poseSkier(sk, c, armsUp, grab, look = 0) { // look turns the head (radians), to see downhill when riding backwards.
     const V = (x, y, z) => ({ x, y, z });
     const hip = V(0, 0.92 - 0.3 * c, 0.08 + 0.12 * c), bend = 0.3 + 0.75 * c;
     for (let i = 0; i < 2; i++) {
@@ -227,7 +235,7 @@
     placeLimb(sk.torso, hip, neck, 0.2);
     sk.pack.position.set(0, (hip.y + neck.y) / 2 + 0.05 * Math.cos(bend), (hip.z + neck.z) / 2 + 0.2); sk.pack.rotation.x = -bend;
     sk.head.position.set(0, neck.y + 0.16, neck.z - 0.04);
-    sk.goggles.position.set(0, neck.y + 0.17, neck.z - 0.17);
+    sk.goggles.position.set(-0.13 * Math.sin(look), neck.y + 0.17, neck.z - 0.04 - 0.13 * Math.cos(look)); sk.goggles.rotation.y = look;
     for (let i = 0; i < 2; i++) {
       const s = i ? 1 : -1, sh = V(s * 0.22, neck.y - 0.08, neck.z + 0.02);
       // A grab: one hand reaches down to its ski, the other goes up for balance.
@@ -467,13 +475,15 @@
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
     intro: 'Ski down an endless 3D valley. Dodge the trees and rocks, grab coins and fly off kickers and rollers.',
-    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, and hold one in the air to spin. On a phone, hold the left or right side of the screen. <kbd>P</kbd> to pause',
+    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
 
     reset() {
       locked = true; // Keep the screen shape until the game is closed.
       ph = ph.map(() => rand(0, 6.3)); SEED = (Math.random() * 1e9) | 0;
       this.d = 0; this.x = center(0); this.vx = 0; this.v = 12;
       this.y = height(this.x, 0); this.vy = 0; this.air = false; this.airT = 0; this.spin = 0;
+      this.flip = 0; this.sw = false; this.airSw = false; this.ollie = false; this.fromRail = false; this.jumpCd = 0;
+      this.swapT = 0; this.look = 0; this.up = this.down = false; this.flipTouch = 0;
       this.chunks = []; this.nextChunk = -CL; this.nextRamp = 150; this.grind = null; this.grindT = 0; this.wasPark = false; this.bump = 0;
       this.lastG = this.y;
       this.parts = []; this.sparks = []; this.pops = []; this.trail = []; this.trailD = -1;
@@ -489,8 +499,18 @@
     key(e, down) {
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.left = down;
       if (e.code === 'ArrowRight' || e.code === 'KeyD') this.right = down;
+      if (e.code === 'ArrowUp' || e.code === 'KeyW') this.up = down;
+      if (e.code === 'ArrowDown' || e.code === 'KeyS') { this.down = down; if (down && !e.repeat) this.switchUp(); }
+      if (e.code === 'Space' && down && !e.repeat) this.jump();
     },
-    press(down) { this.touch = down; },
+    press(down) { this.touch = down; if (!down) this.flipTouch = 0; },
+    // On a phone: swipe up to jump. In the air, swipe up (front flip) or down (back flip) and keep the finger down to keep flipping.
+    swipe(dx, dy) {
+      if (Math.abs(dy) < Math.abs(dx)) return;
+      if (this.air && !this.grind) this.flipTouch = dy < 0 ? 1 : -1;
+      else if (dy < 0) this.jump();
+      else this.switchUp();
+    },
     point(p) { this.tx = p.x; },
 
     /* ----- The mountain ahead ----- */
@@ -625,6 +645,8 @@
       if (inPark(this.d) && !this.wasPark) this.pop('TERRAIN PARK', 'RAILS, BOXES AND JUMPS', '#7fe3ff');
       this.wasPark = inPark(this.d);
       this.bump = Math.max(0, (this.bump || 0) - dt);
+      this.jumpCd = Math.max(0, this.jumpCd - dt); this.swapT = Math.max(0, this.swapT - dt);
+      const pitch = (this.up ? 1 : 0) - (this.down ? 1 : 0) || this.flipTouch;
 
       if (this.grind) {
         // Sliding along a rail or box. Hold left or right to hop off early.
@@ -634,6 +656,7 @@
         const rx = center(this.d) + f.u, top = height(rx, this.d) + f.top;
         this.x += (rx - this.x) * Math.min(1, dt * 15); this.vx = 0;
         this.vy = (top - this.y) / dt; this.y = top; this.grindT += dt;
+        if (this.sw) this.grindSwT += dt;
         this.lastG = this.ground(this.x, this.d);
         if (Math.random() < dt * 50) this.parts.push({ x: this.x + rand(-0.3, 0.3), y: this.y, d: this.d, vx: rand(-2, 2), vy: rand(1, 3), vd: this.v * rand(0.6, 0.9), life: rand(0.2, 0.5), max: 0.5 });
         if (f.type === 'rail' && Math.random() < dt * 40) this.puff(1, this.x, this.y, this.d, 2, 2, this.sparks);
@@ -646,7 +669,11 @@
           this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
           this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 5);
           this.vx -= Math.sign(u) * wall * 1.6 * dt;
-        } else if (dir && this.airT > 0.2) this.spin += dir * 11 * dt; // Hold a direction in the air to spin.
+        } else {
+          // In the air: hold left or right to spin, up (W) to front flip and down (S) to back flip.
+          if (dir && this.airT > (this.ollie || this.fromRail ? 0.05 : 0.2)) this.spin += dir * SPIN_RATE * dt;
+          if (pitch) this.flip += pitch * FLIP_RATE * dt;
+        }
 
         // The valley bends under you. You follow half of a bend by yourself and steer for the rest.
         const y0 = this.y;
@@ -656,7 +683,7 @@
         const g = this.ground(this.x, this.d), gv = (g - this.lastG) / dt; this.lastG = g;
         if (!this.air) {
           if (gv < this.vy - G * dt * 1.2) {
-            this.air = true; this.airT = 0; this.grab = GRABS[(Math.random() * GRABS.length) | 0]; if (this.vy > 2) snd.jump();
+            this.takeoff(false); if (this.vy > 2) snd.jump();
             const k = this.kickerAt(this.x, this.d - this.v * dt);
             if (k && k.type === 'hip') this.vx = -Math.sign(k.u) * HIP_THROW;
           }
@@ -667,14 +694,14 @@
         const f = this.railAt(this.x, this.d);
         if (f) {
           const top = height(center(this.d) + f.u, this.d) + f.top, fromAbove = y0 >= top - (f.type === 'box' ? 0.75 : 0.3);
-          if (fromAbove && this.y <= top + 0.6) this.startGrind(f, top); // Close enough: you pop onto it.
+          if (fromAbove && this.y <= top + 0.6) { this.startGrind(f, top); if (this.crash) return; } // Close enough: you pop onto it.
           else if (!fromAbove && f.type === 'rail' && Math.abs(this.x - center(this.d) - f.u) < 0.3 && this.y < top - 0.3 && !this.bump) {
             const side = this.x >= center(this.d) + f.u ? 1 : -1;
             this.x = center(this.d) + f.u + side * 0.45; this.vx = side * 6; this.v *= 0.7; this.bump = 0.5;
             this.mult = 1; this.multT = 0; this.shake = 0.6; snd.clank(); this.pop('OUCH!', 'SPEED LOST', '#ff6b9a');
           }
         }
-        if (this.air && this.y <= g) this.land(g, gv);
+        if (this.air && this.y <= g) { this.land(g, gv); if (this.crash) return; }
       }
 
       // Coins, trees and rocks near you.
@@ -717,37 +744,69 @@
       this.moveBits(dt);
       this.gen();
     },
+    takeoff(ollie) {
+      this.air = true; this.airT = 0; this.ollie = ollie; this.airSw = this.sw;
+      this.grab = GRABS[(Math.random() * GRABS.length) | 0];
+    },
+    // Space (or swipe up): pop off the snow, or off a rail.
+    jump() {
+      if (this.crash) return;
+      if (this.grind) { if (this.grindT > 0.15) { this.endGrind(0); this.vy += OLLIE - 3; this.crouch = 0; snd.jump(); } return; }
+      if (this.air || this.jumpCd > 0) return;
+      this.takeoff(true);
+      this.vy = Math.max(this.vy, -this.v) + OLLIE; this.crouch = 0; // Legs snap straight, then tuck up in the air.
+      this.puff(10, this.x, this.y + 0.1, this.d, 2, 1.5); snd.jump();
+    },
+    // S (or swipe down) on a rail: a quick 180 on the rail, between forwards and backwards.
+    switchUp() {
+      if (!this.grind || this.swapT > 0 || this.grindT < 0.1) return;
+      this.sw = !this.sw; this.swapT = SWAP_T; this.grindSwaps++; snd.clank();
+      this.pop('SWITCH-UP', '+75', '#7fe3ff');
+    },
     startGrind(f, top) {
-      const turns = this.spin / (Math.PI * 2), n = Math.round(turns);
-      const names = f.type === 'rail' ? RAILS : BOXES;
-      this.grind = f; this.grindT = 0; this.air = false; this.y = top; this.vy = 0;
-      this.grindName = (n ? Math.abs(n) * 360 + ' ' : '') + names[(Math.random() * names.length) | 0];
-      this.grindBonus = 150 * Math.abs(n) + (this.airT > 0.55 ? Math.round(this.airT * 100) : 0);
-      this.spin = 0; this.airT = 0; snd.clank();
+      const n = Math.round(this.spin / Math.PI), flips = this.flip / (Math.PI * 2), nf = Math.round(flips);
+      if (Math.abs(flips - nf) > 0.22) { this.spin = this.flip = 0; return this.hit('the rail upside down'); }
+      if (Math.abs(n) % 2) this.sw = !this.sw; // Land a 180 onto it and you slide backwards.
+      const names = f.type === 'rail' ? RAILS : BOXES, base = names[(Math.random() * names.length) | 0];
+      this.grind = f; this.grindT = 0; this.grindSwT = 0; this.grindSwaps = 0; this.air = false; this.y = top; this.vy = 0;
+      this.grindSide = SIDEWAYS.includes(base);
+      this.grindName = [this.sw ? 'SWITCH' : '', flipName(nf), n ? Math.abs(n) * 180 : '', base].filter(Boolean).join(' ');
+      this.grindBonus = Math.round(spinPts(Math.abs(n)) * 0.75) + 300 * Math.abs(nf) + (this.airT > 0.55 ? Math.round(this.airT * 100) : 0);
+      this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.flipTouch = 0; snd.clank();
     },
     endGrind(push) {
-      // Points for every second on the rail, plus the spin you landed on it with.
-      const pts = (60 + Math.round(this.grindT * 160) + this.grindBonus) * this.mult;
-      this.bonus += pts; this.pop(this.grindName, '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#7fe3ff');
+      // Points for every second on the rail (half as much again riding backwards), switch-ups, and the trick you landed on it with.
+      const sw = this.grindSwaps;
+      const pts = (60 + Math.round(this.grindT * 160 + this.grindSwT * 80) + this.grindBonus + 75 * sw) * this.mult;
+      this.bonus += pts;
+      this.pop(this.grindName + (sw ? ' + ' + sw + ' SWITCH-UP' + (sw > 1 ? 'S' : '') : ''), '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#7fe3ff');
       snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
-      this.grind = null; this.air = true; this.airT = 0; this.vy += 3; this.vx = push;
+      this.grind = null; this.swapT = 0; this.takeoff(false); this.fromRail = true; this.vy += 3; this.vx = push;
       this.lastG = this.ground(this.x, this.d);
     },
     land(g, gv) {
       this.y = g; this.vy = Math.min(gv, this.v * 0.5); this.air = false;
       const t = this.airT;
       if (t > 0.25) { snd.land(); this.puff(26, this.x, g + 0.1, this.d, 3, 2.5); this.shake = Math.max(this.shake, Math.min(0.5, t * 0.3)); }
-      // A spin only counts if you land facing down the hill again.
-      const turns = this.spin / (Math.PI * 2), n = Math.round(turns), off = Math.abs(turns - n);
-      if (Math.abs(this.spin) > 0.3 && off > 0.14) { this.v *= 0.6; this.mult = 1; this.multT = 0; this.pop('SKETCHY LANDING', 'SPEED LOST', '#ff6b9a'); snd.sketchy(); }
-      else if (t > 0.55 || n !== 0) {
-        // A trick: a grab for big air, plus the spin. Tricks in a row raise the multiplier.
-        const pts = (Math.round(t * 100) + 200 * Math.abs(n)) * this.mult;
-        const name = ((n ? Math.abs(n) * 360 + ' ' : '') + (t > 0.55 ? this.grab : '')).trim() || 'SPIN';
+      // Spins count in half turns: an odd number (180, 540...) and you ride away backwards. Flips must come round to your feet.
+      const halves = this.spin / Math.PI, n = Math.round(halves), off = Math.abs(halves - n);
+      const flips = this.flip / (Math.PI * 2), nf = Math.round(flips), offF = Math.abs(flips - nf);
+      const wasSw = this.airSw, out = this.fromRail && n !== 0;
+      this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.ollie = false; this.flipTouch = 0; this.jumpCd = 0.3;
+      if (offF > 0.22) return this.hit('the snow head first');
+      if (Math.abs(n) % 2) this.sw = !this.sw;
+      if ((Math.abs(halves) > 0.3 && off > 0.28) || offF > 0.1) { this.v *= 0.6; this.mult = 1; this.multT = 0; this.pop('SKETCHY LANDING', 'SPEED LOST', '#ff6b9a'); snd.sketchy(); }
+      else if (t > GRAB_T || n !== 0 || nf !== 0) {
+        // A trick: a grab for big air, plus spins and flips. Tricks in a row raise the multiplier. Taking off backwards is worth half as much again.
+        const trick = n !== 0 || nf !== 0;
+        let pts = Math.round(t * 100) + spinPts(Math.abs(n)) + 300 * Math.abs(nf) + (out ? 100 : 0);
+        if (wasSw && trick) pts *= 1.5;
+        pts = Math.round(pts) * this.mult;
+        const name = [wasSw && trick ? 'SWITCH' : '', flipName(nf), n ? Math.abs(n) * 180 : '', t > GRAB_T ? this.grab : '', out ? 'OUT' : ''].filter(Boolean).join(' ');
         this.bonus += pts; this.pop(name, '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#ffd75e');
         snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
+        if (Math.abs(n) >= 3 || nf) this.puff(30, this.x, g + 0.2, this.d, 5, 4, this.sparks);
       }
-      this.spin = 0; this.airT = 0;
     },
     moveBits(dt) {
       for (const list of [this.parts, this.sparks]) {
@@ -771,6 +830,8 @@
       this.lean += (clamp(this.vx / (5 + 0.3 * this.v), -1, 1) - this.lean) * Math.min(1, dt * 8);
       const tuck = this.air ? 0.85 : 0.25 + 0.55 * clamp((this.v - 14) / 24, 0, 1);
       this.crouch += (tuck - this.crouch) * Math.min(1, dt * 4);
+      // Riding backwards, the skier looks over a shoulder down the hill.
+      this.look += ((this.sw && !this.air && !this.swapT ? 2.1 : 0) - this.look) * Math.min(1, dt * 6);
     },
 
     /* ----- Drawing ----- */
@@ -858,7 +919,12 @@
       // The skier.
       const sk = s.skier, heading = Math.atan2(this.vx, this.v);
       sk.root.position.set(this.x, this.y, -this.d);
-      sk.root.rotation.set(0, -heading - this.spin - (this.grind && SIDEWAYS.includes(this.grindName.replace(/^\d+ /, '')) ? Math.PI / 2 : 0), 0);
+      // Facing: your heading, plus the spin, plus half a turn when riding backwards. A switch-up on a rail turns you round with a hop.
+      const swap = this.swapT / SWAP_T;
+      sk.root.rotation.set(0, -heading, 0);
+      sk.root.position.y += Math.sin(swap * Math.PI) * 0.35;
+      sk.flip.rotation.set(-this.flip, 0, 0);
+      sk.turn.rotation.set(0, -this.spin - (this.sw ? Math.PI : 0) + swap * Math.PI - (this.grind && this.grindSide ? Math.PI / 2 : 0), 0);
       sk.lean.rotation.set(0, 0, -this.lean * 0.45);
       if (this.crash) {
         const t = Math.min(this.crash.t * 1.5, 1);
@@ -866,7 +932,7 @@
         sk.root.position.y += Math.sin(t * Math.PI) * 0.8;
       }
       const big = this.air && this.airT > 0.3;
-      poseSkier(sk, this.crouch, big && !!this.spin, big && !this.spin ? (GRABS.indexOf(this.grab) % 2 ? 1 : -1) : 0);
+      poseSkier(sk, this.crouch, big && !!(this.spin || this.flip), big && !this.spin && !this.flip ? (GRABS.indexOf(this.grab) % 2 ? 1 : -1) : 0, this.look);
       const gy = this.ground(this.x, this.d);
       s.blob.position.set(this.x, gy + 0.04, -this.d);
       s.blob.material.opacity = this.y - gy > 0.4 ? (0.3 / (1 + (this.y - gy) * 0.4)) * (1 - night * 0.4) : 0; // Helps judge a landing.
@@ -936,6 +1002,7 @@
       text(String(this.coins), 33, 51, 9, '#ffd75e', 'left');
       text('x' + this.mult, W - 14, 14, 16, this.mult > 1 ? '#ffd75e' : '#ffffff', 'right');
       if (this.mult > 1) { ctx.fillStyle = 'rgba(255,215,94,0.9)'; ctx.fillRect(W - 14 - 46 * (this.multT / 7), 36, 46 * (this.multT / 7), 3); }
+      if (this.sw && !this.crash) text('SWITCH', W - 14, 46, 8, '#7fe3ff', 'right');
       text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, '#ffd23f', 'center');
       text('KM/H', W / 2, H - 20, 7, '#f4f6fb', 'center');
       if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
@@ -950,6 +1017,7 @@
       if (this.t < 4 && !this.crash) {
         ctx.globalAlpha = clamp(4 - this.t, 0, 1);
         text('<  STEER  >', W / 2, H - 82, 11, '#ffffff', 'center');
+        text(coarse ? 'SWIPE UP TO JUMP' : 'SPACE TO JUMP', W / 2, H - 66, 9, '#ffffff', 'center');
         ctx.globalAlpha = 1;
       }
       ctx.textBaseline = 'alphabetic';
