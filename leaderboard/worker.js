@@ -5,7 +5,11 @@
    me is { rank, score } for that name's best score (also when it is outside the top 100), or null.
    Daily Challenge (one game a day, with a board that starts empty at midnight UTC):
    GET  /api/daily[?name=BOB]              -> { day, game, scores, total, me }   (today's board)
-   POST /api/daily { day, name, score }    -> { ok: true, day, game, scores, total, me } */
+   POST /api/daily { day, name, pin, score } -> { ok: true, day, game, scores, total, me }
+   Names belong to one player. The first player to use a name claims it with a 4-digit PIN they pick; after that the name
+   only works with that PIN (on any device). Two players can have the same PIN, since it always goes with the name.
+   POST /api/name { name, pin }           -> { ok: true, name, created }   (claims a free name, or checks the PIN)
+   Scores also need the name's PIN, and a free name is claimed by its first score. */
 
 // The best score a very good player can really reach in each game (for Memory, the fewest moves).
 // Anything outside is refused, so a faked "Snake: 400" can't take the top spot. Raise a number if real players hit it.
@@ -44,6 +48,10 @@ function rude(name) {
 }
 
 const TOP = 100;
+const PIN = /^[0-9]{4}$/;
+const TRIES = 10; // Wrong PINs one visitor can get in an hour...
+const NAME_TRIES = 50; // ...and one name can get in an hour from everyone, so nobody can guess a PIN by trying all 10,000.
+const TRY_WINDOW = 60 * 60 * 1000;
 const SITE = 'https://pocketarcade.net';
 const LIMIT = 20; // Score submissions one visitor can make...
 const WINDOW = 10 * 60 * 1000; // ...in this many milliseconds.
@@ -95,13 +103,42 @@ async function visitor(request) {
   return [...new Uint8Array(bytes)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// The PIN is never stored, only a hash of it mixed with the name.
+async function pinHash(name, pin) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('pocketarcade|' + name + '|' + pin));
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Claims the name if nobody has it yet, or checks the PIN if someone does. Returns { created } or { error, status }.
+async function login(db, name, pin, who) {
+  if (!PIN.test(String(pin ?? ''))) return { error: 'The PIN must be 4 digits.', status: 400 };
+  if (rude(name)) return { error: 'Please pick a different name.', status: 400 };
+  const now = Date.now();
+  const [mine, theirs] = await Promise.all([
+    db.prepare('SELECT COUNT(*) AS n FROM tries WHERE who = ? AND at > ?').bind(who, now - TRY_WINDOW).first(),
+    db.prepare('SELECT COUNT(*) AS n FROM tries WHERE name = ? AND at > ?').bind(name, now - TRY_WINDOW).first(),
+  ]);
+  if (mine.n >= TRIES || theirs.n >= NAME_TRIES) return { error: 'Too many wrong PINs. Try again in an hour.', status: 429 };
+  const hash = await pinHash(name, pin);
+  const made = await db.prepare('INSERT INTO players (name, pin, at) VALUES (?, ?, ?) ON CONFLICT (name) DO NOTHING').bind(name, hash, now).run();
+  if (made.meta.changes) return { created: true };
+  const row = await db.prepare('SELECT pin FROM players WHERE name = ?').bind(name).first();
+  if (row && row.pin === hash) return { created: false };
+  await db.batch([
+    db.prepare('INSERT INTO tries (who, name, at) VALUES (?, ?, ?)').bind(who, name, now),
+    db.prepare('DELETE FROM tries WHERE at < ?').bind(now - TRY_WINDOW),
+  ]);
+  return { error: 'That name is taken. Type its PIN, or pick another name.', status: 403, taken: true };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const isDaily = url.pathname === '/api/daily';
-    if (url.pathname !== '/api/scores' && !isDaily) return json({ error: 'Not found' }, 404);
+    const isName = url.pathname === '/api/name';
+    if (url.pathname !== '/api/scores' && !isDaily && !isName) return json({ error: 'Not found' }, 404);
 
-    if (request.method === 'GET') {
+    if (request.method === 'GET' && !isName) {
       const name = cleanName(url.searchParams.get('name'));
       if (isDaily) {
         const day = dayOf(Date.now());
@@ -119,6 +156,14 @@ export default {
     let body;
     try { body = await request.json(); } catch (e) { return json({ error: 'Bad request' }, 400); }
     const now = Date.now();
+    const who = await visitor(request);
+    if (isName) {
+      const name = cleanName(body.name);
+      if (!name) return json({ error: 'Type a name first (A-Z, 0-9).' }, 400);
+      const r = await login(env.DB, name, body.pin, who);
+      if (r.error) return json({ error: r.error, taken: !!r.taken }, r.status);
+      return json({ ok: true, name, created: r.created });
+    }
     let list = gameList(body.game);
     if (isDaily) {
       // Only today's challenge, or yesterday's for a few minutes after midnight.
@@ -131,9 +176,9 @@ export default {
     const name = cleanName(body.name);
     const score = Number(body.score);
     if (!rules || !name || !Number.isInteger(score) || score < (rules.min ?? 1) || score > rules.max) return json({ error: 'Invalid score' }, 400);
-    if (rude(name)) return json({ error: 'Please pick a different name.' }, 400);
+    const me = await login(env.DB, name, body.pin, who);
+    if (me.error) return json({ error: me.error, taken: !!me.taken }, me.status);
 
-    const who = await visitor(request);
     const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM hits WHERE who = ? AND at > ?').bind(who, now - WINDOW).first();
     if (n >= LIMIT) return json({ error: 'Slow down! Try again in a few minutes.' }, 429);
 

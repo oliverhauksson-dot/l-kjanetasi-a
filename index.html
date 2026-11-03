@@ -189,7 +189,10 @@
     <header class="marquee" id="top">
       <h1>Pocket Arcade</h1>
       <p>Pick a cabinet. Save your score to see your place, and make the top 100 to get your name on the leaderboard.</p>
-      <button class="install" id="install" hidden>ADD TO HOME SCREEN</button>
+      <div class="hbtns">
+        <button class="install lbopen" id="lbopen">🏆 LEADERBOARD</button>
+        <button class="install" id="install" hidden>ADD TO HOME SCREEN</button>
+      </div>
       <p class="itip" id="itip" hidden>On iPhone or iPad: tap the Share button at the bottom of Safari, then <b>Add to Home Screen</b>. Pocket Arcade then opens like an app.</p>
     </header>
 
@@ -202,6 +205,7 @@
         <p class="dlead" id="dlead"></p>
       </div>
       <button id="dplay">▶ PLAY</button>
+      <div class="who" id="who"></div>
     </section>
 
     <section class="menu" id="menu">
@@ -290,6 +294,15 @@
       <a href="privacy.html">Privacy policy</a>
     </footer>
   </div>
+
+  <section class="boards" id="boards" hidden>
+    <div class="hud">
+      <button class="back" id="bback">◀ FRONTPAGE</button>
+      <h2>Leaderboard</h2>
+    </div>
+    <div class="tabs" id="btabs" aria-label="Pick a board"></div>
+    <div class="lb wide" id="blist" aria-live="polite"></div>
+  </section>
 
   <section class="game" id="game" hidden>
     <div class="hud">
