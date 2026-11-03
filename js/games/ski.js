@@ -38,6 +38,8 @@
   // Tricks. A jump (ollie) pops you up; spins count in half turns (180, 360, 540...), flips in full turns.
   const OLLIE = 7.8, SPIN_RATE = 11, FLIP_RATE = 12.5, GRAB_T = 0.75, SWAP_T = 0.35;
   const SPIN_PTS = [0, 100, 200, 350, 500, 700, 900];
+  // Clean tricks give a speed boost on top of cruising speed, as a share of it, that fades over a few seconds.
+  const BOOST_MAX = 0.6, BOOST_FADE = 0.6;
   const spinPts = (k) => (k < SPIN_PTS.length ? SPIN_PTS[k] : 900 + (k - 6) * 200);
   const flipName = (n) => { const a = Math.abs(n); return a ? (a === 1 ? '' : ['', '', 'DOUBLE ', 'TRIPLE '][a] || a + 'X ') + (n > 0 ? 'FRONTFLIP' : 'BACKFLIP') : ''; };
 
@@ -482,7 +484,7 @@
       ph = ph.map(() => rand(0, 6.3)); SEED = (Math.random() * 1e9) | 0;
       this.d = 0; this.x = center(0); this.vx = 0; this.v = 12;
       this.y = height(this.x, 0); this.vy = 0; this.air = false; this.airT = 0; this.spin = 0;
-      this.flip = 0; this.sw = false; this.airSw = false; this.ollie = false; this.fromRail = false; this.jumpCd = 0;
+      this.flip = 0; this.sw = false; this.airSw = false; this.ollie = false; this.fromRail = false; this.jumpCd = 0; this.jumpQ = 0; this.boost = 0; this.boostT = 0;
       this.swapT = 0; this.look = 0; this.up = this.down = false; this.flipTouch = 0;
       this.chunks = []; this.nextChunk = -CL; this.nextRamp = 150; this.grind = null; this.grindT = 0; this.wasPark = false; this.bump = 0;
       this.lastG = this.y;
@@ -645,13 +647,15 @@
       if (inPark(this.d) && !this.wasPark) this.pop('TERRAIN PARK', 'RAILS, BOXES AND JUMPS', '#7fe3ff');
       this.wasPark = inPark(this.d);
       this.bump = Math.max(0, (this.bump || 0) - dt);
-      this.jumpCd = Math.max(0, this.jumpCd - dt); this.swapT = Math.max(0, this.swapT - dt);
+      this.jumpCd = Math.max(0, this.jumpCd - dt); this.jumpQ = Math.max(0, this.jumpQ - dt);
+      this.boost *= Math.exp(-BOOST_FADE * dt); this.boostT = Math.max(0, this.boostT - dt);
+      this.swapT = Math.max(0, this.swapT - dt);
       const pitch = (this.up ? 1 : 0) - (this.down ? 1 : 0) || this.flipTouch;
 
       if (this.grind) {
         // Sliding along a rail or box. Hold left or right to hop off early.
         const f = this.grind;
-        this.v = Math.max(12, this.v - dt * 1.2);
+        // A rail keeps your speed.
         this.d += this.v * dt;
         const rx = center(this.d) + f.u, top = height(rx, this.d) + f.top;
         this.x += (rx - this.x) * Math.min(1, dt * 15); this.vx = 0;
@@ -665,7 +669,7 @@
       } else {
         // Speed creeps up the further you go. Climbing the valley side slows you and pushes you back down.
         if (!this.air) {
-          const want = cruise(this.d) * (wall > 0 ? 0.75 : 1);
+          const want = cruise(this.d) * (wall > 0 ? 0.75 : 1) + this.boost;
           this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
           this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 5);
           this.vx -= Math.sign(u) * wall * 1.6 * dt;
@@ -751,8 +755,13 @@
     // Space (or swipe up): pop off the snow, or off a rail.
     jump() {
       if (this.crash) return;
-      if (this.grind) { if (this.grindT > 0.15) { this.endGrind(0); this.vy += OLLIE - 3; this.crouch = 0; snd.jump(); } return; }
-      if (this.air || this.jumpCd > 0) return;
+      if (this.grind) { if (this.grindT > 0.05) { this.endGrind(0); this.vy += OLLIE - 3; this.crouch = 0; snd.jump(); } return; }
+      // You can hop any time you are on the snow, or only just off it (a bump threw you up a little).
+      // Pressed a moment too early in the air, the hop happens as soon as you touch down.
+      const g = this.ground(this.x, this.d), near = this.air && !this.ollie && !this.fromRail && this.y - g < 0.6 && this.airT < 0.5;
+      if ((this.air && !near) || this.jumpCd > 0) { this.jumpQ = 0.25; return; }
+      this.jumpQ = 0;
+      if (near) this.vy = Math.max(this.vy, (g - this.lastG) / (1 / 60)); // Hop from the snow's own speed, not from the fall.
       this.takeoff(true);
       this.vy = Math.max(this.vy, -this.v) + OLLIE; this.crouch = 0; // Legs snap straight, then tuck up in the air.
       this.puff(10, this.x, this.y + 0.1, this.d, 2, 1.5); snd.jump();
@@ -774,12 +783,20 @@
       this.grindBonus = Math.round(spinPts(Math.abs(n)) * 0.75) + 300 * Math.abs(nf) + (this.airT > 0.55 ? Math.round(this.airT * 100) : 0);
       this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.flipTouch = 0; snd.clank();
     },
+    // A speed boost: share is how much faster than cruising, the trick multiplier makes it bigger.
+    speedUp(share) {
+      const c = cruise(this.d), add = Math.min(share * (1 + 0.15 * (this.mult - 1)), BOOST_MAX - this.boost / c) * c;
+      if (add <= 0.2) return;
+      this.boost += add; this.v += add; this.boostT = 1.2;
+      snd.hiss(0.6, 0.08, 'bandpass', 400, 3200);
+    },
     endGrind(push) {
       // Points for every second on the rail (half as much again riding backwards), switch-ups, and the trick you landed on it with.
       const sw = this.grindSwaps;
       const pts = (60 + Math.round(this.grindT * 160 + this.grindSwT * 80) + this.grindBonus + 75 * sw) * this.mult;
       this.bonus += pts;
       this.pop(this.grindName + (sw ? ' + ' + sw + ' SWITCH-UP' + (sw > 1 ? 'S' : '') : ''), '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#7fe3ff');
+      this.speedUp(Math.min(0.08 + 0.05 * Math.min(this.grindT, 3) + 0.05 * sw, 0.3));
       snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
       this.grind = null; this.swapT = 0; this.takeoff(false); this.fromRail = true; this.vy += 3; this.vx = push;
       this.lastG = this.ground(this.x, this.d);
@@ -792,10 +809,10 @@
       const halves = this.spin / Math.PI, n = Math.round(halves), off = Math.abs(halves - n);
       const flips = this.flip / (Math.PI * 2), nf = Math.round(flips), offF = Math.abs(flips - nf);
       const wasSw = this.airSw, out = this.fromRail && n !== 0;
-      this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.ollie = false; this.flipTouch = 0; this.jumpCd = 0.3;
+      this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.ollie = false; this.flipTouch = 0; this.jumpCd = 0.08;
       if (offF > 0.22) return this.hit('the snow head first');
       if (Math.abs(n) % 2) this.sw = !this.sw;
-      if ((Math.abs(halves) > 0.3 && off > 0.28) || offF > 0.1) { this.v *= 0.6; this.mult = 1; this.multT = 0; this.pop('SKETCHY LANDING', 'SPEED LOST', '#ff6b9a'); snd.sketchy(); }
+      if ((Math.abs(halves) > 0.3 && off > 0.28) || offF > 0.1) { this.v *= 0.85; this.boost = 0; this.mult = 1; this.multT = 0; this.pop('SKETCHY LANDING', 'SPEED LOST', '#ff6b9a'); snd.sketchy(); }
       else if (t > GRAB_T || n !== 0 || nf !== 0) {
         // A trick: a grab for big air, plus spins and flips. Tricks in a row raise the multiplier. Taking off backwards is worth half as much again.
         const trick = n !== 0 || nf !== 0;
@@ -804,9 +821,11 @@
         pts = Math.round(pts) * this.mult;
         const name = [wasSw && trick ? 'SWITCH' : '', flipName(nf), n ? Math.abs(n) * 180 : '', t > GRAB_T ? this.grab : '', out ? 'OUT' : ''].filter(Boolean).join(' ');
         this.bonus += pts; this.pop(name, '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#ffd75e');
+        this.speedUp(trick ? Math.min(0.1 * Math.abs(n) + 0.2 * Math.abs(nf), 0.4) : 0.05);
         snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
         if (Math.abs(n) >= 3 || nf) this.puff(30, this.x, g + 0.2, this.d, 5, 4, this.sparks);
       }
+      if (this.jumpQ > 0) this.jump(); // Space pressed just before touching down.
     },
     moveBits(dt) {
       for (const list of [this.parts, this.sparks]) {
@@ -1003,8 +1022,21 @@
       text('x' + this.mult, W - 14, 14, 16, this.mult > 1 ? '#ffd75e' : '#ffffff', 'right');
       if (this.mult > 1) { ctx.fillStyle = 'rgba(255,215,94,0.9)'; ctx.fillRect(W - 14 - 46 * (this.multT / 7), 36, 46 * (this.multT / 7), 3); }
       if (this.sw && !this.crash) text('SWITCH', W - 14, 46, 8, '#7fe3ff', 'right');
-      text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, '#ffd23f', 'center');
+      text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, this.boost > cruise(this.d) * 0.08 && !this.crash ? '#7fe3ff' : '#ffd23f', 'center');
       text('KM/H', W / 2, H - 20, 7, '#f4f6fb', 'center');
+      // Boosted: speed lines down both sides of the screen, and BOOST by the speed.
+      const bst = this.crash ? 0 : clamp(this.boost / (cruise(this.d) * 0.3), 0, 1);
+      if (bst > 0.05) {
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+        for (let i = 0; i < 14; i++) {
+          const side = i % 2 ? 1 : -1, k = (i * 0.37 + this.t * 2.6) % 1, y = (i * 53 % H), len = 30 + 60 * k;
+          const x = W / 2 + side * (W * 0.32 + k * W * 0.2);
+          ctx.globalAlpha = bst * 0.85 * (1 - k);
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + side * len * 0.4, y + len * (y > H / 2 ? 1 : -1) * 0.3); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        if (this.boostT > 0) text('BOOST!', W / 2, H - 82, 11, '#7fe3ff', 'center');
+      }
       if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
       if (this.grind) text(this.grindName + '  ' + this.grindT.toFixed(1) + 's', W / 2, H - 100, 11, '#7fe3ff', 'center');
       this.pops.slice(-2).forEach((p, i) => {
