@@ -34,6 +34,31 @@
     if (m < PARK_LEN) return 1;
     return clamp(1 - Math.min(m - PARK_LEN, PARK_EVERY - m) / 40, 0, 1);
   }
+  /* Between two parks there is a stretch with something special going on: a slalom, a frozen lake,
+     a snowstorm or an avalanche. The order is shuffled every run. */
+  const ZONE_GAP = 350, ZONE_LEN = 380, ZONE_TYPES = ['slalom', 'lake', 'storm', 'avalanche'];
+  let ZONES = ZONE_TYPES.slice();
+  function zoneAt(d) { // { type, s (where it starts), k (which one) }, or null.
+    const k = Math.floor((d - PARK_AT) / PARK_EVERY);
+    if (k < 0) return null;
+    const s = PARK_AT + k * PARK_EVERY + ZONE_GAP;
+    return d >= s && d < s + ZONE_LEN ? { type: ZONES[k % ZONES.length], s, k } : null;
+  }
+  // How much a zone of this type there is at d: 1 inside, 0 outside, fading over `fade` metres at both ends.
+  function zoneMask(type, d, fade) {
+    const k = Math.floor((d + fade - PARK_AT) / PARK_EVERY);
+    if (k < 0 || ZONES[k % ZONES.length] !== type) return 0;
+    const s = PARK_AT + k * PARK_EVERY + ZONE_GAP;
+    return clamp(Math.min(d - s + fade, s + ZONE_LEN + fade - d) / fade, 0, 1);
+  }
+  // The frozen lake: smooth ice across the valley floor, with a snowy shore.
+  const LAKE_W = FLOOR - 3;
+  function iceAt(x, d) {
+    const m = zoneMask('lake', d, 20);
+    if (!m) return 0;
+    return m * clamp((LAKE_W - Math.abs(x - center(d))) / 3, 0, 1);
+  }
+  const GATE_W = 2.6; // Half the width of a slalom gate.
   const HIP_THROW = 7; // How hard a side hit throws you towards the middle.
   // Tricks. A jump (ollie) pops you up; spins count in half turns (180, 360, 540...), flips in full turns.
   const OLLIE = 7.8, SPIN_RATE = 11, FLIP_RATE = 12.5, GRAB_T = 0.75, SWAP_T = 0.35;
@@ -61,8 +86,9 @@
   function height(x, d) {
     const u = x - center(d), t = Math.max(0, Math.abs(u) - FLOOR);
     const side = t < 40 ? 0.02 * t * t : 32 + 1.6 * (t - 40); // The valley sides get steeper, then rise straight on.
-    return -SLOPE * d + rollers(d) + 0.0016 * u * u + side
-      + noise(x * 0.04, d * 0.04) * 1.4 + noise(x * 0.17, d * 0.17) * 0.3 + noise(x * 0.5, d * 0.35) * 0.06 + t * 0.12 * noise(x * 0.02 + 40, d * 0.02);
+    const flat = 1 - 0.92 * iceAt(x, d); // The lake's ice is smooth: no rollers and no bumps.
+    return -SLOPE * d + rollers(d) * flat + 0.0016 * u * u + side
+      + (noise(x * 0.04, d * 0.04) * 1.4 + noise(x * 0.17, d * 0.17) * 0.3 + noise(x * 0.5, d * 0.35) * 0.06) * flat + t * 0.12 * noise(x * 0.02 + 40, d * 0.02);
   }
   function normalAt(x, d) {
     const e = 0.6, hx = (height(x + e, d) - height(x - e, d)) / (2 * e), hd = (height(x, d + e) - height(x, d - e)) / (2 * e);
@@ -131,6 +157,10 @@
     trick() { if (!this.ready()) return; const t = sfx.ac.currentTime; [784, 988, 1175, 1568].forEach((f, i) => this.note(f, 0.1, 'square', 0.025, t + i * 0.06)); },
     sketchy() { this.note(200, 0.25, 'sawtooth', 0.04, 0, 90); },
     clank() { this.note(1500, 0.09, 'square', 0.03, 0, 900); this.note(2300, 0.12, 'triangle', 0.03); },
+    gate() { if (!this.ready()) return; const t = sfx.ac.currentTime; this.note(1047, 0.07, 'triangle', 0.05, t); this.note(1568, 0.14, 'triangle', 0.05, t + 0.06); },
+    miss() { this.note(330, 0.2, 'square', 0.03, 0, 220); },
+    rumble(vol) { this.note(45 + Math.random() * 10, 0.3, 'sawtooth', vol * 0.08); this.hiss(0.3, vol * 0.12, 'lowpass', 260); },
+    warn() { if (!this.ready()) return; const t = sfx.ac.currentTime; [0, 0.22, 0.44].forEach((k) => this.note(880, 0.14, 'square', 0.035, t + k)); },
   };
 
   /* ---------- 3D scene ---------- */
@@ -180,6 +210,40 @@
     for (let i = 0; i < n.count; i++) { const c = n.getY(i) > 0.55 ? snow : rock; col.push(c.r, c.g, c.b); }
     ng.setAttribute('color', new T.Float32BufferAttribute(col, 3));
     return ng;
+  }
+  // Like at(), but turned round all three axes and stretched.
+  const atR = (x, y, z, rx, ry, rz, sx = 1, sy = 1, sz = 1) => new T.Matrix4().compose(new T.Vector3(x, y, z),
+    new T.Quaternion().setFromEuler(new T.Euler(rx, ry, rz)), new T.Vector3(sx, sy, sz));
+  // A reindeer, facing +x: brown body, pale neck, long legs and a big pair of antlers.
+  function reindeerGeo() {
+    const box = (w, h, d) => new T.BoxGeometry(w, h, d), leg = new T.CylinderGeometry(0.05, 0.04, 0.85, 5), parts = [
+      { geo: box(1.25, 0.55, 0.5), m: at(0, 1.1, 0), color: '#6b4a32', vary: 0.1 },
+      { geo: box(0.5, 0.3, 0.42), m: at(-0.1, 0.9, 0), color: '#d9d0bf' },
+      { geo: box(0.32, 0.6, 0.32), m: atR(0.62, 1.45, 0, 0, 0, -0.5), color: '#e8e0d0' },
+      { geo: box(0.48, 0.24, 0.24), m: at(0.95, 1.72, 0), color: '#5c3f2b' },
+      { geo: box(0.1, 0.1, 0.1), m: at(1.2, 1.72, 0), color: '#1a1414' },
+      { geo: box(0.14, 0.16, 0.36), m: at(-0.66, 1.25, 0), color: '#efe9de' },
+    ];
+    for (const [lx, lz] of [[0.48, 0.17], [0.48, -0.17], [-0.48, 0.17], [-0.48, -0.17]]) parts.push({ geo: leg, m: at(lx, 0.43, lz), color: '#4a3324' });
+    const horn = new T.CylinderGeometry(0.03, 0.04, 1, 4);
+    for (const s of [-1, 1]) {
+      parts.push({ geo: horn, m: atR(0.82, 2.15, s * 0.22, s * 0.45, 0, 0.35), color: '#cbb894' });
+      parts.push({ geo: horn, m: atR(0.68, 2.45, s * 0.36, s * 0.2, 0, -0.9, 1, 0.55, 1), color: '#cbb894' });
+      parts.push({ geo: horn, m: atR(0.98, 2.4, s * 0.32, s * 0.6, 0, 0.9, 1, 0.45, 1), color: '#cbb894' });
+    }
+    return merged(parts);
+  }
+  // A white mountain hare, facing +x, with long ears.
+  function hareGeo() {
+    const ball = new T.SphereGeometry(1, 10, 8), parts = [
+      { geo: ball, m: atR(0, 0.3, 0, 0, 0, 0.2, 0.36, 0.26, 0.22), color: '#f4f6fb' },
+      { geo: ball, m: atR(0.32, 0.5, 0, 0, 0, 0, 0.15, 0.14, 0.13), color: '#f4f6fb' },
+      { geo: ball, m: atR(0.45, 0.5, 0, 0, 0, 0, 0.03, 0.03, 0.03), color: '#222' },
+      { geo: ball, m: atR(-0.36, 0.33, 0, 0, 0, 0, 0.08, 0.08, 0.08), color: '#ffffff' },
+    ];
+    for (const s of [-1, 1]) parts.push({ geo: ball, m: atR(0.25, 0.76, s * 0.06, s * 0.2, 0, -0.35, 0.05, 0.2, 0.04), color: '#e9ecf2' });
+    for (const s of [-1, 1]) parts.push({ geo: ball, m: atR(0.3, 0.86, s * 0.06, s * 0.2, 0, -0.35, 0.025, 0.06, 0.02), color: '#222' });
+    return merged(parts);
   }
   function dotTexture() {
     const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -254,6 +318,7 @@
     try { renderer = new T.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' }); }
     catch (e) { failed = true; return; }
     vA = new T.Vector3(); vB = new T.Vector3();
+    STORM_DAY = new T.Color('#dde3ea'); STORM_NIGHT = new T.Color('#262d40');
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.toneMapping = T.NeutralToneMapping;
     const scene = new T.Scene();
@@ -382,7 +447,19 @@
     ]), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: T.DoubleSide }), 200);
     flags.setColorAt(0, new T.Color('#ffffff')); flags.count = 0; flags.frustumCulled = false; flags.castShadow = true; scene.add(flags);
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, feats: [], skier, blob, tracks, spray, sparks, flakes, built: '' };
+    // Animals that run across the run.
+    const animalMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+    const deer = new T.InstancedMesh(reindeerGeo(), animalMat, 40), hares = new T.InstancedMesh(hareGeo(), animalMat, 40);
+    for (const m of [deer, hares]) { m.count = 0; m.frustumCulled = false; m.castShadow = true; scene.add(m); }
+    // Slalom gates: two poles with a flag between them, red and blue in turn.
+    const gateMats = ['#e8333a', '#2a63e8'].map((c) => new T.MeshStandardMaterial({ color: c, roughness: 0.5, side: T.DoubleSide }));
+    const poleGeo = new T.CylinderGeometry(0.035, 0.035, 1.9, 6), panelGeo = new T.PlaneGeometry(1, 0.55);
+    // The avalanche: a wall of rolling snow clouds right across the valley.
+    const avalanche = new T.InstancedMesh(new T.IcosahedronGeometry(1, 1),
+      new T.MeshStandardMaterial({ color: '#f3f6fb', roughness: 1, flatShading: true, transparent: true, opacity: 0.95 }), 90);
+    avalanche.count = 0; avalanche.frustumCulled = false; scene.add(avalanche);
+
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, built: '' };
   }
   const TRACK = 90;
 
@@ -390,6 +467,7 @@
   function fillTile(tile, ch) {
     const g = tile.geometry, P = g.attributes.position.array, N = g.attributes.normal.array, C = g.attributes.color.array;
     const snow = new T.Color('#f5f8fd'), blue = new T.Color('#d3def2'), rock = new T.Color('#545a6a'), rock2 = new T.Color('#7a8192'), c = new T.Color(), r = new T.Color();
+    const ice1 = new T.Color('#4f9fd4'), ice2 = new T.Color('#93cdeb');
     for (let j = 0; j < ND; j++) {
       const d = ch.d0 + (j * CL) / (ND - 1), cx = center(d);
       for (let i = 0; i < NU; i++) {
@@ -402,6 +480,12 @@
         const steep = clamp((0.42 - n[1]) / 0.15 + noise(x * 0.08, d * 0.08) * 0.35, 0, 1);
         c.copy(snow).lerp(blue, clamp(0.45 + noise(x * 0.03, d * 0.03) * 0.7 + noise(x * 0.3, d * 0.12) * 0.35, 0, 1) * 0.8);
         if (steep > 0) c.lerp(r.copy(rock2).lerp(rock, clamp(0.5 + noise(x * 0.2, d * 0.2), 0, 1)), steep);
+        // The frozen lake: blue ice with pale cracks and streaks.
+        const ice = iceAt(x, d);
+        if (ice > 0) {
+          const crack = Math.pow(1 - Math.abs(noise(x * 0.35, d * 0.35)), 12) + Math.pow(1 - Math.abs(noise(x * 0.11 + 9, d * 0.11)), 20);
+          c.lerp(r.copy(ice1).lerp(ice2, clamp(0.5 + noise(x * 0.06, d * 0.05) * 0.8, 0, 1)).lerp(snow, clamp(crack, 0, 0.7)), ice);
+        }
         C[k] = c.r; C[k + 1] = c.g; C[k + 2] = c.b;
       }
     }
@@ -453,6 +537,14 @@
       }
       const banner = new T.Mesh(new T.BoxGeometry(xr - xl, 3, 0.3), [S.bannerSide, S.bannerSide, S.bannerSide, S.bannerSide, S.bannerMat, S.bannerSide]);
       banner.position.set((xl + xr) / 2, top, -f.d); banner.castShadow = true; m.add(banner);
+    } else if (f.type === 'gate') {
+      m = new T.Group();
+      const mat = S.gateMats[f.c];
+      for (const s of [-1, 1]) {
+        const x = f.x + s * GATE_W, y = height(x, f.d);
+        const pole = new T.Mesh(S.poleGeo, mat); pole.position.set(x, y + 0.95, -f.d); pole.castShadow = true; m.add(pole);
+        const flag = new T.Mesh(S.panelGeo, mat); flag.scale.set(0.9, 1, 1); flag.position.set(x - s * 0.5, y + 1.55, -f.d); m.add(flag);
+      }
     } else m = wedge(f, (s) => f.h * s * s, new T.Color('#f7f9ff'), new T.Color('#9fb5dc'), new T.Color(LIPS[f.type]));
     m.feat = f;
     return m;
@@ -468,6 +560,7 @@
     return t;
   }
 
+  let STORM_DAY = null, STORM_NIGHT = null;
   function dropMesh(m) { S.scene.remove(m); m.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
 
   /* ---------- The game ---------- */
@@ -476,12 +569,13 @@
     get H() { return H; },
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
-    intro: 'Ski down an endless 3D valley. Dodge the trees and rocks, grab coins and fly off kickers and rollers.',
+    intro: 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
     hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
 
     reset() {
       locked = true; // Keep the screen shape until the game is closed.
       ph = ph.map(() => rand(0, 6.3)); SEED = (Math.random() * 1e9) | 0;
+      ZONES = ZONE_TYPES.slice().sort(() => Math.random() - 0.5);
       this.d = 0; this.x = center(0); this.vx = 0; this.v = 12;
       this.y = height(this.x, 0); this.vy = 0; this.air = false; this.airT = 0; this.spin = 0;
       this.flip = 0; this.sw = false; this.airSw = false; this.ollie = false; this.fromRail = false; this.jumpCd = 0; this.jumpQ = 0; this.boost = 0; this.boostT = 0;
@@ -492,6 +586,8 @@
       this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
       this.cam = null; this.lean = 0; this.crouch = 0.3; this.mult = 1; this.multT = 0; this.grab = '';
+      this.zoneK = -1; this.gateHit = 0; this.gateStreak = 0; this.gateN = 0; this.gateI = 0; this.ava = null;
+      this.storm = 0; this.wind = 0; this.windX = 0; this.fallT = 0; this.ice = 0;
       this.gen();
       if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.feats.forEach(dropMesh); S.feats = []; S.built = ''; }
     },
@@ -521,15 +617,20 @@
       while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
     },
     makeChunk(d0) {
-      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [] }, lv = level(d0);
+      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [], gates: [], animals: [] }, lv = level(d0);
       const put = (list, x, d, s) => list.push({ x, d, s, y: height(x, d), r: rand(0, 6.3), h: rand(0.9, 1.15) });
+      // No kickers on the ice or in the middle of a slalom.
+      const calm = (d) => { const z = zoneAt(d); return !z || (z.type !== 'lake' && z.type !== 'slalom'); };
       // A kicker now and then between the parks.
       if (d0 >= this.nextRamp && !inPark(d0 - 60) && !inPark(d0 + CL + 60)) {
         const rd = d0 + rand(5, 40);
-        this.kicker(ch, rd, rand(-12, 12), 7, 1.9, 2, 'kick'); this.nextRamp = rd + RAMP_EVERY * rand(0.8, 1.3);
+        if (calm(rd - 20) && calm(rd + 70)) this.kicker(ch, rd, rand(-12, 12), 7, 1.9, 2, 'kick');
+        this.nextRamp = rd + RAMP_EVERY * rand(0.8, 1.3);
       }
       this.park(ch, d0);
-      const inLane = (x, d) => parkMask(d) > 0 || ch.feats.some((f) => Math.abs(x - f.x) < 7 && d > f.d - 8 && d < f.d + 55);
+      this.slalom(ch, d0);
+      const inLane = (x, d) => parkMask(d) > 0 || ch.feats.some((f) => Math.abs(x - f.x) < 7 && d > f.d - 8 && d < f.d + 55)
+        || (zoneMask('slalom', d, 25) > 0 && Math.abs(x - center(d)) < 16); // A clear run between the gates.
       // Thick forest up the valley sides.
       for (let k = 0; k < 560; k++) {
         const u = (Math.random() < 0.5 ? -1 : 1) * (FLOOR - 3 + Math.pow(Math.random(), 1.15) * 120), d = d0 + rand(0, CL), x = center(d) + u;
@@ -541,6 +642,7 @@
         for (let k = 0; k < n; k++) {
           const d = d0 + rand(0, CL), x = center(d) + rand(-FLOOR + 2, FLOOR - 2);
           if (inLane(x, d)) continue;
+          if (iceAt(x, d) > 0) { if (Math.random() < 0.45) put(ch.rocks, x, d, rand(0.8, 1.5)); continue; } // Only rocks stick out of the ice.
           if (Math.random() < 0.7) { const m = 1 + ((Math.random() * 2.4) | 0); for (let q = 0; q < m; q++) put(ch.trees, x + rand(-2.2, 2.2), d + rand(-2.2, 2.2), rand(0.7, 1.25)); }
           else put(ch.rocks, x, d, rand(0.8, 1.8));
         }
@@ -548,7 +650,13 @@
           const ru = rand(-FLOOR + 4, FLOOR - 4), d = d0 + rand(0, CL - 30);
           for (let q = 0; q < 7; q++) { const dd = d + q * 4, x = center(dd) + ru; if (!inLane(x, dd)) ch.coins.push({ x, d: dd, y: height(x, dd) + 0.9 }); }
         }
+        // Coins in a wavy line across the ice: hard to follow when you slide.
+        if (zoneMask('lake', d0 + CL / 2, 0.01) > 0) {
+          const a = rand(0, 6.3);
+          for (let dd = d0 + 2; dd < d0 + CL; dd += 3.5) { const x = center(dd) + Math.sin(dd / 14 + a) * 14; if (iceAt(x, dd) > 0.5) ch.coins.push({ x, d: dd, y: height(x, dd) + 0.9 }); }
+        }
       }
+      this.animals(ch, d0, lv);
       return ch;
     },
     // A kicker, with coins up in the air where the jump goes. Side hits (hips) throw you towards the middle.
@@ -595,6 +703,29 @@
         for (let i = 0; i < 5; i++) { const d = p0 + 40 + i * 46; if (here(d)) this.kicker(ch, d, (i % 2 ? 1 : -1) * (FLOOR - 5.5), 6, 2.4, 1.7, 'hip'); }
       }
     },
+    // Slalom gates through the slalom stretch, left and right in turn. Ski between the poles.
+    slalom(ch, d0) {
+      const z = zoneAt(d0) || zoneAt(d0 + CL - 1);
+      if (!z || z.type !== 'slalom') return;
+      const n = Math.floor((ZONE_LEN - 40) / 24) + 1;
+      for (let i = 0; i < n; i++) {
+        const d = z.s + 20 + i * 24;
+        if (d < d0 || d >= d0 + CL) continue;
+        const g = { type: 'gate', x: center(d) + (i % 2 ? 1 : -1) * rand(3, 9), u: 0, d, len: 0, c: i % 2, i, n };
+        ch.feats.push(g); ch.gates.push(g);
+      }
+    },
+    // Now and then reindeer or hares wait at the edge of the forest, and run across when you come close.
+    animals(ch, d0, lv) {
+      if (d0 < 250 || Math.random() > 0.28 + 0.2 * lv) return;
+      const d = d0 + rand(8, 50), z = zoneAt(d);
+      if (parkMask(d) > 0 || (z && z.type === 'slalom')) return;
+      const deer = Math.random() < 0.55, dir = Math.random() < 0.5 ? 1 : -1, n = deer ? 1 + ((Math.random() * 3) | 0) : 1 + ((Math.random() * 2) | 0);
+      for (let q = 0; q < n; q++) {
+        const dd = d + q * rand(1.5, 3.5), x = center(dd) - dir * (FLOOR - 1 + q * 2);
+        ch.animals.push({ deer, d: dd, x, y: height(x, dd), dir, speed: deer ? rand(6.5, 8.5) : rand(8, 11), run: false, ph: rand(0, 6.3), done: false });
+      }
+    },
     // The snow height under a point, kickers included.
     ground(x, d) {
       let y = height(x, d);
@@ -621,8 +752,8 @@
         list.push({ x, y, d, vx: Math.cos(a) * sp, vy: rand(0.5, 1) * up, vd: this.v * rand(0.4, 0.85) + Math.sin(a) * sp, life: rand(0.4, 1), max: 1 });
       }
     },
-    hit(what) {
-      this.crash = { t: 0, what, m: Math.floor(this.d), vx: this.vx };
+    hit(what, msg) {
+      this.crash = { t: 0, what, msg, m: Math.floor(this.d), vx: this.vx };
       this.shake = 1; snd.crash();
       this.puff(60, this.x, this.y + 0.5, this.d, 5, 5);
     },
@@ -633,9 +764,10 @@
         this.crash.t += dt; this.v *= Math.exp(-3 * dt); this.vx *= Math.exp(-3 * dt);
         this.d += this.v * dt; this.x += this.vx * dt;
         this.vy -= G * dt; this.y = Math.max(this.y + this.vy * dt, this.ground(this.x, this.d));
+        if (this.ava && !this.ava.out) this.ava.d += cruise(this.d) * dt; // It rolls on over you.
         this.moveBits(dt);
         if (this.crash.t > 1.4) {
-          const msg = 'You hit ' + this.crash.what + ' after ' + this.crash.m + ' m';
+          const msg = (this.crash.msg || 'You hit ' + this.crash.what) + ' after ' + this.crash.m + ' m';
           return over(this.score, msg + (this.coins ? ' and grabbed ' + this.coins + (this.coins === 1 ? ' coin.' : ' coins.') : '.'));
         }
         return;
@@ -646,6 +778,8 @@
       const bend = (center(this.d + 1) - center(this.d - 1)) / 2;
       if (inPark(this.d) && !this.wasPark) this.pop('TERRAIN PARK', 'RAILS, BOXES AND JUMPS', '#7fe3ff');
       this.wasPark = inPark(this.d);
+      this.zones(dt);
+      if (this.crash) return;
       this.bump = Math.max(0, (this.bump || 0) - dt);
       this.jumpCd = Math.max(0, this.jumpCd - dt); this.jumpQ = Math.max(0, this.jumpQ - dt);
       this.boost *= Math.exp(-BOOST_FADE * dt); this.boostT = Math.max(0, this.boostT - dt);
@@ -669,14 +803,16 @@
       } else {
         // Speed creeps up the further you go. Climbing the valley side slows you and pushes you back down.
         if (!this.air) {
-          const want = cruise(this.d) * (wall > 0 ? 0.75 : 1) + this.boost;
+          // On ice you go a bit faster, and turning hardly bites, so you slide on sideways.
+          const want = cruise(this.d) * (wall > 0 ? 0.75 : 1) * (1 + 0.12 * this.ice) + this.boost;
           this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
-          this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 5);
+          this.vx += (dir * maxSide + this.wind - this.vx) * Math.min(1, dt * (5 - 4.3 * this.ice));
           this.vx -= Math.sign(u) * wall * 1.6 * dt;
         } else {
           // In the air: hold left or right to spin, up (W) to front flip and down (S) to back flip.
           if (dir && this.airT > (this.ollie || this.fromRail ? 0.05 : 0.2)) this.spin += dir * SPIN_RATE * dt;
           if (pitch) this.flip += pitch * FLIP_RATE * dt;
+          this.vx += this.wind * 0.8 * dt; // The storm blows you sideways in the air too.
         }
 
         // The valley bends under you. You follow half of a bend by yourself and steer for the rest.
@@ -720,10 +856,12 @@
         for (const o of ch.trees) if (Math.abs(o.d - this.d) < 0.7 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.75 * o.s + 0.3 && this.y - o.y < 4.5 * o.s) return this.hit('a tree');
         for (const o of ch.rocks) if (Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3 && this.y - o.y < 0.8 * o.s) return this.hit('a rock');
       }
+      if (this.critters(dt)) return;
+      this.gates();
 
       // Snow spray when carving hard or ploughing up the side.
       const carve = Math.abs(this.vx) / maxSide;
-      if (!this.air && !this.grind && Math.random() < dt * (carve * 90 + wall * 6 + 6)) {
+      if (!this.air && !this.grind && Math.random() < dt * (carve * 90 + wall * 6 + 6) * (1 - 0.8 * this.ice)) {
         const s = -Math.sign(this.vx || 1);
         this.parts.push({ x: this.x + rand(-0.2, 0.2), y: this.y + 0.05, d: this.d - 0.5, vx: s * rand(1, 5) * (0.5 + carve), vy: rand(1, 4) * (0.5 + carve), vd: this.v * rand(0.5, 0.85), life: rand(0.4, 0.9), max: 0.9 });
       }
@@ -732,8 +870,9 @@
       if (this.sndT <= 0) {
         this.sndT = 0.1;
         if (this.grind) snd.hiss(0.18, 0.03, this.grind.type === 'rail' ? 'highpass' : 'bandpass', this.grind.type === 'rail' ? 3500 : 900);
-        else if (!this.air) snd.hiss(0.18, 0.006 + carve * 0.02, 'bandpass', 1800 + this.v * 30);
-        snd.hiss(0.18, 0.004 + this.v * 0.0005 + (this.air ? 0.01 : 0), 'lowpass', 300 + this.v * 12);
+        else if (!this.air) snd.hiss(0.18, 0.006 + carve * 0.02, 'bandpass', 1800 + this.v * 30 + this.ice * 3000);
+        snd.hiss(0.18, 0.004 + this.v * 0.0005 + (this.air ? 0.01 : 0) + this.storm * 0.03, 'lowpass', 300 + this.v * 12 + this.storm * 500);
+        if (this.ava && !this.ava.out) snd.rumble(clamp(1 - (this.d - this.ava.d) / 70, 0.15, 1));
       }
       // Tracks in the snow.
       if (this.d - this.trailD > 0.5) {
@@ -747,6 +886,73 @@
       if (sc !== this.score) { this.score = sc; setScore(sc); }
       this.moveBits(dt);
       this.gen();
+    },
+    // The special stretches: say what is coming, and run the storm, the ice and the avalanche.
+    zones(dt) {
+      const z = zoneAt(this.d);
+      if (z && z.k !== this.zoneK) {
+        this.zoneK = z.k;
+        if (z.type === 'slalom') { this.pop('SLALOM', 'SKI THROUGH THE GATES', '#7fe3ff'); this.gateHit = this.gateStreak = 0; }
+        if (z.type === 'lake') this.pop('FROZEN LAKE', 'SLIPPERY ICE!', '#9fe0ff');
+        if (z.type === 'storm') this.pop('SNOWSTORM', 'WATCH THE WIND', '#ffffff');
+        if (z.type === 'avalanche') { this.pop('AVALANCHE!', 'SKI FOR YOUR LIFE', '#ff6b9a'); snd.warn(); this.ava = { d: this.d - 45, s: z.s, t: 0, out: false }; }
+      }
+      this.ice = this.air || this.grind ? 0 : iceAt(this.x, this.d);
+      // Storm: gusts that swing from side to side. The snow flies with them.
+      this.storm = zoneMask('storm', this.d, 40);
+      this.wind = this.storm * 6.5 * Math.sin(this.t * 0.45 + this.zoneK * 1.7);
+      this.windX += this.wind * dt * 3; this.fallT += dt * (1 + this.storm * 2.5);
+      // Avalanche: it chases you down the stretch and speeds up as it goes. Get to the end and it stops.
+      const a = this.ava;
+      if (a) {
+        a.t += dt;
+        if (!a.out) {
+          a.d += cruise(this.d) * (0.95 + 0.12 * Math.min(1, a.t / 12)) * dt;
+          const gap = this.d - a.d;
+          this.shake = Math.max(this.shake, 0.3 * clamp(1 - gap / 35, 0, 1));
+          if (Math.random() < dt * 30) this.parts.push({ x: this.x + rand(-14, 14), y: height(this.x, a.d) + rand(0, 4), d: a.d, vx: rand(-2, 2), vy: rand(0, 3), vd: this.v * rand(1.05, 1.3), life: rand(0.6, 1.2), max: 1.2 });
+          if (gap < 0.8) return this.hit('the avalanche', 'The avalanche caught you');
+          if (this.d > a.s + ZONE_LEN) {
+            a.out = true; const pts = 500 * this.mult; this.bonus += pts;
+            this.pop('ESCAPED!', '+' + pts, '#ffd75e'); snd.trick();
+          }
+        } else if (this.d - a.d > 200) this.ava = null;
+      }
+    },
+    // Reindeer and hares: they start to run when you come close. Hit a reindeer and you crash, but you can hop
+    // over a hare, or a reindeer if you jump high enough, for points. Returns true on a crash.
+    critters(dt) {
+      for (const ch of this.chunks) for (const a of ch.animals) {
+        if (!a.run && a.d - this.d < this.v * (Math.abs(this.x - a.x) / a.speed) * 1.05 + 5) a.run = true;
+        if (!a.run) continue;
+        if (Math.abs(a.x - center(a.d)) < FLOOR + 40) { a.x += a.dir * a.speed * dt; a.y = height(a.x, a.d); }
+        if (a.done || Math.abs(a.d - this.d) > (a.deer ? 0.9 : 0.5) || Math.abs(a.x - this.x) > (a.deer ? 1.0 : 0.55)) continue;
+        if (this.y - a.y > (a.deer ? 1.05 : 0.45)) {
+          a.done = true; const pts = (a.deer ? 400 : 150) * this.mult; this.bonus += pts;
+          this.pop(a.deer ? 'REINDEER LEAP' : 'HARE HOP', '+' + pts, '#ffd75e'); snd.trick();
+        } else if (a.deer && !this.grind) { this.hit('a reindeer'); return true; }
+        else a.done = true; // A hare ducks under your skis.
+      }
+      return false;
+    },
+    // Slalom gates: points for every gate you ski through, more for each one in a row. All of them is a perfect run.
+    gates() {
+      for (const ch of this.chunks) for (const g of ch.gates) {
+        if (g.done || this.d < g.d) continue;
+        g.done = true;
+        if (g.i === 0) { this.gateHit = 0; this.gateStreak = 0; }
+        this.gateN = g.n; this.gateI = g.i + 1;
+        if (Math.abs(this.x - g.x) < GATE_W) {
+          this.gateHit++; this.gateStreak++;
+          const pts = 40 * Math.min(this.gateStreak, 10); this.bonus += pts;
+          this.pop('GATE ' + (g.i + 1) + '/' + g.n, '+' + pts, '#7fe3ff'); snd.gate();
+        } else { this.gateStreak = 0; this.pop('MISSED GATE', g.i + 1 + '/' + g.n, '#ff6b9a'); snd.miss(); }
+        if (g.i === g.n - 1) {
+          if (this.gateHit === g.n) { this.bonus += 1000; this.pop('PERFECT SLALOM', '+1000', '#ffd75e'); snd.trick(); }
+          else this.pop('SLALOM DONE', this.gateHit + ' OF ' + g.n + ' GATES', '#7fe3ff');
+          this.gateN = 0;
+        }
+      }
     },
     takeoff(ollie) {
       this.air = true; this.airT = 0; this.ollie = ollie; this.airSw = this.sw;
@@ -896,6 +1102,15 @@
       s.renderer.toneMappingExposure = num('exp');
       s.stars.material.opacity = night; s.auroraMat.uniforms.night.value = night; s.auroraMat.uniforms.time.value = this.t;
       s.lamp.intensity = Math.max(0, night - 0.4) * 25;
+      // A snowstorm greys out the sky, hides the sun and the stars, and the fog closes in.
+      const st = this.storm;
+      scene.fog.density = 0.0027 + st * 0.021;
+      if (st > 0) {
+        const grey = STORM_DAY.clone().lerp(STORM_NIGHT, night);
+        scene.fog.color.lerp(grey, st * 0.85); u.top.value.lerp(grey, st * 0.95); u.hor.value.lerp(grey, st * 0.9);
+        u.sunCol.value.multiplyScalar(1 - st * 0.9); s.sun.intensity *= 1 - 0.6 * st;
+        s.stars.material.opacity *= 1 - st; s.auroraMat.uniforms.night.value *= 1 - st;
+      }
 
       // Give every new chunk a terrain tile.
       for (const t of s.tiles) if (t.chunk && !this.chunks.includes(t.chunk)) { t.chunk = null; t.visible = false; }
@@ -933,6 +1148,39 @@
           s.coins.setMatrixAt(n++, m.compose(p, q, one));
         }
         s.coins.count = n; s.coins.instanceMatrix.needsUpdate = true;
+      }
+
+      // Reindeer and hares, bouncing as they run.
+      {
+        const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), one = new T.Vector3(1, 1, 1);
+        let nd = 0, nh = 0;
+        for (const ch of this.chunks) for (const a of ch.animals) {
+          const hop = a.run ? Math.abs(Math.sin(this.t * (a.deer ? 8 : 11) + a.ph)) * (a.deer ? 0.22 : 0.4) : 0;
+          p.set(a.x, a.y + hop, -a.d); q.setFromEuler(e.set(0, a.dir > 0 ? 0 : Math.PI, a.run ? Math.sin(this.t * 8 + a.ph) * 0.08 : 0));
+          if (a.deer && nd < 40) s.deer.setMatrixAt(nd++, m.compose(p, q, one));
+          else if (!a.deer && nh < 40) s.hares.setMatrixAt(nh++, m.compose(p, q, one));
+        }
+        s.deer.count = nd; s.hares.count = nh; s.deer.instanceMatrix.needsUpdate = s.hares.instanceMatrix.needsUpdate = true;
+      }
+      // The avalanche: big clouds of snow tumbling over each other right across the valley.
+      {
+        const a = this.ava;
+        let n = a && !a.out ? 90 : 0;
+        if (n) {
+          const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), sc = new T.Vector3(), cx = center(a.d);
+          let k = 0;
+          for (let i = 0; i < n; i++) {
+            const row = i % 3, x = cx + (hash(i, 7) * 2 - 1) * (FLOOR + 12), roll = this.t * (2 + hash(i, 8)) + i;
+            const d = a.d - row * 3.5 - hash(i, 9) * 2 + Math.sin(roll) * 0.8, r = (1.4 + hash(i, 10) * 1.6) * (1 + row * 0.25);
+            if (d < this.cam.d + r + 1) continue; // Nothing right in front of the camera, so it never fills the screen.
+            p.set(x, height(x, d) + r * 0.5 + row * 2 + Math.abs(Math.sin(roll * 0.7)) * 1.5, -d);
+            q.setFromEuler(e.set(roll * 0.3, roll * 0.2, 0));
+            s.avalanche.setMatrixAt(k++, m.compose(p, q, sc.set(r, r * 0.85, r)));
+          }
+          n = k;
+          s.avalanche.instanceMatrix.needsUpdate = true;
+        }
+        s.avalanche.count = n;
       }
 
       // The skier.
@@ -979,14 +1227,15 @@
         // Each flake has a fixed spot in a 70 m box that moves with you; the box scrolls as you ski through it.
         const P = s.flakes.geometry.attributes.position.array, c = this.cam, n = P.length / 3;
         for (let j = 0; j < n; j++) {
-          const fall = (this.t * (1.2 + hash(j, 4)) + hash(j, 5) * 30) % 30;
+          const fall = (this.fallT * (1.2 + hash(j, 4)) + hash(j, 5) * 30) % 30;
           const ahead = (((hash(j, 3) * 70 - this.d - this.t * 2) % 70) + 70) % 70;
-          P[j * 3] = c.x + hash(j, 1) * 60 - 30 + Math.sin(this.t * 0.7 + j) * 0.6;
+          P[j * 3] = c.x + ((((hash(j, 1) * 60 + this.windX * (0.7 + hash(j, 6) * 0.6)) % 60) + 60) % 60) - 30 + Math.sin(this.t * 0.7 + j) * 0.6;
           P[j * 3 + 1] = c.y + hash(j, 2) * 30 + 7 - fall - ahead * SLOPE;
           P[j * 3 + 2] = -(c.d + ahead - 4);
         }
         s.flakes.geometry.attributes.position.needsUpdate = true;
-        s.flakes.material.opacity = 0.8 - night * 0.3;
+        s.flakes.material.opacity = 0.8 - night * 0.3 + st * 0.2;
+        s.flakes.material.size = 0.12 + st * 0.1;
       }
 
       // Camera, the sun's shadow box, and things that follow the camera.
@@ -1012,6 +1261,15 @@
         ctx.fillStyle = 'rgba(20,24,40,0.45)'; ctx.fillText(str, x + 2, y + 2);
         ctx.fillStyle = color; ctx.fillText(str, x, y);
       };
+      // The avalanche close behind you: powder snow blowing up over the bottom of the screen.
+      if (this.ava && !this.ava.out) {
+        const k = clamp(1 - (this.d - this.ava.d) / 30, 0, 1);
+        if (k > 0) {
+          const g = ctx.createLinearGradient(0, H, 0, H * (1 - 0.75 * k));
+          g.addColorStop(0, 'rgba(244,247,252,' + (0.95 * k) + ')'); g.addColorStop(1, 'rgba(244,247,252,0)');
+          ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        }
+      }
       // Score and coins top left, the trick multiplier top right, speed big at the bottom.
       text('SCORE', 14, 12, 7, '#f4f6fb', 'left');
       text(this.score.toLocaleString('en-US'), 14, 24, 16, '#ffffff', 'left');
@@ -1022,6 +1280,20 @@
       text('x' + this.mult, W - 14, 14, 16, this.mult > 1 ? '#ffd75e' : '#ffffff', 'right');
       if (this.mult > 1) { ctx.fillStyle = 'rgba(255,215,94,0.9)'; ctx.fillRect(W - 14 - 46 * (this.multT / 7), 36, 46 * (this.multT / 7), 3); }
       if (this.sw && !this.crash) text('SWITCH', W - 14, 46, 8, '#7fe3ff', 'right');
+      // The special stretches: gates so far, the wind, or how close the avalanche is.
+      if (!this.crash) {
+        if (this.gateN) text('GATES ' + this.gateHit + '/' + this.gateI, 14, 70, 8, '#7fe3ff', 'left');
+        if (this.storm > 0.3) {
+          const k = Math.round(Math.abs(this.wind) / 2.2);
+          if (k) text('WIND ' + (this.wind > 0 ? '>'.repeat(k) : '<'.repeat(k)), 14, 70, 8, '#ffffff', 'left');
+        }
+        if (this.ava && !this.ava.out) {
+          const gap = Math.max(0, this.d - this.ava.d), w = 90 * clamp(gap / 60, 0, 1);
+          text('AVALANCHE ' + Math.round(gap) + ' M', 14, 70, 8, gap < 20 ? '#ff6b9a' : '#ffffff', 'left');
+          ctx.fillStyle = 'rgba(20,24,40,0.45)'; ctx.fillRect(14, 84, 90, 5);
+          ctx.fillStyle = gap < 20 ? '#ff6b9a' : '#ffd75e'; ctx.fillRect(14, 84, w, 5);
+        }
+      }
       text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, this.boost > cruise(this.d) * 0.08 && !this.crash ? '#7fe3ff' : '#ffd23f', 'center');
       text('KM/H', W / 2, H - 20, 7, '#f4f6fb', 'center');
       // Boosted: speed lines down both sides of the screen, and BOOST by the speed.
