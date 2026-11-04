@@ -29,6 +29,7 @@ const GAMES = {
   chase: { max: 60000 }, // 10 points a second plus coins and crashes, so about an hour of play.
   ski: { max: 100000 }, // About 40 minutes at top speed, plus coins and jumps.
   tower: { max: 500000 }, // Monster coins plus 10 x wave for each wave survived. Wave 60 is about 100000.
+  fishing: { max: 20000 }, // One 60-second round. A Lake Shark is about 1500 at most.
 };
 
 // The Daily Challenge game for a day (YYYY-MM-DD). This list must match DAILY in js/arcade.js.
