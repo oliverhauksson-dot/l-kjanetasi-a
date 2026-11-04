@@ -1,6 +1,6 @@
 # Pocket Arcade
 
-> Pocket Arcade (https://pocketarcade.net) is a free website with 13 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
+> Pocket Arcade (https://pocketarcade.net) is a free website with 14 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
 
 ## Games
 
@@ -17,10 +17,11 @@
 - [Cube Rush](https://pocketarcade.net/games/cube.html): Cube Rush is a one-button jumping game. The cube slides on its own; jump over spikes and onto blocks. Play Level 1, 2 or 3 (each about 50 seconds), or Endless, which keeps getting faster.
 - [Police Chase](https://pocketarcade.net/games/chase.html): Police Chase is a top-down driving game in a 3D city of skyscrapers and apartment buildings. Drive a getaway car round the city, grab coins and speed boosts, and don't let the police catch you. More police join the longer you last, and police cars that crash into each other stop for a while. They catch you 3 times and it's over.
 - [Endless Ski](https://pocketarcade.net/games/ski.html): Endless Ski is a 3D downhill skiing game. Race down a never-ending mountain valley, dodge trees and rocks, grab coins, catch air off kickers and rollers, and jump to throw 180s, 360s, front flips and backflips, or ride rails backwards. The sky goes from day to sunset to a night with northern lights.
+- [Fishing](https://pocketarcade.net/games/fishing.html): Fishing is a one-button fishing game on a lake. Cast your line, choose how deep the hook sinks, and press when the float goes under to hook the fish. Then reel it in while keeping the line tension in the green: too tight and the line snaps, too slack and the fish gets away. There are 8 kinds of fish, from minnows to a rare golden fish and a huge lake shark, and an old boot. A round lasts 60 seconds, from morning to sunset.
 
 ## Play a game directly
 
-Open `https://pocketarcade.net/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, blackjack, cube, chase, ski.
+Open `https://pocketarcade.net/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, blackjack, cube, chase, ski, fishing.
 
 ## Daily Challenge
 
