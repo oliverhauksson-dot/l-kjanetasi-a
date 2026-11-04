@@ -44,3 +44,55 @@ CREATE TABLE IF NOT EXISTS tries (
 );
 CREATE INDEX IF NOT EXISTS tries_by_who ON tries (who, at);
 CREATE INDEX IF NOT EXISTS tries_by_name ON tries (name, at);
+
+-- Chats. A player makes a chat and gets a 6-letter code; friends join with the code (at most 20 people in one chat).
+-- Every chat needs the player's name and PIN, so only people in the chat can read it.
+CREATE TABLE IF NOT EXISTS rooms (
+  code TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS members (
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (code, name)
+);
+CREATE INDEX IF NOT EXISTS members_by_name ON members (name);
+
+-- Chat messages. Old ones are deleted after 7 days.
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  text TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS messages_by_code ON messages (code, id);
+CREATE INDEX IF NOT EXISTS messages_by_name ON messages (name, at);
+
+-- Who a player has blocked. Their messages are hidden from that player in every chat.
+CREATE TABLE IF NOT EXISTS blocks (
+  name TEXT NOT NULL,
+  blocked TEXT NOT NULL,
+  PRIMARY KEY (name, blocked)
+);
+
+-- Reported messages, with a copy of the text, so you can read them in the D1 Console.
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL,
+  message INTEGER NOT NULL,
+  author TEXT NOT NULL,
+  text TEXT NOT NULL,
+  reporter TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+
+-- People the owner removed from a chat. They can't join that chat again with the code.
+CREATE TABLE IF NOT EXISTS kicked (
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (code, name)
+);
