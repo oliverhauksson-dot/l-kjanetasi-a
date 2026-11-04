@@ -9,7 +9,8 @@
    Names belong to one player. The first player to use a name claims it with a 4-digit PIN they pick; after that the name
    only works with that PIN (on any device). Two players can have the same PIN, since it always goes with the name.
    POST /api/name { name, pin }           -> { ok: true, name, created }   (claims a free name, or checks the PIN)
-   Scores also need the name's PIN, and a free name is claimed by its first score. */
+   Scores also need the name's PIN, and a free name is claimed by its first score.
+   POST /api/chat { action, name, pin, ... } -> chats with friends (see "Chat" further down). */
 
 // The best score a very good player can really reach in each game (for Memory, the fewest moves).
 // Anything outside is refused, so a faked "Snake: 400" can't take the top spot. Raise a number if real players hit it.
@@ -132,14 +133,204 @@ async function login(db, name, pin, who) {
   return { error: 'That name is taken. Type its PIN, or pick another name.', status: 403, taken: true };
 }
 
+/* ---------- Chat ----------
+   A player makes a chat and gets a 6-letter code. Friends join with the code, at most 20 people in one chat.
+   Everything goes through POST /api/chat { action, name, pin, ... } and needs the name's PIN, so only people
+   in a chat can read it. Actions:
+     list                       -> { chats: [{ code, title, owner, people }], blocked: [names] }
+     create { title }           -> { ok, code }
+     join { code }              -> { ok, code }
+     leave { code }             -> { ok }
+     read { code, after }       -> { chat: { code, title, owner, people: [names] }, messages: [{ id, name, text, at }] }
+     send { code, text, after } -> same as read, with the new message in it
+     remove { code, who }       -> { ok }   (only the person who made the chat)
+     block { who } / unblock { who } -> { ok, blocked }
+     report { code, id }        -> { ok }   (the message is copied to the reports table for you to read)
+   Messages from someone you blocked are hidden from you. Messages are deleted after 7 days. */
+const CHAT_MAX = 20; // People in one chat.
+const CHATS_EACH = 20; // Chats one player can be in.
+const MADE_EACH = 5; // Chats one player can make.
+const TEXT_MAX = 150; // Letters in one message.
+const SENDS = 15; // Messages one player can send...
+const SEND_WINDOW = 60 * 1000; // ...in one minute.
+const KEEP_CHAT = 7 * 864e5; // Messages are deleted after 7 days.
+const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No 0/O or 1/I, so codes are easy to read out loud.
+const CODE = /^[A-HJ-NP-Z2-9]{6}$/;
+// In chat, short words are only blocked as whole words, and a few that are fine to say are allowed (SEX is "six" in Icelandic).
+const CHAT_SHORT = SHORT.filter((w) => !['GAY', 'HOMO', 'JEW', 'POO', 'POOP', 'SEX'].includes(w));
+// Normal words that happen to have a blocked word inside them, like THORA (Þóra) or FAGNA.
+const FINE = /THORA|FAGN|FAGUR|FAGR|PEACOCK|HANCOCK|SCUNTHORPE|DICKENS/g;
+
+// Why a message can't be sent, or null when it's fine.
+function badText(text) {
+  if (/https?:|www\.|\.(com|net|org|is|io|gg|co|me|app|xyz|tk|ly|tv|be)\b/i.test(text)) return 'Links are not allowed in chat.';
+  if (/[^\s@]+@[^\s@]+\.[a-z]/i.test(text)) return 'Don\'t share email addresses in chat.';
+  if (/(\d[\s.-]*){7,}/.test(text)) return 'Don\'t share phone numbers in chat.';
+  const flat = text.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[ðÐ]/g, 'd').replace(/[þÞ]/g, 'th').replace(/[æÆ]/g, 'ae')
+    .toUpperCase().replace(/0/g, 'O').replace(/1/g, 'I').replace(/3/g, 'E').replace(/4/g, 'A').replace(/5/g, 'S').replace(/7/g, 'T').replace(/8/g, 'B').replace(/\$/g, 'S').replace(/@/g, 'A');
+  const words = flat.split(/[^A-Z*]+/).map((w) => w.replace(/\*/g, '')).filter(Boolean);
+  const joined = flat.replace(/[^A-Z]/g, ''); // Catches spaced out words like "F U C K".
+  if (words.some((w) => CHAT_SHORT.includes(w) || CHAT_SHORT.includes(w.replace(/S$/, '')) || LONG.some((l) => w.replace(FINE, '').includes(l)))) return 'That message has a word that isn\'t allowed.';
+  if (/(^|[^A-Z])([A-Z][^A-Z]){3,}/.test(flat + ' ') && LONG.some((l) => joined.includes(l))) return 'That message has a word that isn\'t allowed.';
+  return null;
+}
+
+function newCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return [...bytes].map((b) => LETTERS[b % LETTERS.length]).join('');
+}
+
+async function chatInfo(db, code) {
+  const room = await db.prepare('SELECT code, title, owner FROM rooms WHERE code = ?').bind(code).first();
+  if (!room) return null;
+  const { results } = await db.prepare('SELECT name FROM members WHERE code = ? ORDER BY at').bind(code).all();
+  return { code: room.code, title: room.title, owner: room.owner, people: results.map((r) => r.name) };
+}
+
+async function readChat(db, code, name, after) {
+  const chat = await chatInfo(db, code);
+  const from = Number.isInteger(after) && after > 0 ? after : 0;
+  const q = 'SELECT id, name, text, at FROM messages WHERE code = ? AND id > ? AND name NOT IN (SELECT blocked FROM blocks WHERE name = ?) ORDER BY id DESC LIMIT 60';
+  const { results } = await db.prepare(q).bind(code, from, name).all();
+  return { chat, messages: results.reverse() };
+}
+
+async function chat(db, body, who) {
+  const name = cleanName(body.name);
+  if (!name) return json({ error: 'Pick a name first.' }, 400);
+  const me = await login(db, name, body.pin, who);
+  if (me.error) return json({ error: me.error, taken: !!me.taken }, me.status);
+  const now = Date.now();
+  const code = String(body.code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const inChat = async () => code && !!(await db.prepare('SELECT 1 AS y FROM members WHERE code = ? AND name = ?').bind(code, name).first());
+  const notIn = () => json({ error: 'You are not in that chat anymore.', gone: true }, 403);
+
+  switch (body.action) {
+    case 'list': {
+      const { results } = await db.prepare(`SELECT r.code, r.title, r.owner, (SELECT COUNT(*) FROM members m2 WHERE m2.code = r.code) AS people,
+        (SELECT MAX(id) FROM messages g WHERE g.code = r.code) AS last
+        FROM members m JOIN rooms r ON r.code = m.code WHERE m.name = ? ORDER BY m.at`).bind(name).all();
+      const blocked = await db.prepare('SELECT blocked FROM blocks WHERE name = ? ORDER BY blocked').bind(name).all();
+      return json({ chats: results, blocked: blocked.results.map((r) => r.blocked) });
+    }
+    case 'create': {
+      const title = String(body.title ?? '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+      if (!title) return json({ error: 'Give the chat a name.' }, 400);
+      if (badText(title)) return json({ error: 'Please pick a different chat name.' }, 400);
+      const [made, mine] = await Promise.all([
+        db.prepare('SELECT COUNT(*) AS n FROM rooms WHERE owner = ?').bind(name).first(),
+        db.prepare('SELECT COUNT(*) AS n FROM members WHERE name = ?').bind(name).first(),
+      ]);
+      if (made.n >= MADE_EACH) return json({ error: 'You can make ' + MADE_EACH + ' chats. Leave one first.' }, 400);
+      if (mine.n >= CHATS_EACH) return json({ error: 'You are in ' + CHATS_EACH + ' chats already. Leave one first.' }, 400);
+      for (let i = 0; i < 5; i++) {
+        const c = newCode();
+        if (rude(c)) continue;
+        const r = await db.prepare('INSERT INTO rooms (code, title, owner, at) VALUES (?, ?, ?, ?) ON CONFLICT (code) DO NOTHING').bind(c, title, name, now).run();
+        if (!r.meta.changes) continue;
+        await db.prepare('INSERT INTO members (code, name, at) VALUES (?, ?, ?)').bind(c, name, now).run();
+        return json({ ok: true, code: c });
+      }
+      return json({ error: 'Could not make the chat. Try again.' }, 500);
+    }
+    case 'join': {
+      if (!CODE.test(code)) return json({ error: 'A chat code is 6 letters and numbers, like K7P2QX.' }, 400);
+      const room = await db.prepare('SELECT code FROM rooms WHERE code = ?').bind(code).first();
+      if (!room) {
+        // Wrong codes count like wrong PINs, so nobody can guess their way into a chat.
+        await db.prepare('INSERT INTO tries (who, name, at) VALUES (?, ?, ?)').bind(who, '#chat', now).run();
+        return json({ error: 'No chat has that code. Check it and try again.' }, 404);
+      }
+      if (await inChat()) return json({ ok: true, code });
+      const [kicked, people, mine] = await Promise.all([
+        db.prepare('SELECT 1 AS y FROM kicked WHERE code = ? AND name = ?').bind(code, name).first(),
+        db.prepare('SELECT COUNT(*) AS n FROM members WHERE code = ?').bind(code).first(),
+        db.prepare('SELECT COUNT(*) AS n FROM members WHERE name = ?').bind(name).first(),
+      ]);
+      if (kicked) return json({ error: 'You were removed from that chat, so you can\'t join it again.' }, 403);
+      if (people.n >= CHAT_MAX) return json({ error: 'That chat is full (' + CHAT_MAX + ' people).' }, 400);
+      if (mine.n >= CHATS_EACH) return json({ error: 'You are in ' + CHATS_EACH + ' chats already. Leave one first.' }, 400);
+      await db.prepare('INSERT INTO members (code, name, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').bind(code, name, now).run();
+      return json({ ok: true, code });
+    }
+    case 'leave': {
+      const room = await db.prepare('SELECT owner FROM rooms WHERE code = ?').bind(code).first();
+      await db.prepare('DELETE FROM members WHERE code = ? AND name = ?').bind(code, name).run();
+      if (room) {
+        const next = await db.prepare('SELECT name FROM members WHERE code = ? ORDER BY at LIMIT 1').bind(code).first();
+        if (!next) {
+          // The last person left: the chat and its messages are deleted.
+          await db.batch([
+            db.prepare('DELETE FROM rooms WHERE code = ?').bind(code),
+            db.prepare('DELETE FROM messages WHERE code = ?').bind(code),
+            db.prepare('DELETE FROM kicked WHERE code = ?').bind(code),
+          ]);
+        } else if (room.owner === name) {
+          await db.prepare('UPDATE rooms SET owner = ? WHERE code = ?').bind(next.name, code).run(); // The next person in charge.
+        }
+      }
+      return json({ ok: true });
+    }
+    case 'read': {
+      if (!(await inChat())) return notIn();
+      return json(await readChat(db, code, name, Number(body.after)));
+    }
+    case 'send': {
+      if (!(await inChat())) return notIn();
+      const text = String(body.text ?? '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!text) return json({ error: 'Type a message first.' }, 400);
+      if (text.length > TEXT_MAX) return json({ error: 'Messages can be ' + TEXT_MAX + ' letters at most.' }, 400);
+      const bad = badText(text);
+      if (bad) return json({ error: bad }, 400);
+      const { n } = await db.prepare('SELECT COUNT(*) AS n FROM messages WHERE name = ? AND at > ?').bind(name, now - SEND_WINDOW).first();
+      if (n >= SENDS) return json({ error: 'Slow down! Wait a minute before sending more.' }, 429);
+      await db.batch([
+        db.prepare('INSERT INTO messages (code, name, text, at) VALUES (?, ?, ?, ?)').bind(code, name, text, now),
+        db.prepare('DELETE FROM messages WHERE at < ?').bind(now - KEEP_CHAT),
+      ]);
+      return json(Object.assign({ ok: true }, await readChat(db, code, name, Number(body.after))));
+    }
+    case 'remove': {
+      const who2 = cleanName(body.who);
+      const room = await db.prepare('SELECT owner FROM rooms WHERE code = ?').bind(code).first();
+      if (!room || room.owner !== name) return json({ error: 'Only the person who made the chat can remove people.' }, 403);
+      if (!who2 || who2 === name) return json({ error: 'Pick someone to remove.' }, 400);
+      await db.batch([
+        db.prepare('DELETE FROM members WHERE code = ? AND name = ?').bind(code, who2),
+        db.prepare('INSERT INTO kicked (code, name) VALUES (?, ?) ON CONFLICT DO NOTHING').bind(code, who2),
+      ]);
+      return json({ ok: true });
+    }
+    case 'block':
+    case 'unblock': {
+      const who2 = cleanName(body.who);
+      if (!who2 || who2 === name) return json({ error: 'Pick someone to block.' }, 400);
+      if (body.action === 'block') await db.prepare('INSERT INTO blocks (name, blocked) VALUES (?, ?) ON CONFLICT DO NOTHING').bind(name, who2).run();
+      else await db.prepare('DELETE FROM blocks WHERE name = ? AND blocked = ?').bind(name, who2).run();
+      const { results } = await db.prepare('SELECT blocked FROM blocks WHERE name = ? ORDER BY blocked').bind(name).all();
+      return json({ ok: true, blocked: results.map((r) => r.blocked) });
+    }
+    case 'report': {
+      if (!(await inChat())) return notIn();
+      const msg = await db.prepare('SELECT id, name, text FROM messages WHERE id = ? AND code = ?').bind(Number(body.id), code).first();
+      if (!msg) return json({ error: 'That message is gone.' }, 404);
+      await db.prepare('INSERT INTO reports (code, message, author, text, reporter, at) VALUES (?, ?, ?, ?, ?, ?)').bind(code, msg.id, msg.name, msg.text, name, now).run();
+      return json({ ok: true });
+    }
+    default:
+      return json({ error: 'Bad request' }, 400);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const isDaily = url.pathname === '/api/daily';
     const isName = url.pathname === '/api/name';
-    if (url.pathname !== '/api/scores' && !isDaily && !isName) return json({ error: 'Not found' }, 404);
+    const isChat = url.pathname === '/api/chat';
+    if (url.pathname !== '/api/scores' && !isDaily && !isName && !isChat) return json({ error: 'Not found' }, 404);
 
-    if (request.method === 'GET' && !isName) {
+    if (request.method === 'GET' && !isName && !isChat) {
       const name = cleanName(url.searchParams.get('name'));
       if (isDaily) {
         const day = dayOf(Date.now());
@@ -158,6 +349,7 @@ export default {
     try { body = await request.json(); } catch (e) { return json({ error: 'Bad request' }, 400); }
     const now = Date.now();
     const who = await visitor(request);
+    if (isChat) return chat(env.DB, body, who);
     if (isName) {
       const name = cleanName(body.name);
       if (!name) return json({ error: 'Type a name first (A-Z, 0-9).' }, 400);

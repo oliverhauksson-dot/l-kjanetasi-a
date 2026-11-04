@@ -43,6 +43,34 @@ Until you do this, saving scores fails, so do it right after the new site goes l
 2. In the Worker, click **Edit code**, delete what's there, paste everything in `worker.js`, and click **Deploy**.
 3. Test it: on the front page, type a name and a PIN under the Daily Challenge and press **Save name**. It should say "Name saved!".
 
+## Chat update (one time)
+
+The front page now has a **💬 CHAT** button. A player makes a chat and gets a 6-letter code (like `K7P2QX`), and up to 20 friends join with that code. Everyone uses the same name and PIN as the leaderboard.
+Until you do this, the Chat page says "The leaderboard is offline right now".
+
+1. In the D1 **Console**, paste everything in `schema.sql` again and press **Execute**. (The old tables are left as they are; the new `rooms`, `members`, `messages`, `blocks`, `reports` and `kicked` tables are added.)
+2. In the Worker, click **Edit code**, delete what's there, paste everything in `worker.js`, and click **Deploy**.
+3. Test it: press **💬 CHAT** on the front page, make a chat, and send a message.
+
+How it stays safe:
+
+- Only people with the code can join, at most 20 in one chat. The person who made a chat (★) can remove people, and a removed person can't join again.
+- Messages with rude words, links, email addresses or phone numbers are refused. Messages are at most 150 letters, one player can send 15 a minute, and messages are deleted after 7 days.
+- Anyone can tap a message to **Block** that person (their messages are hidden for you) or **Report** it.
+
+## Reading reports
+
+In the D1 **Console**, run:
+
+```sql
+SELECT * FROM reports ORDER BY at DESC;
+```
+
+Each row has the chat code, who wrote the message (`author`), the message text, and who reported it.
+To remove a player from every chat: `DELETE FROM members WHERE name = 'BADNAME';`
+To delete a whole chat: `DELETE FROM rooms WHERE code = 'K7P2QX'; DELETE FROM members WHERE code = 'K7P2QX'; DELETE FROM messages WHERE code = 'K7P2QX';`
+To block a word, add it to `LONG` (blocked anywhere in a word) or `SHORT` (blocked only as a whole word) at the top of `worker.js`, then do step 2 above.
+
 ## Someone forgot their PIN
 
 In the D1 **Console**, run (with the right name):
