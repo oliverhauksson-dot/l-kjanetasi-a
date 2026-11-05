@@ -395,9 +395,9 @@
     const safe = el('p', 'csafe', 'Only chat with friends you know. Never share your real full name, address, school, phone number or passwords. If someone is mean, tap their message to block or report them, and tell an adult.');
     const list = el('div', 'clist'); list.append(el('p', 'cnote', 'Loading...'));
     const make = el('div', 'cform');
-    make.append(el('h4', null, 'MAKE A CHAT'));
+    make.append(el('h4', null, 'MAKE A CHAT'), el('p', 'cnote', 'You get a random 6-letter code. Send it to your friends so they can join.'));
     const mrow = el('div', 'lbname'), title = el('input'), mbtn = el('button', null, 'Make');
-    title.maxLength = 24; title.placeholder = 'CHAT NAME'; title.setAttribute('aria-label', 'Name for the new chat'); title.className = 'free';
+    title.maxLength = 24; title.placeholder = 'Name (optional)'; title.setAttribute('aria-label', 'Name for the new chat'); title.className = 'free';
     const mmsg = el('p', 'lbmsg'); mmsg.setAttribute('aria-live', 'polite');
     mrow.append(title, mbtn); make.append(mrow, mmsg);
     const join = el('div', 'cform');
@@ -411,8 +411,7 @@
     if (chatState.note) { const n = el('p', 'lbmsg', chatState.note); cbox.insertBefore(n, list); chatState.note = ''; }
 
     const doMake = async () => {
-      const t = title.value.trim();
-      if (!t) { mmsg.textContent = 'Give the chat a name.'; title.focus(); return; }
+      const t = title.value.trim() || player.get().name + '\'s chat'; // The name is optional.
       mbtn.disabled = true; mmsg.textContent = 'Making...';
       const { data, error } = await chatApi('create', { title: t });
       mbtn.disabled = false;
@@ -474,9 +473,14 @@
     const head = el('div', 'chead'); const h = el('h3', null, '...'); const sub = el('p', 'cnote');
     head.append(h, sub);
     top.append(back, head);
+    // The chat's code, big, so it's easy to read out or copy to friends.
+    const codeBox = el('div', 'ccode');
+    const codeText = el('span'); codeText.append(el('small', null, 'FRIEND CODE'), el('b', null, code));
+    const share = el('button', null, 'Copy');
+    codeBox.append(codeText, share);
     const tools = el('div', 'ctools');
-    const share = el('button', 'link', 'Copy code'), peopleBtn = el('button', 'link', 'People'), leave = el('button', 'link', 'Leave chat');
-    tools.append(share, peopleBtn, leave);
+    const peopleBtn = el('button', 'link', 'People'), leave = el('button', 'link', 'Leave chat');
+    tools.append(peopleBtn, leave);
     const people = el('div', 'cpeople'); people.hidden = true;
     const log = el('div', 'clog'); log.setAttribute('aria-live', 'polite'); log.append(el('p', 'cnote', 'Loading...'));
     const form = el('div', 'lbname csend');
@@ -484,7 +488,7 @@
     const send = el('button', null, 'Send');
     form.append(input, send);
     const msg = el('p', 'lbmsg'); msg.setAttribute('aria-live', 'polite');
-    cbox.append(top, tools, people, log, form, msg);
+    cbox.append(top, codeBox, tools, people, log, form, msg);
 
     share.addEventListener('click', async () => {
       const link = 'https://pocketarcade.net/?chat=' + code;
@@ -588,7 +592,7 @@
     function got(data, first) {
       chatState.chat = data.chat;
       h.textContent = data.chat.title;
-      sub.textContent = 'Code ' + data.chat.code + ' · ' + data.chat.people.length + '/20 people';
+      sub.textContent = data.chat.people.length + '/20 people';
       if (data.messages.length || first || !chatState.last) {
         const known = new Set(chatState.msgs.map((m) => m.id));
         chatState.msgs = chatState.msgs.concat(data.messages.filter((m) => !known.has(m.id))).slice(-200);

@@ -298,3 +298,12 @@ html.lock, html.lock body { overflow: hidden; }
 .cbox .cmsg p { margin: 0; color: var(--ink); font-size: 15px; overflow-wrap: anywhere; }
 .cact { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; }
 .cact .link { font-size: 12px; }
+.ccode {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 2px dashed var(--c); border-radius: 6px; padding: 10px 12px; background: var(--bg);
+}
+.ccode span { display: grid; gap: 6px; }
+.ccode small { font: 9px/1 var(--display); color: var(--muted); letter-spacing: 1px; }
+.ccode b { font: 20px/1 var(--display); color: var(--c); letter-spacing: 3px; }
+.ccode button { font: 10px/1 var(--display); color: #15111f; background: var(--c); border: 0; border-radius: 4px; padding: 10px 12px; cursor: pointer; }
+.ccode button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
