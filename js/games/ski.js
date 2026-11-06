@@ -26,7 +26,7 @@
   const RAILS = ['50-50', 'BOARDSLIDE', 'LIPSLIDE', 'NOSE PRESS', 'TAIL PRESS'], BOXES = ['BOX SLIDE', 'BOARDSLIDE', '50-50', 'NOSE PRESS'];
   const SIDEWAYS = ['BOARDSLIDE', 'LIPSLIDE', 'BOX SLIDE']; // Slides done with the skis across the rail.
   // A terrain park every PARK_EVERY metres: rails, boxes, kickers and side hits, with no trees on the run.
-  const PARK_AT = 420, PARK_EVERY = 900, PARK_LEN = 260;
+  const PARK_AT = 420, PARK_EVERY = 1150, PARK_LEN = 520;
   const inPark = (d) => d >= PARK_AT && (d - PARK_AT) % PARK_EVERY < PARK_LEN;
   function parkMask(d) { // 1 in a park, 0 outside, fading in between. The park's snow is smoothed flat.
     const k = d - PARK_AT, m = ((k % PARK_EVERY) + PARK_EVERY) % PARK_EVERY;
@@ -36,7 +36,7 @@
   }
   /* Between two parks there is a stretch with something special going on: a slalom, a frozen lake,
      a snowstorm or an avalanche. The order is shuffled every run. */
-  const ZONE_GAP = 350, ZONE_LEN = 380, ZONE_TYPES = ['slalom', 'lake', 'storm', 'avalanche'];
+  const ZONE_GAP = PARK_LEN + 90, ZONE_LEN = 380, ZONE_TYPES = ['slalom', 'lake', 'storm', 'avalanche'];
   let ZONES = ZONE_TYPES.slice();
   function zoneAt(d) { // { type, s (where it starts), k (which one) }, or null.
     const k = Math.floor((d - PARK_AT) / PARK_EVERY);
@@ -253,28 +253,70 @@
     return new T.CanvasTexture(c);
   }
 
+  /* Skins: the skier's outfit. Pick one with C, or tap the SKIN button. The choice is saved in the browser. */
+  const SKINS = [
+    { name: 'CLASSIC', jacket: '#ffb020', accent: '#1f2740', pants: '#1f2740', helmet: '#f4f6fa', lens: '#ff8a20', skis: '#ff5a36', gloves: '#1a1c24' },
+    { name: 'ARCTIC', jacket: '#e9f1fb', accent: '#2fb5ff', pants: '#2a3a5c', helmet: '#2fb5ff', lens: '#7fe3ff', skis: '#2fb5ff', gloves: '#2a3a5c' },
+    { name: 'LAVA', jacket: '#e8333a', accent: '#18181c', pants: '#18181c', helmet: '#18181c', lens: '#ffd23f', skis: '#ff6a2c', gloves: '#18181c' },
+    { name: 'NEON', jacket: '#b6ff3b', accent: '#ff2fd0', pants: '#5a2fd6', helmet: '#ff2fd0', lens: '#3bf0ff', skis: '#b6ff3b', gloves: '#5a2fd6' },
+    { name: 'FOREST', jacket: '#2f6b3a', accent: '#e3b04b', pants: '#6b5236', helmet: '#e3b04b', lens: '#6be36b', skis: '#e3b04b', gloves: '#3a2a1a' },
+    { name: 'GALAXY', jacket: '#3a1f78', accent: '#c39bff', pants: '#14112a', helmet: '#0d0b1c', lens: '#c39bff', skis: '#7a4dff', gloves: '#c39bff' },
+    { name: 'BUBBLEGUM', jacket: '#ff7ab8', accent: '#ffffff', pants: '#f4f6fa', helmet: '#ffffff', lens: '#ff2f8a', skis: '#ff7ab8', gloves: '#ffffff' },
+    { name: 'GOLD', jacket: '#ffd23f', accent: '#fff3c2', pants: '#2a2418', helmet: '#ffd23f', lens: '#ff4a4a', skis: '#ffd23f', gloves: '#2a2418', shiny: true },
+  ];
+  const CROWD = ['#e8333a', '#2a63e8', '#ffb020', '#2fd6a0', '#ff7ab8', '#7a4dff', '#f4f6fa'];
+  let skinIx = clamp(Arcade.store.get('ski-skin') || 0, 0, SKINS.length - 1);
+
   // The skier: simple shapes, posed every frame. Limbs are capsules stretched between two points.
   function makeSkier() {
     const mat = (c, r = 0.55) => new T.MeshStandardMaterial({ color: c, roughness: r });
-    const jacket = mat('#ffb020', 0.5), pants = mat('#1f2740', 0.7), dark = mat('#1a1c24', 0.4), white = mat('#f4f6fa', 0.35);
+    const M = {
+      jacket: mat('#ffb020', 0.5), accent: mat('#1f2740', 0.5), pants: mat('#1f2740', 0.7), helmet: mat('#f4f6fa', 0.3),
+      lens: new T.MeshStandardMaterial({ color: '#ff8a20', roughness: 0.1, metalness: 0.8, emissive: '#ff8a20', emissiveIntensity: 0.25 }),
+      skis: mat('#ff5a36', 0.35), gloves: mat('#1a1c24', 0.6),
+    };
+    const dark = mat('#1a1c24', 0.4), face = mat('#f1c7a5', 0.6), strap = mat('#15161c', 0.7), metal = mat('#c9cdd8', 0.3);
     // root follows your heading, flip tips you head over heels round your middle, turn is the spin, lean leans into turns.
     const root = new T.Group(), flip = new T.Group(), turn = new T.Group(), lean = new T.Group();
     root.add(flip); flip.add(turn); turn.add(lean); flip.position.y = 0.7; turn.position.y = -0.7;
-    const capsule = new T.CapsuleGeometry(1, 1, 4, 10);
-    const add = (geo, m) => { const o = new T.Mesh(geo, m); o.castShadow = true; lean.add(o); return o; };
+    const capsule = new T.CapsuleGeometry(1, 1, 4, 10), ball = new T.SphereGeometry(1, 12, 10);
+    const add = (geo, m, to = lean) => { const o = new T.Mesh(geo, m); o.castShadow = true; to.add(o); return o; };
+    // The head turns as one piece: face, helmet with a stripe, goggles with a strap round the back.
+    const head = new T.Group(); lean.add(head);
+    add(new T.SphereGeometry(0.135, 16, 12), face, head);
+    const shell = add(new T.SphereGeometry(0.158, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), M.helmet, head); shell.position.y = 0.025;
+    const stripe = add(new T.SphereGeometry(0.161, 18, 12, -0.12, 0.24, 0, Math.PI * 0.5), M.accent, head); stripe.position.y = 0.025; stripe.rotation.y = Math.PI;
+    const ring = add(new T.TorusGeometry(0.15, 0.018, 6, 24), strap, head); ring.rotation.x = Math.PI / 2; ring.position.y = 0.0;
+    const frame = add(new T.BoxGeometry(0.22, 0.085, 0.05), strap, head); frame.position.set(0, 0.0, -0.135);
+    const lens = add(new T.BoxGeometry(0.2, 0.068, 0.02), M.lens, head); lens.position.set(0, 0.0, -0.162);
+    const chin = add(new T.BoxGeometry(0.06, 0.03, 0.03), strap, head); chin.position.set(0, -0.12, -0.08);
     return {
-      root, flip, turn, lean,
-      skis: [0, 1].map(() => add(new T.BoxGeometry(0.11, 0.035, 1.75), mat('#ff5a36', 0.35))),
-      boots: [0, 1].map(() => add(new T.BoxGeometry(0.15, 0.2, 0.3), dark)),
-      shins: [0, 1].map(() => add(capsule, pants)),
-      thighs: [0, 1].map(() => add(capsule, pants)),
-      torso: add(capsule, jacket),
-      arms: [0, 1].map(() => add(capsule, jacket)),
-      poles: [0, 1].map(() => add(new T.CylinderGeometry(0.012, 0.012, 1, 5), mat('#c9cdd8', 0.3))),
-      head: add(new T.SphereGeometry(0.15, 16, 12), white),
-      goggles: add(new T.BoxGeometry(0.2, 0.07, 0.08), new T.MeshStandardMaterial({ color: '#ff8a20', roughness: 0.15, metalness: 0.6 })),
-      pack: add(new T.BoxGeometry(0.26, 0.3, 0.12), mat('#30343f', 0.8)),
+      root, flip, turn, lean, M, head,
+      skis: [0, 1].map(() => add(new T.BoxGeometry(0.11, 0.035, 1.75), M.skis)),
+      tips: [0, 1].map(() => add(new T.BoxGeometry(0.11, 0.035, 0.22), M.skis)),
+      boots: [0, 1].map(() => add(new T.BoxGeometry(0.16, 0.24, 0.32), dark)),
+      bindings: [0, 1].map(() => add(new T.BoxGeometry(0.13, 0.05, 0.42), metal)),
+      shins: [0, 1].map(() => add(capsule, M.pants)),
+      thighs: [0, 1].map(() => add(capsule, M.pants)),
+      knees: [0, 1].map(() => add(ball, M.accent)),
+      torso: add(capsule, M.jacket),
+      zip: add(capsule, M.accent),
+      collar: add(new T.CylinderGeometry(0.11, 0.13, 0.12, 12), M.jacket),
+      hem: add(new T.CylinderGeometry(0.225, 0.215, 0.08, 14), M.accent),
+      arms: [0, 1].map(() => add(capsule, M.jacket)),
+      cuffs: [0, 1].map(() => add(ball, M.accent)),
+      gloves: [0, 1].map(() => add(ball, M.gloves)),
+      poles: [0, 1].map(() => add(new T.CylinderGeometry(0.012, 0.012, 1, 5), metal)),
+      baskets: [0, 1].map(() => add(new T.CylinderGeometry(0.05, 0.05, 0.01, 10), dark)),
+      pack: add(new T.BoxGeometry(0.26, 0.3, 0.12), M.accent),
     };
+  }
+  function applySkin(sk, k) {
+    const c = SKINS[k];
+    for (const key of ['jacket', 'accent', 'pants', 'helmet', 'lens', 'skis', 'gloves']) sk.M[key].color.set(c[key]);
+    sk.M.lens.emissive.set(c.lens);
+    sk.M.jacket.metalness = sk.M.helmet.metalness = c.shiny ? 0.7 : 0;
+    sk.M.jacket.roughness = c.shiny ? 0.25 : 0.5;
   }
   const UP = { x: 0, y: 1, z: 0 };
   let vA = null, vB = null;
@@ -292,24 +334,34 @@
     for (let i = 0; i < 2; i++) {
       const s = i ? 1 : -1, x = s * 0.13;
       sk.skis[i].position.set(x, 0.02, -0.15);
-      sk.boots[i].position.set(x, 0.13, 0);
+      sk.tips[i].position.set(x, 0.06, -1.07); sk.tips[i].rotation.x = 0.45; // Turned-up tips.
+      sk.bindings[i].position.set(x, 0.05, 0);
+      sk.boots[i].position.set(x, 0.15, 0);
       const knee = V(x * 1.05, 0.5 - 0.14 * c, -0.2 - 0.12 * c);
-      placeLimb(sk.shins[i], V(x, 0.18, 0), knee, 0.09);
-      placeLimb(sk.thighs[i], knee, V(s * 0.1, hip.y, hip.z), 0.11);
+      placeLimb(sk.shins[i], V(x, 0.2, 0), knee, 0.095);
+      placeLimb(sk.thighs[i], knee, V(s * 0.1, hip.y, hip.z), 0.115);
+      sk.knees[i].position.set(knee.x, knee.y, knee.z - 0.05); sk.knees[i].scale.set(0.085, 0.07, 0.06);
     }
     const neck = V(0, hip.y + 0.55 * Math.cos(bend), hip.z - 0.55 * Math.sin(bend));
     placeLimb(sk.torso, hip, neck, 0.2);
+    // Zip down the front of the jacket, a collar and a coloured hem.
+    const fy = -Math.sin(bend), fz = -Math.cos(bend);
+    placeLimb(sk.zip, V(0, hip.y + 0.06 * Math.cos(bend) + fy * 0.17, hip.z - 0.06 * Math.sin(bend) + fz * 0.17), V(0, neck.y + fy * 0.17, neck.z + fz * 0.17), 0.035);
+    sk.collar.position.set(0, neck.y + 0.02, neck.z); sk.collar.rotation.x = -bend * 0.6;
+    sk.hem.position.set(0, hip.y + 0.05 * Math.cos(bend), hip.z - 0.05 * Math.sin(bend)); sk.hem.rotation.x = -bend;
     sk.pack.position.set(0, (hip.y + neck.y) / 2 + 0.05 * Math.cos(bend), (hip.z + neck.z) / 2 + 0.2); sk.pack.rotation.x = -bend;
-    sk.head.position.set(0, neck.y + 0.16, neck.z - 0.04);
-    sk.goggles.position.set(-0.13 * Math.sin(look), neck.y + 0.17, neck.z - 0.04 - 0.13 * Math.cos(look)); sk.goggles.rotation.y = look;
+    sk.head.position.set(0, neck.y + 0.17, neck.z - 0.04); sk.head.rotation.set(-bend * 0.25 + 0.15, look, 0);
     for (let i = 0; i < 2; i++) {
       const s = i ? 1 : -1, sh = V(s * 0.22, neck.y - 0.08, neck.z + 0.02);
       // A grab: one hand reaches down to its ski, the other goes up for balance.
       const reach = grab === s, up = armsUp || (grab && !reach);
       const hand = reach ? V(s * 0.17, 0.12, 0.05) : up ? V(s * 0.55, neck.y + 0.15, neck.z - 0.1) : V(s * 0.26, hip.y + 0.05 + 0.1 * c, hip.z - 0.42 - 0.05 * c);
-      placeLimb(sk.arms[i], sh, hand, 0.07);
+      placeLimb(sk.arms[i], sh, hand, 0.075);
       const tip = reach ? V(s * 0.3, 0.3, hand.z + 1.1) : up ? V(s * 0.75, hand.y - 0.6, hand.z + 0.9) : V(s * 0.35, 0.05, hand.z + 1.05);
       placeLimb(sk.poles[i], hand, tip, 0, true);
+      sk.gloves[i].position.set(hand.x, hand.y, hand.z); sk.gloves[i].scale.setScalar(0.065);
+      const k = 0.82; sk.cuffs[i].position.set(sh.x + (hand.x - sh.x) * k, sh.y + (hand.y - sh.y) * k, sh.z + (hand.z - sh.z) * k); sk.cuffs[i].scale.setScalar(0.08);
+      const b = 0.9; sk.baskets[i].position.set(hand.x + (tip.x - hand.x) * b, hand.y + (tip.y - hand.y) * b, hand.z + (tip.z - hand.z) * b); sk.baskets[i].quaternion.copy(sk.poles[i].quaternion);
     }
   }
 
@@ -413,7 +465,7 @@
       new T.MeshStandardMaterial({ color: '#ffc531', metalness: 0.35, roughness: 0.3, emissive: '#ff9d00', emissiveIntensity: 0.45 }), 400);
     for (const m of [trees, rocks, coins]) { m.count = 0; m.frustumCulled = false; m.castShadow = m !== coins; m.receiveShadow = true; scene.add(m); }
 
-    const skier = makeSkier(); scene.add(skier.root);
+    const skier = makeSkier(); scene.add(skier.root); applySkin(skier, skinIx);
     const blob = new T.Mesh(new T.CircleGeometry(0.7, 20).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#1b2140', transparent: true, opacity: 0.25, depthWrite: false }));
     scene.add(blob);
 
@@ -440,6 +492,20 @@
     const legMat = new T.MeshStandardMaterial({ color: '#4a5266', metalness: 0.4, roughness: 0.5 });
     const bannerMat = new T.MeshStandardMaterial({ map: bannerTexture(), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
     const bannerSide = new T.MeshStandardMaterial({ color: '#1b2350', roughness: 0.7 });
+    const megaMat = new T.MeshStandardMaterial({ map: bannerTexture('MEGA JUMP', '#5a1030'), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
+    const gapMat = new T.MeshStandardMaterial({ map: bannerTexture('GAP JUMP', '#0f4a3a'), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
+    const railMat2 = new T.MeshStandardMaterial({ color: '#2fd6a0', metalness: 0.6, roughness: 0.3 });
+    const wallMat = new T.MeshStandardMaterial({ color: '#b98a55', roughness: 0.8 });
+    // Fans along the park, cheering, and big speakers.
+    const crowdBody = new T.InstancedMesh(new T.CapsuleGeometry(0.28, 0.75, 3, 8), new T.MeshStandardMaterial({ roughness: 0.7 }), 400);
+    const crowdHead = new T.InstancedMesh(new T.SphereGeometry(0.17, 10, 8), new T.MeshStandardMaterial({ color: '#f1c7a5', roughness: 0.6 }), 400);
+    crowdBody.setColorAt(0, new T.Color('#ffffff'));
+    const speakers = new T.InstancedMesh(merged([
+      { geo: new T.BoxGeometry(1.1, 1.8, 0.9), m: at(0, 0.9, 0), color: '#1a1c24' },
+      { geo: new T.CylinderGeometry(0.34, 0.34, 0.05, 16).rotateX(Math.PI / 2), m: at(0, 1.25, -0.46), color: '#565a66' },
+      { geo: new T.CylinderGeometry(0.2, 0.2, 0.05, 16).rotateX(Math.PI / 2), m: at(0, 0.55, -0.46), color: '#565a66' },
+    ]), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), 40);
+    for (const m of [crowdBody, crowdHead, speakers]) { m.count = 0; m.frustumCulled = false; m.castShadow = true; scene.add(m); }
     // Little flags along both edges of a park.
     const flags = new T.InstancedMesh(merged([
       { geo: new T.CylinderGeometry(0.03, 0.03, 1.6, 5), m: at(0, 0.8, 0), color: '#ffffff' },
@@ -459,7 +525,7 @@
       new T.MeshStandardMaterial({ color: '#f3f6fb', roughness: 1, flatShading: true, transparent: true, opacity: 0.95 }), 90);
     avalanche.count = 0; avalanche.frustumCulled = false; scene.add(avalanche);
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, built: '' };
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, megaMat, gapMat, railMat2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, built: '' };
   }
   const TRACK = 90;
 
@@ -494,7 +560,19 @@
   }
   // Park features. Kickers are curved wedges of snow with a coloured lip, boxes are flat-topped slides,
   // and rails are metal bars on legs. All of them follow the slope.
-  const LIPS = { kick: '#ff6a2c', big: '#ff2f55', hip: '#2fb5ff' };
+  const LIPS = { kick: '#ff6a2c', big: '#ff2f55', hip: '#2fb5ff', mega: '#ffd23f', deck: '#ff2f55' };
+  // How high a kicker (or the landing deck of a gap jump) lifts the snow, s from 0 to 1 along it.
+  function lift(f, s) {
+    if (f.type === 'deck') return f.h * (s < 0.08 ? s / 0.08 : s > 0.75 ? (1 - s) / 0.25 : 1);
+    return f.h * s * s;
+  }
+  // The top of a rail or box at d. Rainbow rails arch up and down, kinked rails step down in the middle.
+  function bendAt(f, s) {
+    if (f.shape === 'rainbow') return 1.5 * Math.sin(Math.PI * s);
+    if (f.shape === 'kink') return s < 0.38 ? 0 : s < 0.55 ? -0.75 * (s - 0.38) / 0.17 : -0.75;
+    return 0;
+  }
+  const railTop = (f, d) => height(center(d) + f.u, d) + f.top + bendAt(f, clamp((d - f.d) / f.len, 0, 1));
   function wedge(f, lift, top, side, edge) {
     const pos = [], col = [], n = 10;
     const quad = (a, b, c, e, cl) => { for (const p of [a, b, c, a, c, e]) { pos.push(p[0], p[1], p[2]); col.push(cl.r, cl.g, cl.b); } };
@@ -519,23 +597,24 @@
     else if (f.type === 'rail') {
       m = new T.Group();
       const pts = [];
-      for (let s = 0; s <= f.len + 0.01; s += 1) { const d = f.d + s, x = center(d) + f.u; pts.push(new T.Vector3(x, height(x, d) + f.top - 0.05, -d)); }
-      const bar = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 2, 0.07, 8), S.railMat);
+      for (let s = 0; s <= f.len + 0.01; s += 0.5) { const d = f.d + s, x = center(d) + f.u; pts.push(new T.Vector3(x, railTop(f, d) - 0.05, -d)); }
+      const bar = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 2, 0.07, 8), f.shape ? S.railMat2 : S.railMat);
       bar.castShadow = true; m.add(bar);
       for (let s = 0.3; s < f.len; s += 3) {
-        const d = f.d + Math.min(s, f.len - 0.3), x = center(d) + f.u, y = height(x, d);
-        const leg = new T.Mesh(new T.CylinderGeometry(0.05, 0.07, f.top + 0.3, 6), S.legMat);
-        leg.position.set(x, y + (f.top - 0.3) / 2, -d); leg.castShadow = true; m.add(leg);
+        const d = f.d + Math.min(s, f.len - 0.3), x = center(d) + f.u, y = height(x, d), h = railTop(f, d) - y;
+        const leg = new T.Mesh(new T.CylinderGeometry(0.05, 0.07, h + 0.3, 6), S.legMat);
+        leg.position.set(x, y + (h - 0.3) / 2, -d); leg.castShadow = true; m.add(leg);
       }
     } else if (f.type === 'arch') {
       // The park's entrance: two posts and a banner right across the run.
       m = new T.Group();
-      const xl = center(f.d) - FLOOR + 1, xr = center(f.d) + FLOOR - 1, top = Math.max(height(xl, f.d), height(xr, f.d)) + 8;
+      const half = f.half || FLOOR - 1, xl = center(f.d) + f.u - half, xr = center(f.d) + f.u + half, top = Math.max(height(xl, f.d), height(xr, f.d)) + (f.tall || 8);
       for (const x of [xl, xr]) {
         const y0 = height(x, f.d) - 0.5, post = new T.Mesh(new T.CylinderGeometry(0.35, 0.4, top - y0 + 1.6, 10), S.legMat);
         post.position.set(x, (top + 1.6 + y0) / 2, -f.d); post.castShadow = true; m.add(post);
       }
-      const banner = new T.Mesh(new T.BoxGeometry(xr - xl, 3, 0.3), [S.bannerSide, S.bannerSide, S.bannerSide, S.bannerSide, S.bannerMat, S.bannerSide]);
+      const bm = f.text === 'MEGA JUMP' ? S.megaMat : f.text === 'GAP' ? S.gapMat : S.bannerMat;
+      const banner = new T.Mesh(new T.BoxGeometry(xr - xl, 3, 0.3), [S.bannerSide, S.bannerSide, S.bannerSide, S.bannerSide, bm, S.bannerSide]);
       banner.position.set((xl + xr) / 2, top, -f.d); banner.castShadow = true; m.add(banner);
     } else if (f.type === 'gate') {
       m = new T.Group();
@@ -545,17 +624,25 @@
         const pole = new T.Mesh(S.poleGeo, mat); pole.position.set(x, y + 0.95, -f.d); pole.castShadow = true; m.add(pole);
         const flag = new T.Mesh(S.panelGeo, mat); flag.scale.set(0.9, 1, 1); flag.position.set(x - s * 0.5, y + 1.55, -f.d); m.add(flag);
       }
-    } else m = wedge(f, (s) => f.h * s * s, new T.Color('#f7f9ff'), new T.Color('#9fb5dc'), new T.Color(LIPS[f.type]));
+    } else if (f.type === 'wall') {
+      // A wooden wall at the side of the run, leaning out a little, on two posts.
+      m = new T.Group();
+      const dm = f.d + f.len / 2, x = center(dm) + f.u, y = height(x, dm);
+      const wall = new T.Mesh(new T.BoxGeometry(0.18, 3.2, f.len), S.wallMat);
+      wall.position.set(x, y + 1.5, -dm); wall.rotation.z = -Math.sign(f.u) * 0.3; wall.rotation.x = Math.atan(SLOPE); wall.castShadow = wall.receiveShadow = true; m.add(wall);
+      const trim = new T.Mesh(new T.BoxGeometry(0.22, 0.25, f.len), S.railMat);
+      trim.position.set(x + Math.sign(f.u) * 0.45, y + 3.0, -dm); trim.rotation.x = Math.atan(SLOPE); m.add(trim);
+    } else m = wedge(f, (s) => lift(f, s), new T.Color('#f7f9ff'), new T.Color(f.type === 'deck' ? '#c4d3ee' : '#9fb5dc'), new T.Color(LIPS[f.type]));
     m.feat = f;
     return m;
   }
-  function bannerTexture() {
+  function bannerTexture(word = 'TERRAIN PARK', col = '#1b2350') {
     const c = document.createElement('canvas'); c.width = 1024; c.height = 64;
     const g = c.getContext('2d');
-    g.fillStyle = '#1b2350'; g.fillRect(0, 0, 1024, 64);
+    g.fillStyle = col; g.fillRect(0, 0, 1024, 64);
     g.fillStyle = '#ffd23f'; g.fillRect(0, 0, 1024, 5); g.fillRect(0, 59, 1024, 5);
     g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (let i = 0; i < 3; i++) { g.fillStyle = i === 1 ? '#ffffff' : '#7fe3ff'; g.fillText(i === 1 ? 'TERRAIN PARK' : '★  ★  ★', 170 + i * 342, 34); }
+    for (let i = 0; i < 3; i++) { g.fillStyle = i === 1 ? '#ffffff' : '#7fe3ff'; g.fillText(i === 1 ? word : '★  ★  ★', 170 + i * 342, 34); }
     const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 4;
     return t;
   }
@@ -570,7 +657,7 @@
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
     intro: 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
-    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
+    hint: '<kbd>C</kbd> changes your outfit. <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
 
     reset() {
       locked = true; // Keep the screen shape until the game is closed.
@@ -586,6 +673,8 @@
       this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
       this.cam = null; this.lean = 0; this.crouch = 0.3; this.mult = 1; this.multT = 0; this.grab = '';
+      this.skinT = 0; this.skinTap = false; this.fresh = false;
+      this.wallR = null; this.line = 0; this.lineT = 0; this.bestLine = 0; this.parkStart = 0;
       this.zoneK = -1; this.gateHit = 0; this.gateStreak = 0; this.gateN = 0; this.gateI = 0; this.ava = null;
       this.storm = 0; this.wind = 0; this.windX = 0; this.fallT = 0; this.ice = 0;
       this.gen();
@@ -600,8 +689,16 @@
       if (e.code === 'ArrowUp' || e.code === 'KeyW') this.up = down;
       if (e.code === 'ArrowDown' || e.code === 'KeyS') { this.down = down; if (down && !e.repeat) this.switchUp(); }
       if (e.code === 'Space' && down && !e.repeat) this.jump();
+      if (e.code === 'KeyC' && down && !e.repeat) this.nextSkin();
     },
-    press(down) { this.touch = down; if (!down) this.flipTouch = 0; },
+    nextSkin() {
+      skinIx = (skinIx + 1) % SKINS.length; Arcade.store.set('ski-skin', skinIx);
+      if (S) applySkin(S.skier, skinIx);
+      this.skinT = 1.5; snd.gate();
+    },
+    // The SKIN button, bottom right of the screen.
+    skinBtn() { return { x: W - 92, y: H - 34, w: 82, h: 24 }; },
+    press(down) { this.touch = down; this.fresh = down; if (!down) { this.flipTouch = 0; this.skinTap = false; } },
     // On a phone: swipe up to jump. In the air, swipe up (front flip) or down (back flip) and keep the finger down to keep flipping.
     swipe(dx, dy) {
       if (Math.abs(dy) < Math.abs(dx)) return;
@@ -609,7 +706,13 @@
       else if (dy < 0) this.jump();
       else this.switchUp();
     },
-    point(p) { this.tx = p.x; },
+    point(p) {
+      if (this.fresh) { // The first touch of a press: on the SKIN button it changes outfit instead of steering.
+        this.fresh = false; const b = this.skinBtn();
+        if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y - 6 && p.y <= b.y + b.h + 6) { this.skinTap = true; this.nextSkin(); }
+      }
+      this.tx = p.x;
+    },
 
     /* ----- The mountain ahead ----- */
     gen() {
@@ -673,34 +776,81 @@
       }
     },
     // A rail (with a small kicker to pop onto it) or a box you can ride straight onto.
-    rail(ch, d, u, len, box) {
-      const f = { type: box ? 'box' : 'rail', x: center(d) + u, u, d, len, top: box ? 0.55 : 0.95, w: box ? 0.6 : 0.12 };
+    rail(ch, d, u, len, box, shape) {
+      const f = { type: box ? 'box' : 'rail', x: center(d) + u, u, d, len, top: box ? 0.55 : shape === 'rainbow' ? 0.6 : 0.95, w: box ? 0.6 : 0.12, shape };
       if (!box) this.kicker(ch, d - 4.4, u, 4, 1.3, 1.05, 'kick', true);
       ch.feats.push(f);
-      for (let s = 3; s < len; s += 3) { const dd = d + s, x = center(dd) + u; ch.coins.push({ x, d: dd, y: height(x, dd) + f.top + 0.9 }); }
+      for (let s = 3; s < len; s += 3) { const dd = d + s, x = center(dd) + u; ch.coins.push({ x, d: dd, y: railTop(f, dd) + 0.9 }); }
+      return f;
     },
     // Fill the part of a terrain park that lies in this chunk: an entrance arch, flags along the edges,
     // rows of rails, boxes and kickers across the run, and side hits on both edges.
     park(ch, d0) {
       const here = (d) => d >= d0 && d < d0 + CL;
+      const LANES = [-13.5, -4.5, 4.5, 13.5];
+      // One random feature in a lane: rails of all shapes, boxes and kickers.
+      const any = (d, u, inner) => {
+        const r = Math.random();
+        if (r < 0.2) this.rail(ch, d, u, rand(13, 18), false);
+        else if (r < 0.36) this.rail(ch, d, u, rand(10, 14), true);
+        else if (r < 0.5) this.rail(ch, d, u, rand(14, 18), false, 'rainbow');
+        else if (r < 0.64) this.rail(ch, d, u, rand(15, 19), false, 'kink');
+        else if (r < 0.88 || !inner) this.kicker(ch, d, u, 7, 1.9, 2, 'kick');
+        else this.kicker(ch, d, u, 10, 2.6, 3.2, 'big');
+      };
       for (let k = Math.max(0, Math.floor((d0 - PARK_AT) / PARK_EVERY)); PARK_AT + k * PARK_EVERY < d0 + CL; k++) {
-        const p0 = PARK_AT + k * PARK_EVERY;
+        const p0 = PARK_AT + k * PARK_EVERY, at = (m) => here(p0 + m);
         if (p0 + PARK_LEN < d0) continue;
-        if (here(p0)) ch.feats.push({ type: 'arch', x: center(p0), u: 0, d: p0, len: 1 });
+        if (at(0)) ch.feats.push({ type: 'arch', x: center(p0), u: 0, d: p0, len: 1 });
         for (let d = p0; d <= p0 + PARK_LEN; d += 10) if (here(d)) for (const s of [-1, 1]) { const x = center(d) + s * (FLOOR - 1.5); ch.flags.push({ x, d, y: height(x, d), c: (d / 10 + (s > 0 ? 1 : 0)) % 2 }); }
-        for (let i = 0; i < 7; i++) {
-          const d = p0 + 24 + i * 33;
-          if (!here(d)) continue;
-          const lanes = [-9, 0, 9].sort(() => Math.random() - 0.5), n = i === 0 ? 3 : Math.random() < 0.5 ? 2 : 3;
-          for (let j = 0; j < n; j++) {
-            const u = lanes[j] + rand(-1.5, 1.5), r = Math.random();
-            if (r < 0.38) this.rail(ch, d, u, rand(13, 18), false);
-            else if (r < 0.62) this.rail(ch, d, u, rand(10, 14), true);
-            else if (r < 0.82 || lanes[j] !== 0) this.kicker(ch, d, u, 7, 1.9, 2, 'kick');
-            else this.kicker(ch, d, u, 10, 2.6, 3.2, 'big');
-          }
+        // 1. Rows across four lanes.
+        for (let i = 0; i < 6; i++) {
+          const m = 26 + i * 30;
+          if (!at(m)) continue;
+          const lanes = LANES.slice().sort(() => Math.random() - 0.5), n = i === 0 ? 4 : Math.random() < 0.5 ? 3 : 4;
+          for (let j = 0; j < n; j++) any(p0 + m, lanes[j] + rand(-1.2, 1.2), Math.abs(lanes[j]) < 9);
         }
-        for (let i = 0; i < 5; i++) { const d = p0 + 40 + i * 46; if (here(d)) this.kicker(ch, d, (i % 2 ? 1 : -1) * (FLOOR - 5.5), 6, 2.4, 1.7, 'hip'); }
+        // 2. The jump line: three kickers in a row, each bigger. A box line and rails beside it.
+        if (at(205)) this.kicker(ch, p0 + 205, -4.5, 7, 2.2, 2, 'kick');
+        if (at(243)) this.kicker(ch, p0 + 243, -4.5, 9, 2.6, 2.9, 'big');
+        if (at(287)) this.kicker(ch, p0 + 287, -4.5, 11, 3, 3.9, 'big');
+        for (let i = 0; i < 4; i++) if (at(208 + i * 19)) this.rail(ch, p0 + 208 + i * 19, -14, 12, true);
+        if (at(212)) this.rail(ch, p0 + 212, 5.5, 18, false, 'kink');
+        if (at(252)) this.rail(ch, p0 + 252, 5.5, 17, false, 'rainbow');
+        if (at(222)) this.rail(ch, p0 + 222, 14, 16, false);
+        if (at(268)) this.rail(ch, p0 + 268, 14, 14, true);
+        // 3. The gap jump: a kicker, a gap, then a landing deck. Come up short and you case it.
+        if (at(318)) {
+          this.kicker(ch, p0 + 318, 0, 8, 3, 2.4, 'kick', true);
+          const deck = { type: 'deck', x: center(p0 + 338) + 0, u: 0, d: p0 + 338, len: 16, w: 3.4, h: 2.6 };
+          ch.feats.push(deck);
+          ch.feats.push({ type: 'arch', x: center(p0 + 333), u: 0, d: p0 + 333, len: 1, half: 4.5, tall: 9, text: 'GAP' });
+        }
+        for (const m of [322, 356, 386]) if (at(m)) for (const u of [-14, 13.5]) any(p0 + m, u + rand(-1, 1), false);
+        // 4. The mega jump, with its own banner, a crowd and speakers.
+        if (at(418)) {
+          this.kicker(ch, p0 + 418, 0, 18, 5, 7, 'mega');
+          ch.feats.push({ type: 'arch', x: center(p0 + 408), u: 0, d: p0 + 408, len: 1, text: 'MEGA JUMP', tall: 11 });
+        }
+        // Hips and wall rides on the edges, in turn.
+        for (let i = 0; i < 8; i++) {
+          const m = 45 + i * 52, side = i % 2 ? 1 : -1;
+          if (!at(m) || (m > 300 && m < 350)) continue;
+          if (i % 4 < 2) this.kicker(ch, p0 + m, side * (FLOOR - 5.5), 6, 2.4, 1.7, 'hip');
+          else ch.feats.push({ type: 'wall', x: center(p0 + m + 8) + side * (FLOOR - 6), u: side * (FLOOR - 6), d: p0 + m, len: 16, w: 0.6 });
+        }
+        // Fans and speakers at the start and round the mega jump.
+        ch.crowd = ch.crowd || []; ch.speakers = ch.speakers || [];
+        for (const [a, b] of [[0, 40], [395, 490]]) {
+          for (let d = p0 + a; d < p0 + b; d += 1.4) {
+            if (!here(d)) continue;
+            for (const side of [-1, 1]) for (let r = 0; r < 2; r++) {
+              const x = center(d) + side * (FLOOR + 0.5 + r * 1.3 + rand(0, 0.6));
+              ch.crowd.push({ x, d: d + rand(-0.4, 0.4), y: height(x, d), c: (Math.random() * 7) | 0, ph: rand(0, 6.3) });
+            }
+          }
+          for (const m of [a + 6, b - 10]) if (at(m)) for (const side of [-1, 1]) { const x = center(p0 + m) + side * (FLOOR - 0.5); ch.speakers.push({ x, d: p0 + m, y: height(x, p0 + m), side }); }
+        }
       }
     },
     // Slalom gates through the slalom stretch, left and right in turn. Ski between the poles.
@@ -731,12 +881,18 @@
       let y = height(x, d);
       for (const ch of this.chunks) {
         if (d < ch.d0 - 20 || d > ch.d0 + CL + 20) continue;
-        for (const f of ch.feats) if (f.h && d >= f.d && d <= f.d + f.len && Math.abs(x - f.x) < f.w) { const s = (d - f.d) / f.len; y += f.h * s * s; }
+        for (const f of ch.feats) if (f.h && d >= f.d && d <= f.d + f.len && Math.abs(x - f.x) < f.w) y += lift(f, (d - f.d) / f.len);
       }
       return y;
     },
     kickerAt(x, d) {
       for (const ch of this.chunks) for (const f of ch.feats) if (f.h && d >= f.d - 0.5 && d <= f.d + f.len + 0.5 && Math.abs(x - f.x) < f.w + 0.3) return f;
+      return null;
+    },
+    wallAt(x, d) {
+      for (const ch of this.chunks) for (const f of ch.feats) if (f.type === 'wall' && d >= f.d && d <= f.d + f.len) {
+        const u = x - center(d); if (Math.sign(u) === Math.sign(f.u) && Math.abs(u) > Math.abs(f.u) - 0.5) return f;
+      }
       return null;
     },
     railAt(x, d) {
@@ -773,11 +929,18 @@
         return;
       }
       let dir = (this.right ? 1 : 0) - (this.left ? 1 : 0);
-      if (this.touch) dir = clamp((this.tx - W / 2) / 70, -1, 1);
+      if (this.touch && !this.skinTap) dir = clamp((this.tx - W / 2) / 70, -1, 1);
       const u = this.x - center(this.d), wall = Math.max(0, Math.abs(u) - FLOOR), maxSide = 5 + 0.3 * this.v;
       const bend = (center(this.d + 1) - center(this.d - 1)) / 2;
-      if (inPark(this.d) && !this.wasPark) this.pop('TERRAIN PARK', 'RAILS, BOXES AND JUMPS', '#7fe3ff');
+      if (inPark(this.d) && !this.wasPark) { this.pop('TERRAIN PARK', 'RAILS, BOXES AND JUMPS', '#7fe3ff'); this.parkStart = this.bonus; this.bestLine = 0; }
+      if (!inPark(this.d) && this.wasPark) {
+        this.endLine();
+        const pts = this.bonus - this.parkStart;
+        this.pop('PARK DONE', pts.toLocaleString('en-US') + ' PARK POINTS' + (this.bestLine >= 3 ? ', BEST LINE x' + this.bestLine : ''), '#ffd75e'); snd.trick();
+      }
       this.wasPark = inPark(this.d);
+      // A line: features one after another. It ends if you ride on the snow too long between them.
+      if (this.line && !this.air && !this.grind && !this.wallR && (this.lineT -= dt) <= 0) this.endLine();
       this.zones(dt);
       if (this.crash) return;
       this.bump = Math.max(0, (this.bump || 0) - dt);
@@ -786,12 +949,27 @@
       this.swapT = Math.max(0, this.swapT - dt);
       const pitch = (this.up ? 1 : 0) - (this.down ? 1 : 0) || this.flipTouch;
 
-      if (this.grind) {
+      if (this.wallR) {
+        // Riding up a wall and back down, then off it into the air.
+        const w = this.wallR, f = w.f, side = Math.sign(f.u);
+        w.t += dt; this.d += this.v * dt;
+        const k = Math.min(w.t / 0.85, 1), x = center(this.d) + f.u - side * 0.4;
+        this.x += (x - this.x) * Math.min(1, dt * 12); this.vx = 0;
+        this.y = height(this.x, this.d) + 2.4 * Math.sin(Math.PI * k);
+        if (Math.random() < dt * 30) this.puff(1, this.x, this.y, this.d, 1.5, 1);
+        if (k >= 1 || this.d > f.d + f.len) {
+          this.wallR = null; this.takeoff(false); this.fromRail = true; this.vy = 2.5; this.vx = -side * 7;
+          const pts = 300 * this.mult; this.bonus += pts;
+          this.pop('WALLRIDE', '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#7fe3ff');
+          this.speedUp(0.15); snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7; this.lineHit();
+          this.lastG = this.ground(this.x, this.d);
+        }
+      } else if (this.grind) {
         // Sliding along a rail or box. Hold left or right to hop off early.
         const f = this.grind;
         // A rail keeps your speed.
         this.d += this.v * dt;
-        const rx = center(this.d) + f.u, top = height(rx, this.d) + f.top;
+        const rx = center(this.d) + f.u, top = railTop(f, this.d);
         this.x += (rx - this.x) * Math.min(1, dt * 15); this.vx = 0;
         this.vy = (top - this.y) / dt; this.y = top; this.grindT += dt;
         if (this.sw) this.grindSwT += dt;
@@ -833,13 +1011,22 @@
         // Come down on a rail, or ride onto a box, and you start sliding. Ride into a rail and it knocks you aside.
         const f = this.railAt(this.x, this.d);
         if (f) {
-          const top = height(center(this.d) + f.u, this.d) + f.top, fromAbove = y0 >= top - (f.type === 'box' ? 0.75 : 0.3);
+          const top = railTop(f, this.d), fromAbove = y0 >= top - (f.type === 'box' ? 0.75 : 0.3);
           if (fromAbove && this.y <= top + 0.6) { this.startGrind(f, top); if (this.crash) return; } // Close enough: you pop onto it.
           else if (!fromAbove && f.type === 'rail' && Math.abs(this.x - center(this.d) - f.u) < 0.3 && this.y < top - 0.3 && !this.bump) {
             const side = this.x >= center(this.d) + f.u ? 1 : -1;
             this.x = center(this.d) + f.u + side * 0.45; this.vx = side * 6; this.v *= 0.7; this.bump = 0.5;
             this.mult = 1; this.multT = 0; this.shake = 0.6; snd.clank(); this.pop('OUCH!', 'SPEED LOST', '#ff6b9a');
           }
+        }
+        // Ride into a wall and you ride up it.
+        const wf = this.wallAt(this.x, this.d);
+        if (wf && this.y - height(this.x, this.d) < 1.5) { this.wallR = { f: wf, t: 0 }; this.air = false; this.spin = this.flip = 0; snd.clank(); }
+        // The landing deck of a gap jump: run into its front and you case it.
+        const deck = this.kickerAt(this.x, this.d);
+        if (deck && deck.type === 'deck' && !deck.hit && this.d - deck.d < 1.6 && y0 < height(this.x, this.d) + deck.h - 0.6) {
+          deck.hit = true; this.v *= 0.55; this.boost = 0; this.mult = 1; this.multT = 0; this.shake = 0.8; this.endLine();
+          this.pop('CASED IT!', 'SPEED LOST', '#ff6b9a'); snd.clank();
         }
         if (this.air && this.y <= g) { this.land(g, gv); if (this.crash) return; }
       }
@@ -989,6 +1176,12 @@
       this.grindBonus = Math.round(spinPts(Math.abs(n)) * 0.75) + 300 * Math.abs(nf) + (this.airT > 0.55 ? Math.round(this.airT * 100) : 0);
       this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.flipTouch = 0; snd.clank();
     },
+    // Another feature in a line, in the park.
+    lineHit() { if (!inPark(this.d)) return; this.line++; this.lineT = 3.5; this.bestLine = Math.max(this.bestLine, this.line); },
+    endLine() {
+      if (this.line >= 3) { const pts = 150 * this.line; this.bonus += pts; this.pop('LINE x' + this.line, '+' + pts, '#ffd75e'); }
+      this.line = 0; this.lineT = 0;
+    },
     // A speed boost: share is how much faster than cruising, the trick multiplier makes it bigger.
     speedUp(share) {
       const c = cruise(this.d), add = Math.min(share * (1 + 0.15 * (this.mult - 1)), BOOST_MAX - this.boost / c) * c;
@@ -1003,7 +1196,7 @@
       this.bonus += pts;
       this.pop(this.grindName + (sw ? ' + ' + sw + ' SWITCH-UP' + (sw > 1 ? 'S' : '') : ''), '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#7fe3ff');
       this.speedUp(Math.min(0.08 + 0.05 * Math.min(this.grindT, 3) + 0.05 * sw, 0.3));
-      snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
+      snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7; this.lineHit();
       this.grind = null; this.swapT = 0; this.takeoff(false); this.fromRail = true; this.vy += 3; this.vx = push;
       this.lastG = this.ground(this.x, this.d);
     },
@@ -1018,7 +1211,12 @@
       this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.ollie = false; this.flipTouch = 0; this.jumpCd = 0.08;
       if (offF > 0.22) return this.hit('the snow head first');
       if (Math.abs(n) % 2) this.sw = !this.sw;
-      if ((Math.abs(halves) > 0.3 && off > 0.28) || offF > 0.1) { this.v *= 0.85; this.boost = 0; this.mult = 1; this.multT = 0; this.pop('SKETCHY LANDING', 'SPEED LOST', '#ff6b9a'); snd.sketchy(); }
+      // Landed on top of a gap jump's deck: the gap is cleared.
+      const dk = this.kickerAt(this.x, this.d);
+      if (dk && dk.type === 'deck' && !dk.hit && !dk.done && t > 0.3) {
+        dk.done = true; const pts = 300 * this.mult; this.bonus += pts; this.pop('GAP CLEARED', '+' + pts, '#7fe3ff'); this.lineHit();
+      }
+      if ((Math.abs(halves) > 0.3 && off > 0.28) || offF > 0.1) { this.endLine(); this.v *= 0.85; this.boost = 0; this.mult = 1; this.multT = 0; this.pop('SKETCHY LANDING', 'SPEED LOST', '#ff6b9a'); snd.sketchy(); }
       else if (t > GRAB_T || n !== 0 || nf !== 0) {
         // A trick: a grab for big air, plus spins and flips. Tricks in a row raise the multiplier. Taking off backwards is worth half as much again.
         const trick = n !== 0 || nf !== 0;
@@ -1030,6 +1228,8 @@
         this.speedUp(trick ? Math.min(0.1 * Math.abs(n) + 0.2 * Math.abs(nf), 0.4) : 0.05);
         snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
         if (Math.abs(n) >= 3 || nf) this.puff(30, this.x, g + 0.2, this.d, 5, 4, this.sparks);
+        if (t > 0.5) this.lineHit();
+        if (t > 1.3) { const big = Math.round(t * 200) * this.mult; this.bonus += big; this.pop('MEGA AIR ' + t.toFixed(1) + 's', '+' + big, '#ff9d2f'); }
       }
       if (this.jumpQ > 0) this.jump(); // Space pressed just before touching down.
     },
@@ -1162,6 +1362,29 @@
         }
         s.deer.count = nd; s.hares.count = nh; s.deer.instanceMatrix.needsUpdate = s.hares.instanceMatrix.needsUpdate = true;
       }
+      // Fans cheering (jumping higher while you are in the air), and the speakers.
+      {
+        const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), one = new T.Vector3(1, 1, 1), col = new T.Color();
+        let n = 0, sp = 0;
+        const hype = this.air && inPark(this.d) ? 1 : 0.35;
+        for (const ch of this.chunks) {
+          for (const c of ch.crowd || []) {
+            if (n >= 400) break;
+            const hop = Math.max(0, Math.sin(this.t * 7 + c.ph)) * 0.35 * hype;
+            q.setFromEuler(e.set(0, Math.sign(c.x - center(c.d)) > 0 ? -Math.PI / 2 : Math.PI / 2, 0));
+            p.set(c.x, c.y + 0.65 + hop, -c.d); s.crowdBody.setMatrixAt(n, m.compose(p, q, one)); s.crowdBody.setColorAt(n, col.set(CROWD[c.c]));
+            p.y += 0.72; s.crowdHead.setMatrixAt(n, m.compose(p, q, one)); n++;
+          }
+          for (const o of ch.speakers || []) {
+            if (sp >= 40) break;
+            q.setFromEuler(e.set(0, o.side > 0 ? Math.PI / 2 : -Math.PI / 2, 0));
+            p.set(o.x, o.y, -o.d); s.speakers.setMatrixAt(sp++, m.compose(p, q, one));
+          }
+        }
+        s.crowdBody.count = s.crowdHead.count = n; s.speakers.count = sp;
+        s.crowdBody.instanceMatrix.needsUpdate = s.crowdHead.instanceMatrix.needsUpdate = s.speakers.instanceMatrix.needsUpdate = true;
+        if (s.crowdBody.instanceColor) s.crowdBody.instanceColor.needsUpdate = true;
+      }
       // The avalanche: big clouds of snow tumbling over each other right across the valley.
       {
         const a = this.ava;
@@ -1193,6 +1416,7 @@
       sk.flip.rotation.set(-this.flip, 0, 0);
       sk.turn.rotation.set(0, -this.spin - (this.sw ? Math.PI : 0) + swap * Math.PI - (this.grind && this.grindSide ? Math.PI / 2 : 0), 0);
       sk.lean.rotation.set(0, 0, -this.lean * 0.45);
+      if (this.wallR) sk.lean.rotation.z = Math.sign(this.wallR.f.u) * 1.1 * Math.sin(Math.PI * Math.min(this.wallR.t / 0.85, 1));
       if (this.crash) {
         const t = Math.min(this.crash.t * 1.5, 1);
         sk.lean.rotation.set(-t * 1.4, 0, (this.crash.vx >= 0 ? -1 : 1) * t * 1.2);
@@ -1280,6 +1504,7 @@
       text('x' + this.mult, W - 14, 14, 16, this.mult > 1 ? '#ffd75e' : '#ffffff', 'right');
       if (this.mult > 1) { ctx.fillStyle = 'rgba(255,215,94,0.9)'; ctx.fillRect(W - 14 - 46 * (this.multT / 7), 36, 46 * (this.multT / 7), 3); }
       if (this.sw && !this.crash) text('SWITCH', W - 14, 46, 8, '#7fe3ff', 'right');
+      if (this.line >= 2 && !this.crash) text('LINE x' + this.line, W - 14, 60, 8, '#ffd75e', 'right');
       // The special stretches: gates so far, the wind, or how close the avalanche is.
       if (!this.crash) {
         if (this.gateN) text('GATES ' + this.gateHit + '/' + this.gateI, 14, 70, 8, '#7fe3ff', 'left');
@@ -1308,6 +1533,14 @@
         }
         ctx.globalAlpha = 1;
         if (this.boostT > 0) text('BOOST!', W / 2, H - 82, 11, '#7fe3ff', 'center');
+      }
+      // The SKIN button, and the outfit's name for a moment after changing it.
+      {
+        const b = this.skinBtn(); this.skinT = Math.max(0, (this.skinT || 0) - 1 / 60);
+        ctx.fillStyle = 'rgba(20,24,40,0.45)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.fillStyle = SKINS[skinIx].jacket; ctx.fillRect(b.x + 6, b.y + 7, 10, 10);
+        text(coarse ? 'SKIN' : 'SKIN (C)', b.x + 22, b.y + 8, 7, '#ffffff', 'left');
+        if (this.skinT > 0) { ctx.globalAlpha = clamp(this.skinT * 2, 0, 1); text(SKINS[skinIx].name, W - 14, b.y - 18, 9, '#ffd75e', 'right'); ctx.globalAlpha = 1; }
       }
       if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
       if (this.grind) text(this.grindName + '  ' + this.grindT.toFixed(1) + 's', W / 2, H - 100, 11, '#7fe3ff', 'center');
