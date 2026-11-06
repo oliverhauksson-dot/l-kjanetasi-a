@@ -25,12 +25,16 @@
   const GRABS = ['INDY', 'TWEAKED INDY', 'METHOD', 'MUTE GRAB', 'STALEFISH', 'TAIL GRAB', 'JAPAN', 'MELON'];
   const RAILS = ['50-50', 'BOARDSLIDE', 'LIPSLIDE', 'NOSE PRESS', 'TAIL PRESS'], BOXES = ['BOX SLIDE', 'BOARDSLIDE', '50-50', 'NOSE PRESS'];
   const SIDEWAYS = ['BOARDSLIDE', 'LIPSLIDE', 'BOX SLIDE']; // Slides done with the skis across the rail.
-  // A terrain park every PARK_EVERY metres: rails, boxes, kickers and side hits, with no trees on the run.
-  const PARK_AT = 420, PARK_EVERY = 1150, PARK_LEN = 520;
-  const inPark = (d) => d >= PARK_AT && (d - PARK_AT) % PARK_EVERY < PARK_LEN;
+  /* PARK_ONLY: the whole run is one endless terrain park, built from sections one after another.
+     Set it to false to bring back the forest run, with a park every PARK_EVERY metres and the special
+     stretches (slalom, frozen lake, snowstorm, avalanche) in between. */
+  const PARK_ONLY = true;
+  const PARK_AT = PARK_ONLY ? 40 : 420, PARK_EVERY = 1150, PARK_LEN = 520;
+  const inPark = (d) => d >= PARK_AT && (PARK_ONLY || (d - PARK_AT) % PARK_EVERY < PARK_LEN);
   function parkMask(d) { // 1 in a park, 0 outside, fading in between. The park's snow is smoothed flat.
     const k = d - PARK_AT, m = ((k % PARK_EVERY) + PARK_EVERY) % PARK_EVERY;
     if (k < -40) return 0;
+    if (PARK_ONLY) return clamp(1 + k / 40, 0, 1);
     if (m < PARK_LEN) return 1;
     return clamp(1 - Math.min(m - PARK_LEN, PARK_EVERY - m) / 40, 0, 1);
   }
@@ -39,6 +43,7 @@
   const ZONE_GAP = PARK_LEN + 90, ZONE_LEN = 380, ZONE_TYPES = ['slalom', 'lake', 'storm', 'avalanche'];
   let ZONES = ZONE_TYPES.slice();
   function zoneAt(d) { // { type, s (where it starts), k (which one) }, or null.
+    if (!ZONES.length) return null;
     const k = Math.floor((d - PARK_AT) / PARK_EVERY);
     if (k < 0) return null;
     const s = PARK_AT + k * PARK_EVERY + ZONE_GAP;
@@ -46,6 +51,7 @@
   }
   // How much a zone of this type there is at d: 1 inside, 0 outside, fading over `fade` metres at both ends.
   function zoneMask(type, d, fade) {
+    if (!ZONES.length) return 0;
     const k = Math.floor((d + fade - PARK_AT) / PARK_EVERY);
     if (k < 0 || ZONES[k % ZONES.length] !== type) return 0;
     const s = PARK_AT + k * PARK_EVERY + ZONE_GAP;
@@ -59,6 +65,9 @@
     return m * clamp((LAKE_W - Math.abs(x - center(d))) / 3, 0, 1);
   }
   const GATE_W = 2.6; // Half the width of a slalom gate.
+  const FENCE = FLOOR - 0.9;
+  const LIFT_SPAN = 48;
+  const MAX_FANS = 700; // Metres between chairlift towers. // The safety fence along both sides of the park.
   const HIP_THROW = 7; // How hard a side hit throws you towards the middle.
   // Tricks. A jump (ollie) pops you up; spins count in half turns (180, 360, 540...), flips in full turns.
   const OLLIE = 7.8, SPIN_RATE = 11, FLIP_RATE = 12.5, GRAB_T = 0.75, SWAP_T = 0.35;
@@ -357,7 +366,7 @@
     try { renderer = new T.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' }); }
     catch (e) { failed = true; return; }
     vA = new T.Vector3(); vB = new T.Vector3();
-    STORM_DAY = new T.Color('#dde3ea'); STORM_NIGHT = new T.Color('#262d40');
+    STORM_DAY = new T.Color('#dde3ea'); STORM_NIGHT = new T.Color('#262d40'); LAMP_ON = new T.Color('#fff2c4');
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.toneMapping = T.NeutralToneMapping;
     const scene = new T.Scene();
@@ -479,20 +488,51 @@
     const legMat = new T.MeshStandardMaterial({ color: '#4a5266', metalness: 0.4, roughness: 0.5 });
     const bannerMat = new T.MeshStandardMaterial({ map: bannerTexture(), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
     const bannerSide = new T.MeshStandardMaterial({ color: '#1b2350', roughness: 0.7 });
-    const megaMat = new T.MeshStandardMaterial({ map: bannerTexture('MEGA JUMP', '#5a1030'), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
-    const gapMat = new T.MeshStandardMaterial({ map: bannerTexture('GAP JUMP', '#0f4a3a'), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
+    // One banner for each park section, each in its own colour.
+    const banners = {};
+    for (const [text, col] of [['RAIL GARDEN', '#14405a'], ['JUMP LINE', '#5a2a10'], ['GAP JUMP', '#0f4a3a'], ['WALL RIDE', '#4a2a5a'], ['MEGA JUMP', '#5a1030']])
+      banners[text] = new T.MeshStandardMaterial({ map: bannerTexture(text, col), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
     const railMat2 = new T.MeshStandardMaterial({ color: '#2fd6a0', metalness: 0.6, roughness: 0.3 });
     const wallMat = new T.MeshStandardMaterial({ color: '#b98a55', roughness: 0.8 });
     // Fans along the park, cheering, and big speakers.
-    const crowdBody = new T.InstancedMesh(new T.CapsuleGeometry(0.28, 0.75, 3, 8), new T.MeshStandardMaterial({ roughness: 0.7 }), 400);
-    const crowdHead = new T.InstancedMesh(new T.SphereGeometry(0.17, 10, 8), new T.MeshStandardMaterial({ color: '#f1c7a5', roughness: 0.6 }), 400);
+    const crowdBody = new T.InstancedMesh(new T.CapsuleGeometry(0.28, 0.75, 3, 8), new T.MeshStandardMaterial({ roughness: 0.7 }), MAX_FANS);
+    const crowdHead = new T.InstancedMesh(new T.SphereGeometry(0.17, 10, 8), new T.MeshStandardMaterial({ color: '#f1c7a5', roughness: 0.6 }), MAX_FANS);
     crowdBody.setColorAt(0, new T.Color('#ffffff'));
     const speakers = new T.InstancedMesh(merged([
       { geo: new T.BoxGeometry(1.1, 1.8, 0.9), m: at(0, 0.9, 0), color: '#1a1c24' },
       { geo: new T.CylinderGeometry(0.34, 0.34, 0.05, 16).rotateX(Math.PI / 2), m: at(0, 1.25, -0.46), color: '#565a66' },
       { geo: new T.CylinderGeometry(0.2, 0.2, 0.05, 16).rotateX(Math.PI / 2), m: at(0, 0.55, -0.46), color: '#565a66' },
     ]), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), 40);
-    for (const m of [crowdBody, crowdHead, speakers]) { m.count = 0; m.frustumCulled = false; m.castShadow = true; scene.add(m); }
+    // The safety fence: posts and orange netting along both edges.
+    const fencePosts = new T.InstancedMesh(new T.CylinderGeometry(0.05, 0.05, 1.3, 5).translate(0, 0.65, 0), new T.MeshStandardMaterial({ color: '#d9dde6', roughness: 0.5 }), 500);
+    const fenceNet = new T.InstancedMesh(new T.PlaneGeometry(1, 1.05).rotateY(Math.PI / 2).translate(0, 0.62, 0),
+      new T.MeshStandardMaterial({ color: '#ff6a1a', roughness: 0.8, side: T.DoubleSide, transparent: true, opacity: 0.88 }), 500);
+    // Light towers: a tall pole with a bank of lamps that glow at night.
+    const lightPoles = new T.InstancedMesh(merged([
+      { geo: new T.CylinderGeometry(0.14, 0.2, 10, 8), m: at(0, 5, 0), color: '#59606f' },
+      { geo: new T.BoxGeometry(0.15, 0.15, 2.2), m: at(0, 10, 0), color: '#59606f' },
+    ]), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4 }), 40);
+    const lampMat = new T.MeshBasicMaterial({ color: '#fff2c4' });
+    const lamps = new T.InstancedMesh(new T.BoxGeometry(0.5, 0.45, 2.2), lampMat, 40);
+    const glow = points(40, 9, '#ffe4a0', 0); glow.material.blending = T.AdditiveBlending;
+    // The chairlift: towers, two cables, and chairs that go round.
+    const towers = new T.InstancedMesh(merged([
+      { geo: new T.CylinderGeometry(0.3, 0.45, 12, 8), m: at(0, 6, 0), color: '#6d7484' },
+      { geo: new T.BoxGeometry(4.2, 0.3, 0.4), m: at(0, 12, 0), color: '#6d7484' },
+      { geo: new T.CylinderGeometry(0.35, 0.35, 0.2, 12).rotateZ(Math.PI / 2), m: at(-1.8, 11.8, 0), color: '#2a2d36' },
+      { geo: new T.CylinderGeometry(0.35, 0.35, 0.2, 12).rotateZ(Math.PI / 2), m: at(1.8, 11.8, 0), color: '#2a2d36' },
+    ]), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.3 }), 20);
+    const cables = new T.InstancedMesh(new T.CylinderGeometry(0.035, 0.035, 1, 4).rotateX(Math.PI / 2), new T.MeshStandardMaterial({ color: '#22252d', roughness: 0.6 }), 40);
+    const chairs = new T.InstancedMesh(merged([
+      { geo: new T.CylinderGeometry(0.03, 0.03, 2.2, 4), m: at(0, -1.1, 0), color: '#2a2d36' },
+      { geo: new T.BoxGeometry(1.5, 0.1, 0.55), m: at(0, -2.2, 0.05), color: '#3a6fd8' },
+      { geo: new T.BoxGeometry(1.5, 0.6, 0.08), m: at(0, -1.9, 0.33), color: '#3a6fd8' },
+      { geo: new T.BoxGeometry(1.5, 0.04, 0.04), m: at(0, -1.75, -0.3), color: '#2a2d36' },
+    ]), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), 120);
+    // DJ booth lights pulse to the beat.
+    const boothGlow = new T.MeshStandardMaterial({ color: '#ff2fd0', emissive: '#ff2fd0', emissiveIntensity: 1, roughness: 0.4 });
+    const boothGlow2 = new T.MeshStandardMaterial({ color: '#3bf0ff', emissive: '#3bf0ff', emissiveIntensity: 1, roughness: 0.4 });
+    for (const m of [crowdBody, crowdHead, speakers, fencePosts, fenceNet, lightPoles, lamps, towers, cables, chairs]) { m.count = 0; m.frustumCulled = false; m.castShadow = m !== lamps; scene.add(m); }
     // Little flags along both edges of a park.
     const flags = new T.InstancedMesh(merged([
       { geo: new T.CylinderGeometry(0.03, 0.03, 1.6, 5), m: at(0, 0.8, 0), color: '#ffffff' },
@@ -512,7 +552,7 @@
       new T.MeshStandardMaterial({ color: '#f3f6fb', roughness: 1, flatShading: true, transparent: true, opacity: 0.95 }), 90);
     avalanche.count = 0; avalanche.frustumCulled = false; scene.add(avalanche);
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, megaMat, gapMat, railMat2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, built: '' };
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, banners, railMat2, fencePosts, fenceNet, lightPoles, lampMat, lamps, glow, towers, cables, chairs, boothGlow, boothGlow2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, built: '' };
   }
   const TRACK = 90;
 
@@ -600,7 +640,7 @@
         const y0 = height(x, f.d) - 0.5, post = new T.Mesh(new T.CylinderGeometry(0.35, 0.4, top - y0 + 1.6, 10), S.legMat);
         post.position.set(x, (top + 1.6 + y0) / 2, -f.d); post.castShadow = true; m.add(post);
       }
-      const bm = f.text === 'MEGA JUMP' ? S.megaMat : f.text === 'GAP' ? S.gapMat : S.bannerMat;
+      const bm = S.banners[f.text] || S.bannerMat;
       const banner = new T.Mesh(new T.BoxGeometry(xr - xl, 3, 0.3), [S.bannerSide, S.bannerSide, S.bannerSide, S.bannerSide, bm, S.bannerSide]);
       banner.position.set((xl + xr) / 2, top, -f.d); banner.castShadow = true; m.add(banner);
     } else if (f.type === 'gate') {
@@ -611,6 +651,19 @@
         const pole = new T.Mesh(S.poleGeo, mat); pole.position.set(x, y + 0.95, -f.d); pole.castShadow = true; m.add(pole);
         const flag = new T.Mesh(S.panelGeo, mat); flag.scale.set(0.9, 1, 1); flag.position.set(x - s * 0.5, y + 1.55, -f.d); m.add(flag);
       }
+    } else if (f.type === 'booth') {
+      // The DJ booth: a stage with a deck, the DJ, speaker stacks and glowing light bars.
+      m = new T.Group();
+      const g = new T.Group(); g.position.set(f.x, f.y, -f.d); g.rotation.y = f.side > 0 ? Math.PI / 2 : -Math.PI / 2; m.add(g);
+      const box = (w, h, dp, mat, x, y, z) => { const o = new T.Mesh(new T.BoxGeometry(w, h, dp), mat); o.position.set(x, y, z); o.castShadow = true; g.add(o); return o; };
+      const dark = S.legMat;
+      box(6, 1.2, 4, S.bannerSide, 0, 0.6, 0);
+      box(3, 1, 0.8, dark, 0, 1.7, -0.6);
+      box(3, 0.12, 0.85, S.boothGlow, 0, 2.25, -0.6);
+      for (const x of [-2.6, 2.6]) { box(1.1, 2.6, 1, dark, x, 2.5, -0.4); box(0.2, 4, 0.2, dark, x, 3.2, 1.6); }
+      box(5.4, 0.25, 0.25, S.boothGlow2, 0, 5.2, 1.6);
+      const dj = new T.Mesh(new T.CapsuleGeometry(0.3, 0.8, 3, 8), S.boothGlow2); dj.position.set(0, 2.25, 0.3); g.add(dj);
+      const head = new T.Mesh(new T.SphereGeometry(0.2, 10, 8), S.legMat); head.position.set(0, 3.0, 0.3); g.add(head);
     } else if (f.type === 'wall') {
       // A wooden wall at the side of the run, leaning out a little, on two posts.
       m = new T.Group();
@@ -634,7 +687,7 @@
     return t;
   }
 
-  let STORM_DAY = null, STORM_NIGHT = null;
+  let STORM_DAY = null, STORM_NIGHT = null, LAMP_ON = null;
   function dropMesh(m) { S.scene.remove(m); m.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
 
   /* ---------- The game ---------- */
@@ -643,17 +696,19 @@
     get H() { return H; },
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
-    intro: 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
+    intro: PARK_ONLY ? 'Ski down an endless 3D terrain park. Grind rails, ride walls, clear the gap and fly off the mega jump. Land your tricks clean and stay off the fence.'
+      : 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
     hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
 
     reset() {
       locked = true; // Keep the screen shape until the game is closed.
       ph = ph.map(() => rand(0, 6.3)); SEED = (Math.random() * 1e9) | 0;
-      ZONES = ZONE_TYPES.slice().sort(() => Math.random() - 0.5);
+      ZONES = PARK_ONLY ? [] : ZONE_TYPES.slice().sort(() => Math.random() - 0.5);
       this.d = 0; this.x = center(0); this.vx = 0; this.v = 12;
       this.y = height(this.x, 0); this.vy = 0; this.air = false; this.airT = 0; this.spin = 0;
       this.flip = 0; this.sw = false; this.airSw = false; this.ollie = false; this.fromRail = false; this.jumpCd = 0; this.jumpQ = 0; this.boost = 0; this.boostT = 0;
       this.swapT = 0; this.look = 0; this.up = this.down = false; this.flipTouch = 0;
+      this.plan = []; this.planD = PARK_AT; this.order = []; this.sections = 0;
       this.chunks = []; this.nextChunk = -CL; this.nextRamp = 150; this.grind = null; this.grindT = 0; this.wasPark = false; this.bump = 0;
       this.lastG = this.y;
       this.parts = []; this.sparks = []; this.pops = []; this.trail = []; this.trailD = -1;
@@ -692,7 +747,7 @@
       while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
     },
     makeChunk(d0) {
-      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [], gates: [], animals: [] }, lv = level(d0);
+      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [], gates: [], animals: [], crowd: [], speakers: [], booths: [], fence: [], lights: [], towers: [] }, lv = level(d0);
       const put = (list, x, d, s) => list.push({ x, d, s, y: height(x, d), r: rand(0, 6.3), h: rand(0.9, 1.15) });
       // No kickers on the ice or in the middle of a slalom.
       const calm = (d) => { const z = zoneAt(d); return !z || (z.type !== 'lake' && z.type !== 'slalom'); };
@@ -709,6 +764,7 @@
       // Thick forest up the valley sides.
       for (let k = 0; k < 560; k++) {
         const u = (Math.random() < 0.5 ? -1 : 1) * (FLOOR - 3 + Math.pow(Math.random(), 1.15) * 120), d = d0 + rand(0, CL), x = center(d) + u;
+        if (inPark(d) && (Math.abs(u) < FLOOR + 7 || Math.abs(u + FLOOR + 15) < 5)) continue; // Room for the fans, the lights and the chairlift.
         if (normalAt(x, d)[1] > 0.45 && noise(x * 0.03, d * 0.03) > -0.45) put(ch.forest, x, d, rand(0.9, 2));
       }
       // Trees and rocks to dodge on the valley floor, more and more of them the further you go.
@@ -739,9 +795,9 @@
       const f = { type, x: center(d) + u, u, d, len, w, h };
       ch.feats.push(f);
       if (noCoins) return;
-      const v = cruise(d), lip = (2 * h) / len, side = type === 'hip' ? -Math.sign(u) * HIP_THROW : 0;
-      for (let s = 4; s < 60; s += 4) {
-        const up = h + (lip + SLOPE) * s - ((G / 2) * s * s) / (v * v); // Height above the snow where the jump goes.
+      const v = cruise(d), a = Math.min(2 * h / len - SLOPE, 0.5) + SLOPE, side = type === 'hip' ? -Math.sign(u) * HIP_THROW : 0;
+      for (let s = 4; s < 90; s += 4) {
+        const up = h + a * s - ((G / 2) * s * s) / (v * v); // Height above the snow where the jump goes.
         if (up < 0.8) break;
         const dd = d + len + s, x = center(dd) + u + (side * s) / v;
         ch.coins.push({ x, d: dd, y: height(x, dd) + up });
@@ -755,75 +811,115 @@
       for (let s = 3; s < len; s += 3) { const dd = d + s, x = center(dd) + u; ch.coins.push({ x, d: dd, y: railTop(f, dd) + 0.9 }); }
       return f;
     },
-    // Fill the part of a terrain park that lies in this chunk: an entrance arch, flags along the edges,
-    // rows of rails, boxes and kickers across the run, and side hits on both edges.
+    /* ----- The terrain park -----
+       The park is planned ahead as a list of things to build, section after section. Each chunk then
+       builds the things that lie in it. Sections: a rail garden, a jump line, a gap jump and wall rides,
+       in a shuffled order, with the mega jump after every round of them. */
     park(ch, d0) {
-      const here = (d) => d >= d0 && d < d0 + CL;
-      const LANES = [-13.5, -4.5, 4.5, 13.5];
-      // One random feature in a lane: rails of all shapes, boxes and kickers.
-      const any = (d, u, inner) => {
-        const r = Math.random();
+      while (this.planD < d0 + CL + 80) {
+        if (!inPark(this.planD)) { this.planD = PARK_AT + Math.ceil((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY; continue; }
+        if (!PARK_ONLY && this.planD > PARK_AT + Math.floor((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY + PARK_LEN - 150) { this.planD += 50; continue; }
+        if (!this.order.length) this.order = this.sections++ === 0 ? ['rails', 'jumps', 'gap', 'walls', 'mega'] : ['rails', 'jumps', 'gap', 'walls'].sort(() => Math.random() - 0.5).concat('mega');
+        this.planD += this['sec_' + this.order.shift()](this.planD) + 12;
+      }
+      const keep = [];
+      for (const it of this.plan) { if (it.d >= d0 && it.d < d0 + CL) it.make(ch); else if (it.d >= d0 + CL) keep.push(it); }
+      this.plan = keep;
+      if (inPark(d0) || inPark(d0 + CL)) this.parkEdges(ch, d0);
+    },
+    // Queue something to build at d.
+    at(d, make) { this.plan.push({ d, make }); },
+    // Roughly how far past the lip you come down off a kicker, at this point's cruising speed (a bit more with a boost).
+    landDist(len, h, d) {
+      const v = cruise(d) * 1.15, a = Math.min(2 * h / len - SLOPE, 0.5) + SLOPE;
+      return (a + Math.sqrt(a * a + 2 * G * h / (v * v))) * v * v / G * 0.8;
+    },
+    sign(d, text, opts) { this.at(d, (ch) => ch.feats.push(Object.assign({ type: 'arch', x: center(d), u: 0, d, len: 1, text }, opts))); },
+    fans(a, b, rows = 2) {
+      for (let d = a; d < b; d += 1.4) this.at(d, (ch) => {
+        for (const side of [-1, 1]) for (let r = 0; r < rows; r++) {
+          const x = center(d) + side * (FLOOR + 0.6 + r * 1.3 + rand(0, 0.6));
+          ch.crowd.push({ x, d: d + rand(-0.4, 0.4), y: height(x, d), c: (Math.random() * 7) | 0, ph: rand(0, 6.3) });
+        }
+      });
+    },
+    speakers(d) { this.at(d, (ch) => { for (const side of [-1, 1]) { const x = center(d) + side * (FLOOR + 1.6); ch.speakers.push({ x, d, y: height(x, d), side }); } }); },
+    // One random feature in a lane: rails of all shapes, boxes and kickers.
+    any(d, u, inner) {
+      const r = Math.random();
+      this.at(d, (ch) => {
         if (r < 0.2) this.rail(ch, d, u, rand(13, 18), false);
         else if (r < 0.36) this.rail(ch, d, u, rand(10, 14), true);
         else if (r < 0.5) this.rail(ch, d, u, rand(14, 18), false, 'rainbow');
         else if (r < 0.64) this.rail(ch, d, u, rand(15, 19), false, 'kink');
-        else if (r < 0.88 || !inner) this.kicker(ch, d, u, 7, 1.9, 2, 'kick');
-        else this.kicker(ch, d, u, 10, 2.6, 3.2, 'big');
-      };
-      for (let k = Math.max(0, Math.floor((d0 - PARK_AT) / PARK_EVERY)); PARK_AT + k * PARK_EVERY < d0 + CL; k++) {
-        const p0 = PARK_AT + k * PARK_EVERY, at = (m) => here(p0 + m);
-        if (p0 + PARK_LEN < d0) continue;
-        if (at(0)) ch.feats.push({ type: 'arch', x: center(p0), u: 0, d: p0, len: 1 });
-        for (let d = p0; d <= p0 + PARK_LEN; d += 10) if (here(d)) for (const s of [-1, 1]) { const x = center(d) + s * (FLOOR - 1.5); ch.flags.push({ x, d, y: height(x, d), c: (d / 10 + (s > 0 ? 1 : 0)) % 2 }); }
-        // 1. Rows across four lanes.
-        for (let i = 0; i < 6; i++) {
-          const m = 26 + i * 30;
-          if (!at(m)) continue;
-          const lanes = LANES.slice().sort(() => Math.random() - 0.5), n = i === 0 ? 4 : Math.random() < 0.5 ? 3 : 4;
-          for (let j = 0; j < n; j++) any(p0 + m, lanes[j] + rand(-1.2, 1.2), Math.abs(lanes[j]) < 9);
-        }
-        // 2. The jump line: three kickers in a row, each bigger. A box line and rails beside it.
-        if (at(205)) this.kicker(ch, p0 + 205, -4.5, 7, 2.2, 2, 'kick');
-        if (at(243)) this.kicker(ch, p0 + 243, -4.5, 9, 2.6, 2.9, 'big');
-        if (at(287)) this.kicker(ch, p0 + 287, -4.5, 11, 3, 3.9, 'big');
-        for (let i = 0; i < 4; i++) if (at(208 + i * 19)) this.rail(ch, p0 + 208 + i * 19, -14, 12, true);
-        if (at(212)) this.rail(ch, p0 + 212, 5.5, 18, false, 'kink');
-        if (at(252)) this.rail(ch, p0 + 252, 5.5, 17, false, 'rainbow');
-        if (at(222)) this.rail(ch, p0 + 222, 14, 16, false);
-        if (at(268)) this.rail(ch, p0 + 268, 14, 14, true);
-        // 3. The gap jump: a kicker, a gap, then a landing deck. Come up short and you case it.
-        if (at(318)) {
-          this.kicker(ch, p0 + 318, 0, 8, 3, 2.4, 'kick', true);
-          const deck = { type: 'deck', x: center(p0 + 338) + 0, u: 0, d: p0 + 338, len: 16, w: 3.4, h: 2.6 };
-          ch.feats.push(deck);
-          ch.feats.push({ type: 'arch', x: center(p0 + 333), u: 0, d: p0 + 333, len: 1, half: 4.5, tall: 9, text: 'GAP' });
-        }
-        for (const m of [322, 356, 386]) if (at(m)) for (const u of [-14, 13.5]) any(p0 + m, u + rand(-1, 1), false);
-        // 4. The mega jump, with its own banner, a crowd and speakers.
-        if (at(418)) {
-          this.kicker(ch, p0 + 418, 0, 18, 5, 7, 'mega');
-          ch.feats.push({ type: 'arch', x: center(p0 + 408), u: 0, d: p0 + 408, len: 1, text: 'MEGA JUMP', tall: 11 });
-        }
-        // Hips and wall rides on the edges, in turn.
-        for (let i = 0; i < 8; i++) {
-          const m = 45 + i * 52, side = i % 2 ? 1 : -1;
-          if (!at(m) || (m > 300 && m < 350)) continue;
-          if (i % 4 < 2) this.kicker(ch, p0 + m, side * (FLOOR - 5.5), 6, 2.4, 1.7, 'hip');
-          else ch.feats.push({ type: 'wall', x: center(p0 + m + 8) + side * (FLOOR - 6), u: side * (FLOOR - 6), d: p0 + m, len: 16, w: 0.6 });
-        }
-        // Fans and speakers at the start and round the mega jump.
-        ch.crowd = ch.crowd || []; ch.speakers = ch.speakers || [];
-        for (const [a, b] of [[0, 40], [395, 490]]) {
-          for (let d = p0 + a; d < p0 + b; d += 1.4) {
-            if (!here(d)) continue;
-            for (const side of [-1, 1]) for (let r = 0; r < 2; r++) {
-              const x = center(d) + side * (FLOOR + 0.5 + r * 1.3 + rand(0, 0.6));
-              ch.crowd.push({ x, d: d + rand(-0.4, 0.4), y: height(x, d), c: (Math.random() * 7) | 0, ph: rand(0, 6.3) });
-            }
-          }
-          for (const m of [a + 6, b - 10]) if (at(m)) for (const side of [-1, 1]) { const x = center(p0 + m) + side * (FLOOR - 0.5); ch.speakers.push({ x, d: p0 + m, y: height(x, p0 + m), side }); }
-        }
+        else if (r < 0.86 || !inner) this.kicker(ch, d, u, 8, 2.2, 2.6, 'kick');
+        else this.kicker(ch, d, u, 11, 2.8, 4.2, 'big');
+      });
+    },
+    hip(d, side) { this.at(d, (ch) => this.kicker(ch, d, side * (FLOOR - 5.5), 6, 2.4, 1.8, 'hip')); },
+    wallRide(d, side, len = 18) { this.at(d, (ch) => ch.feats.push({ type: 'wall', x: center(d + len / 2) + side * (FLOOR - 6), u: side * (FLOOR - 6), d, len, w: 0.6 })); },
+    // Rows of rails, boxes and kickers across four lanes, with side hits on the edges.
+    sec_rails(d) {
+      this.sign(d, d < 100 ? 'TERRAIN PARK' : 'RAIL GARDEN'); this.fans(d - 6, d + 8, 1); this.speakers(d + 4);
+      const LANES = [-13.5, -4.5, 4.5, 13.5];
+      for (let i = 0; i < 5; i++) {
+        const lanes = LANES.slice().sort(() => Math.random() - 0.5), n = i === 0 ? 4 : Math.random() < 0.5 ? 3 : 4;
+        for (let j = 0; j < n; j++) this.any(d + 22 + i * 30, lanes[j] + rand(-1.2, 1.2), Math.abs(lanes[j]) < 9);
       }
+      this.hip(d + 45, -1); this.hip(d + 105, 1);
+      return 175;
+    },
+    // A line of four kickers down the middle, each bigger than the last, spaced so you land before the next.
+    // A box line and rails run beside it.
+    sec_jumps(d) {
+      this.sign(d, 'JUMP LINE'); this.fans(d - 6, d + 8, 1);
+      let k = d + 20;
+      for (const [len, w, h, type] of [[8, 2.4, 2.6, 'kick'], [10, 2.8, 3.6, 'big'], [12, 3.2, 4.6, 'big'], [14, 3.6, 5.6, 'big']]) {
+        const at = k; this.at(at, (ch) => this.kicker(ch, at, 0, len, w, h, type));
+        k += len + this.landDist(len, h, at) + 22;
+      }
+      for (let b = d + 24; b < k - 30; b += 19) { const bd = b; this.at(bd, (ch) => this.rail(ch, bd, -14, 12, true)); }
+      for (let r = d + 30; r < k - 40; r += 42) { const rd = r, shape = ['kink', 'rainbow', ''][(Math.random() * 3) | 0] || undefined; this.at(rd, (ch) => this.rail(ch, rd, 13.5, 17, false, shape)); }
+      return k - d;
+    },
+    // The gap jump: a kicker, a gap, then a landing deck. Come up short and you crash into it.
+    sec_gap(d) {
+      this.sign(d, 'GAP JUMP', { half: 6, tall: 10 }); this.fans(d - 6, d + 8, 1);
+      const kd = d + 25, dd = kd + 9 + 15;
+      const deck = { type: 'deck', x: center(dd), u: 0, d: dd, len: 20, w: 3.8, h: 3.2 };
+      this.at(kd, (ch) => { this.kicker(ch, kd, 0, 9, 3.4, 3, 'kick', true); ch.feats[ch.feats.length - 1].deck = deck; });
+      this.at(dd, (ch) => ch.feats.push(deck));
+      this.any(d + 30, -14, false); this.any(d + 30, 13.5, false); this.any(d + 75, -14, false); this.any(d + 75, 13.5, false);
+      this.hip(d + 110, -1);
+      return dd + 20 + this.landDist(9, 3, kd) * 0.5 + 15 - d;
+    },
+    // Wall rides on both sides in turn, with big kickers and boxes down the middle.
+    sec_walls(d) {
+      this.sign(d, 'WALL RIDE'); this.fans(d - 6, d + 8, 1);
+      for (let i = 0; i < 4; i++) this.wallRide(d + 20 + i * 38, i % 2 ? 1 : -1);
+      for (const m of [40, 115]) { const kd = d + m; this.at(kd, (ch) => this.kicker(ch, kd, 0, 11, 2.8, 4.2, 'big')); }
+      for (const m of [30, 80, 130]) { const bd = d + m, u = (m / 10) % 2 ? 7 : -7; this.at(bd, (ch) => this.rail(ch, bd, u, 13, true)); }
+      return 175;
+    },
+    // The mega jump: ten metres high, with a big crowd, speakers and a DJ booth by the landing.
+    sec_mega(d) {
+      const kd = d + 32, len = 24, h = 10, land = kd + len + this.landDist(len, h, kd);
+      this.sign(d + 6, 'MEGA JUMP', { tall: 14 });
+      this.at(kd, (ch) => this.kicker(ch, kd, 0, len, 6, h, 'mega'));
+      this.fans(d, kd + 20, 2); this.fans(land - 40, land + 25, 3);
+      this.speakers(d + 4); this.speakers(kd + 12); this.speakers(land - 30); this.speakers(land + 10);
+      const bd = land - 12, side = Math.random() < 0.5 ? -1 : 1;
+      this.at(bd, (ch) => { const x = center(bd) + side * (FLOOR + 5); ch.feats.push({ type: 'booth', x, u: side * (FLOOR + 5), d: bd, len: 0, y: height(x, bd), side }); });
+      return land + 30 - d;
+    },
+    // Along both edges of the park: the safety fence with flags, light towers, and the chairlift up the left side.
+    parkEdges(ch, d0) {
+      for (let d = Math.ceil(d0 / 4) * 4; d < d0 + CL; d += 4) if (inPark(d)) for (const s of [-1, 1]) {
+        const x = center(d) + s * FENCE; ch.fence.push({ x, d, y: height(x, d), s });
+        if (d % 20 === 0) ch.flags.push({ x: x - s * 0.1, d, y: height(x, d) + 0.1, c: (d / 20 + (s > 0 ? 1 : 0)) % 2 });
+      }
+      for (let d = Math.ceil(d0 / 64) * 64; d < d0 + CL; d += 64) if (inPark(d)) { const s = (d / 64) % 2 ? 1 : -1, x = center(d) + s * (FLOOR + 3.2); ch.lights.push({ x, d, y: height(x, d), s }); }
+      for (let d = Math.ceil(d0 / LIFT_SPAN) * LIFT_SPAN; d < d0 + CL; d += LIFT_SPAN) { const x = center(d) - (FLOOR + 15); ch.towers.push({ x, d, y: height(x, d) }); }
     },
     // Slalom gates through the slalom stretch, left and right in turn. Ski between the poles.
     slalom(ch, d0) {
@@ -976,6 +1072,7 @@
             this.takeoff(false); if (this.vy > 2) snd.jump();
             const k = this.kickerAt(this.x, this.d - this.v * dt);
             if (k && k.type === 'hip') this.vx = -Math.sign(k.u) * HIP_THROW;
+            this.gapDeck = k && k.deck ? k.deck : null; // Off the gap jump's kicker: is the deck cleared?
           }
           else { this.y = g; if (gv < this.v * 0.5) this.vy = gv; } // Stepping up the side of a kicker is not a launch.
         }
@@ -994,11 +1091,10 @@
         // Ride into a wall and you ride up it.
         const wf = this.wallAt(this.x, this.d);
         if (wf && this.y - height(this.x, this.d) < 1.5) { this.wallR = { f: wf, t: 0 }; this.air = false; this.spin = this.flip = 0; snd.clank(); }
-        // The landing deck of a gap jump: run into its front and you case it.
+        // The landing deck of a gap jump: come up short into its front and you crash.
         const deck = this.kickerAt(this.x, this.d);
         if (deck && deck.type === 'deck' && !deck.hit && this.d - deck.d < 1.6 && y0 < height(this.x, this.d) + deck.h - 0.6) {
-          deck.hit = true; this.v *= 0.55; this.boost = 0; this.mult = 1; this.multT = 0; this.shake = 0.8; this.endLine();
-          this.pop('CASED IT!', 'SPEED LOST', '#ff6b9a'); snd.clank();
+          deck.hit = true; return this.hit('the gap deck', 'You came up short on the gap jump');
         }
         if (this.air && this.y <= g) { this.land(g, gv); if (this.crash) return; }
       }
@@ -1015,6 +1111,8 @@
         for (const o of ch.trees) if (Math.abs(o.d - this.d) < 0.7 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.75 * o.s + 0.3 && this.y - o.y < 4.5 * o.s) return this.hit('a tree');
         for (const o of ch.rocks) if (Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3 && this.y - o.y < 0.8 * o.s) return this.hit('a rock');
       }
+      // The safety fence along the edges of the park.
+      if (inPark(this.d) && Math.abs(this.x - center(this.d)) > FENCE - 0.35) return this.hit('the safety fence');
       if (this.critters(dt)) return;
       this.gates();
 
@@ -1184,7 +1282,8 @@
       if (offF > 0.22) return this.hit('the snow head first');
       if (Math.abs(n) % 2) this.sw = !this.sw;
       // Landed on top of a gap jump's deck: the gap is cleared.
-      const dk = this.kickerAt(this.x, this.d);
+      const dk = this.gapDeck && this.d > this.gapDeck.d + 1 ? this.gapDeck : this.kickerAt(this.x, this.d);
+      this.gapDeck = null;
       if (dk && dk.type === 'deck' && !dk.hit && !dk.done && t > 0.3) {
         dk.done = true; const pts = 300 * this.mult; this.bonus += pts; this.pop('GAP CLEARED', '+' + pts, '#7fe3ff'); this.lineHit();
       }
@@ -1305,6 +1404,7 @@
         const flagCol = [new T.Color('#ff6a2c'), new T.Color('#2fb5ff')];
         for (const ch of this.chunks) for (const o of ch.flags) { if (fl >= 200) break; p.set(o.x, o.y - 0.1, -o.d); s.flags.setMatrixAt(fl, m.compose(p, q.identity(), sc.set(1, 1, 1))); s.flags.setColorAt(fl++, flagCol[o.c]); }
         s.flags.count = fl; s.flags.instanceMatrix.needsUpdate = true; if (s.flags.instanceColor) s.flags.instanceColor.needsUpdate = true;
+        this.buildEdges(s);
         s.trees.count = n; s.rocks.count = r; s.forest.count = f; s.trees.instanceMatrix.needsUpdate = s.rocks.instanceMatrix.needsUpdate = s.forest.instanceMatrix.needsUpdate = true;
         const all = this.chunks.flatMap((c) => c.feats);
         s.feats = s.feats.filter((mesh) => { if (all.includes(mesh.feat)) return true; dropMesh(mesh); return false; });
@@ -1334,6 +1434,12 @@
         }
         s.deer.count = nd; s.hares.count = nh; s.deer.instanceMatrix.needsUpdate = s.hares.instanceMatrix.needsUpdate = true;
       }
+      // Chairs going round the chairlift, lamps that light up at night, and the DJ booth's lights.
+      this.moveLift(s);
+      s.lampMat.color.set('#6a6658').lerp(LAMP_ON, clamp(night * 1.3 - 0.2, 0, 1));
+      s.glow.material.opacity = clamp(night * 1.3 - 0.3, 0, 0.8);
+      const beat = 0.6 + 0.6 * Math.max(0, Math.sin(this.t * 8.4)), beat2 = 0.6 + 0.6 * Math.max(0, Math.sin(this.t * 8.4 + 3.1));
+      s.boothGlow.emissiveIntensity = beat; s.boothGlow2.emissiveIntensity = beat2;
       // Fans cheering (jumping higher while you are in the air), and the speakers.
       {
         const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), one = new T.Vector3(1, 1, 1), col = new T.Color();
@@ -1341,7 +1447,7 @@
         const hype = this.air && inPark(this.d) ? 1 : 0.35;
         for (const ch of this.chunks) {
           for (const c of ch.crowd || []) {
-            if (n >= 400) break;
+            if (n >= MAX_FANS) break;
             const hop = Math.max(0, Math.sin(this.t * 7 + c.ph)) * 0.35 * hype;
             q.setFromEuler(e.set(0, Math.sign(c.x - center(c.d)) > 0 ? -Math.PI / 2 : Math.PI / 2, 0));
             p.set(c.x, c.y + 0.65 + hop, -c.d); s.crowdBody.setMatrixAt(n, m.compose(p, q, one)); s.crowdBody.setColorAt(n, col.set(CROWD[c.c]));
@@ -1448,6 +1554,67 @@
       s.sky.position.copy(cam.position); s.stars.position.copy(cam.position); s.aurora.position.copy(cam.position);
       const pd = this.d + 470, pc = center(pd); s.peaks.position.set(pc, height(pc, pd) - 60, -pd);
       s.renderer.render(scene, cam);
+    },
+
+    // The fence, light towers and chairlift towers and cables only change when the chunks do.
+    buildEdges(s) {
+      const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(0, 0, 0, 'YXZ'), p = new T.Vector3(), sc = new T.Vector3(), one = new T.Vector3(1, 1, 1);
+      let np = 0, nn = 0, nl = 0, nt = 0, nc = 0;
+      const pts = [], towers = [];
+      for (const ch of this.chunks) {
+        for (const f of ch.fence) {
+          if (np >= 500) break;
+          p.set(f.x, f.y, -f.d); s.fencePosts.setMatrixAt(np++, m.compose(p, q.identity(), one));
+          // A net panel from this post to the next one down the hill.
+          const d2 = f.d + 4, x2 = center(d2) + f.s * FENCE, y2 = height(x2, d2);
+          if (!inPark(d2)) continue;
+          const dx = x2 - f.x, dy = y2 - f.y, len = Math.hypot(dx, dy, 4);
+          p.set((f.x + x2) / 2, (f.y + y2) / 2, -(f.d + 2));
+          q.setFromEuler(e.set(Math.atan2(dy, Math.hypot(dx, 4)), Math.atan2(-dx, 4), 0));
+          s.fenceNet.setMatrixAt(nn++, m.compose(p, q, sc.set(1, 1, len)));
+        }
+        for (const l of ch.lights) {
+          if (nl >= 40) break;
+          q.setFromEuler(e.set(0, 0, 0)); p.set(l.x, l.y, -l.d); s.lightPoles.setMatrixAt(nl, m.compose(p, q, one));
+          p.set(l.x - l.s * 0.3, l.y + 9.7, -l.d); s.lamps.setMatrixAt(nl, m.compose(p, q, one));
+          pts.push(l.x - l.s * 0.6, l.y + 9.6, -l.d); nl++;
+        }
+        for (const t of ch.towers) towers.push(t);
+      }
+      for (const t of towers) { if (nt >= 20) break; p.set(t.x, t.y, -t.d); s.towers.setMatrixAt(nt++, m.compose(p, q.identity(), one)); }
+      // Cables from tower to tower, on both sides of each tower.
+      this.lift = [];
+      for (let i = 0; i + 1 < towers.length && nc < 38; i++) {
+        const a = towers[i], b = towers[i + 1];
+        for (const side of [-1, 1]) {
+          const ax = a.x + side * 1.8, bx = b.x + side * 1.8, ay = a.y + 11.8, by = b.y + 11.8;
+          const len = Math.hypot(bx - ax, by - ay, b.d - a.d);
+          p.set((ax + bx) / 2, (ay + by) / 2, -(a.d + b.d) / 2);
+          q.setFromEuler(e.set(Math.atan2(by - ay, Math.hypot(bx - ax, b.d - a.d)), Math.atan2(-(bx - ax), b.d - a.d), 0));
+          s.cables.setMatrixAt(nc++, m.compose(p, q, sc.set(1, 1, len)));
+          this.lift.push({ ax, ay, ad: a.d, bx, by, bd: b.d, side });
+        }
+      }
+      s.fencePosts.count = np; s.fenceNet.count = nn; s.lightPoles.count = s.lamps.count = nl; s.towers.count = nt; s.cables.count = nc;
+      for (const o of [s.fencePosts, s.fenceNet, s.lightPoles, s.lamps, s.towers, s.cables]) o.instanceMatrix.needsUpdate = true;
+      const G2 = s.glow.geometry, P = G2.attributes.position.array;
+      P.fill(0); P.set(pts.slice(0, P.length)); G2.setDrawRange(0, pts.length / 3); G2.attributes.position.needsUpdate = true;
+    },
+    // Chairs ride up one cable (towards the top of the mountain) and down the other.
+    moveLift(s) {
+      const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), one = new T.Vector3(1, 1, 1);
+      let n = 0;
+      for (const c of this.lift || []) {
+        const span = c.bd - c.ad, gap = span / 4;
+        for (let k = 0; k < 4 && n < 120; k++) {
+          const off = ((((k * gap + c.side * this.t * 3) % span) + span) % span) / span;
+          const sag = Math.sin(Math.PI * off) * 0.8;
+          p.set(c.ax + (c.bx - c.ax) * off, c.ay + (c.by - c.ay) * off - sag, -(c.ad + span * off));
+          q.setFromEuler(e.set(0, c.side > 0 ? Math.PI : 0, Math.sin(this.t * 1.3 + k + c.ad) * 0.04));
+          s.chairs.setMatrixAt(n++, m.compose(p, q, one));
+        }
+      }
+      s.chairs.count = n; s.chairs.instanceMatrix.needsUpdate = true;
     },
 
     drawHud() {
