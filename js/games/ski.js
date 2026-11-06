@@ -253,19 +253,9 @@
     return new T.CanvasTexture(c);
   }
 
-  /* Skins: the skier's outfit. Pick one with C, or tap the SKIN button. The choice is saved in the browser. */
-  const SKINS = [
-    { name: 'CLASSIC', jacket: '#ffb020', accent: '#1f2740', pants: '#1f2740', helmet: '#f4f6fa', lens: '#ff8a20', skis: '#ff5a36', gloves: '#1a1c24' },
-    { name: 'ARCTIC', jacket: '#e9f1fb', accent: '#2fb5ff', pants: '#2a3a5c', helmet: '#2fb5ff', lens: '#7fe3ff', skis: '#2fb5ff', gloves: '#2a3a5c' },
-    { name: 'LAVA', jacket: '#e8333a', accent: '#18181c', pants: '#18181c', helmet: '#18181c', lens: '#ffd23f', skis: '#ff6a2c', gloves: '#18181c' },
-    { name: 'NEON', jacket: '#b6ff3b', accent: '#ff2fd0', pants: '#5a2fd6', helmet: '#ff2fd0', lens: '#3bf0ff', skis: '#b6ff3b', gloves: '#5a2fd6' },
-    { name: 'FOREST', jacket: '#2f6b3a', accent: '#e3b04b', pants: '#6b5236', helmet: '#e3b04b', lens: '#6be36b', skis: '#e3b04b', gloves: '#3a2a1a' },
-    { name: 'GALAXY', jacket: '#3a1f78', accent: '#c39bff', pants: '#14112a', helmet: '#0d0b1c', lens: '#c39bff', skis: '#7a4dff', gloves: '#c39bff' },
-    { name: 'BUBBLEGUM', jacket: '#ff7ab8', accent: '#ffffff', pants: '#f4f6fa', helmet: '#ffffff', lens: '#ff2f8a', skis: '#ff7ab8', gloves: '#ffffff' },
-    { name: 'GOLD', jacket: '#ffd23f', accent: '#fff3c2', pants: '#2a2418', helmet: '#ffd23f', lens: '#ff4a4a', skis: '#ffd23f', gloves: '#2a2418', shiny: true },
-  ];
-  const CROWD = ['#e8333a', '#2a63e8', '#ffb020', '#2fd6a0', '#ff7ab8', '#7a4dff', '#f4f6fa'];
-  let skinIx = clamp(Arcade.store.get('ski-skin') || 0, 0, SKINS.length - 1);
+  const CROWD = ['#e8333a', '#2a63e8', '#ffb020', '#2fd6a0', '#ff7ab8', '#7a4dff', '#f4f6fa']; // Fans' jackets.
+  // The skier's outfit colours.
+  const SKIN = { jacket: '#ffb020', accent: '#1f2740', pants: '#1f2740', helmet: '#f4f6fa', lens: '#ff8a20', skis: '#ff5a36', gloves: '#1a1c24' };
 
   // The skier: simple shapes, posed every frame. Limbs are capsules stretched between two points.
   function makeSkier() {
@@ -311,12 +301,9 @@
       pack: add(new T.BoxGeometry(0.26, 0.3, 0.12), M.accent),
     };
   }
-  function applySkin(sk, k) {
-    const c = SKINS[k];
-    for (const key of ['jacket', 'accent', 'pants', 'helmet', 'lens', 'skis', 'gloves']) sk.M[key].color.set(c[key]);
-    sk.M.lens.emissive.set(c.lens);
-    sk.M.jacket.metalness = sk.M.helmet.metalness = c.shiny ? 0.7 : 0;
-    sk.M.jacket.roughness = c.shiny ? 0.25 : 0.5;
+  function applySkin(sk) {
+    for (const key of ['jacket', 'accent', 'pants', 'helmet', 'lens', 'skis', 'gloves']) sk.M[key].color.set(SKIN[key]);
+    sk.M.lens.emissive.set(SKIN.lens);
   }
   const UP = { x: 0, y: 1, z: 0 };
   let vA = null, vB = null;
@@ -465,7 +452,7 @@
       new T.MeshStandardMaterial({ color: '#ffc531', metalness: 0.35, roughness: 0.3, emissive: '#ff9d00', emissiveIntensity: 0.45 }), 400);
     for (const m of [trees, rocks, coins]) { m.count = 0; m.frustumCulled = false; m.castShadow = m !== coins; m.receiveShadow = true; scene.add(m); }
 
-    const skier = makeSkier(); scene.add(skier.root); applySkin(skier, skinIx);
+    const skier = makeSkier(); scene.add(skier.root); applySkin(skier);
     const blob = new T.Mesh(new T.CircleGeometry(0.7, 20).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#1b2140', transparent: true, opacity: 0.25, depthWrite: false }));
     scene.add(blob);
 
@@ -657,7 +644,7 @@
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
     intro: 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
-    hint: '<kbd>C</kbd> changes your outfit. <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
+    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
 
     reset() {
       locked = true; // Keep the screen shape until the game is closed.
@@ -673,7 +660,6 @@
       this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
       this.cam = null; this.lean = 0; this.crouch = 0.3; this.mult = 1; this.multT = 0; this.grab = '';
-      this.skinT = 0; this.skinTap = false; this.fresh = false;
       this.wallR = null; this.line = 0; this.lineT = 0; this.bestLine = 0; this.parkStart = 0;
       this.zoneK = -1; this.gateHit = 0; this.gateStreak = 0; this.gateN = 0; this.gateI = 0; this.ava = null;
       this.storm = 0; this.wind = 0; this.windX = 0; this.fallT = 0; this.ice = 0;
@@ -689,16 +675,8 @@
       if (e.code === 'ArrowUp' || e.code === 'KeyW') this.up = down;
       if (e.code === 'ArrowDown' || e.code === 'KeyS') { this.down = down; if (down && !e.repeat) this.switchUp(); }
       if (e.code === 'Space' && down && !e.repeat) this.jump();
-      if (e.code === 'KeyC' && down && !e.repeat) this.nextSkin();
     },
-    nextSkin() {
-      skinIx = (skinIx + 1) % SKINS.length; Arcade.store.set('ski-skin', skinIx);
-      if (S) applySkin(S.skier, skinIx);
-      this.skinT = 1.5; snd.gate();
-    },
-    // The SKIN button, bottom right of the screen.
-    skinBtn() { return { x: W - 92, y: H - 34, w: 82, h: 24 }; },
-    press(down) { this.touch = down; this.fresh = down; if (!down) { this.flipTouch = 0; this.skinTap = false; } },
+    press(down) { this.touch = down; if (!down) this.flipTouch = 0; },
     // On a phone: swipe up to jump. In the air, swipe up (front flip) or down (back flip) and keep the finger down to keep flipping.
     swipe(dx, dy) {
       if (Math.abs(dy) < Math.abs(dx)) return;
@@ -706,13 +684,7 @@
       else if (dy < 0) this.jump();
       else this.switchUp();
     },
-    point(p) {
-      if (this.fresh) { // The first touch of a press: on the SKIN button it changes outfit instead of steering.
-        this.fresh = false; const b = this.skinBtn();
-        if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y - 6 && p.y <= b.y + b.h + 6) { this.skinTap = true; this.nextSkin(); }
-      }
-      this.tx = p.x;
-    },
+    point(p) { this.tx = p.x; },
 
     /* ----- The mountain ahead ----- */
     gen() {
@@ -929,7 +901,7 @@
         return;
       }
       let dir = (this.right ? 1 : 0) - (this.left ? 1 : 0);
-      if (this.touch && !this.skinTap) dir = clamp((this.tx - W / 2) / 70, -1, 1);
+      if (this.touch) dir = clamp((this.tx - W / 2) / 70, -1, 1);
       const u = this.x - center(this.d), wall = Math.max(0, Math.abs(u) - FLOOR), maxSide = 5 + 0.3 * this.v;
       const bend = (center(this.d + 1) - center(this.d - 1)) / 2;
       if (inPark(this.d) && !this.wasPark) { this.pop('TERRAIN PARK', 'RAILS, BOXES AND JUMPS', '#7fe3ff'); this.parkStart = this.bonus; this.bestLine = 0; }
@@ -1229,7 +1201,7 @@
         snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
         if (Math.abs(n) >= 3 || nf) this.puff(30, this.x, g + 0.2, this.d, 5, 4, this.sparks);
         if (t > 0.5) this.lineHit();
-        if (t > 1.3) { const big = Math.round(t * 200) * this.mult; this.bonus += big; this.pop('MEGA AIR ' + t.toFixed(1) + 's', '+' + big, '#ff9d2f'); }
+        if (t > 1.3) { const big = Math.round(t * 200) * this.mult; this.bonus += big; this.pop('BIG AIR ' + t.toFixed(1) + 's', '+' + big, '#ff9d2f'); }
       }
       if (this.jumpQ > 0) this.jump(); // Space pressed just before touching down.
     },
@@ -1533,14 +1505,6 @@
         }
         ctx.globalAlpha = 1;
         if (this.boostT > 0) text('BOOST!', W / 2, H - 82, 11, '#7fe3ff', 'center');
-      }
-      // The SKIN button, and the outfit's name for a moment after changing it.
-      {
-        const b = this.skinBtn(); this.skinT = Math.max(0, (this.skinT || 0) - 1 / 60);
-        ctx.fillStyle = 'rgba(20,24,40,0.45)'; ctx.fillRect(b.x, b.y, b.w, b.h);
-        ctx.fillStyle = SKINS[skinIx].jacket; ctx.fillRect(b.x + 6, b.y + 7, 10, 10);
-        text(coarse ? 'SKIN' : 'SKIN (C)', b.x + 22, b.y + 8, 7, '#ffffff', 'left');
-        if (this.skinT > 0) { ctx.globalAlpha = clamp(this.skinT * 2, 0, 1); text(SKINS[skinIx].name, W - 14, b.y - 18, 9, '#ffd75e', 'right'); ctx.globalAlpha = 1; }
       }
       if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
       if (this.grind) text(this.grindName + '  ' + this.grindT.toFixed(1) + 's', W / 2, H - 100, 11, '#7fe3ff', 'center');
