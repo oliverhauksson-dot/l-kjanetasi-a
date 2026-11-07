@@ -67,7 +67,6 @@
   const GATE_W = 2.6; // Half the width of a slalom gate.
   const FENCE = FLOOR - 0.9;
   const LIFT_SPAN = 48;
-  const GOND_V = 6, GOND_GAP = 32; // The cable car: gondolas go round at 6 m/s, 32 m apart.
   const MAX_FANS = 700; // Metres between chairlift towers. // The safety fence along both sides of the park.
   const HIP_THROW = 7; // How hard a side hit throws you towards the middle.
   // Tricks. A jump (ollie) pops you up; spins count in half turns (180, 360, 540...), flips in full turns.
@@ -524,7 +523,7 @@
     const bannerSide = new T.MeshStandardMaterial({ color: '#1b2350', roughness: 0.7 });
     // One banner for each park section, each in its own colour.
     const banners = {};
-    for (const [text, col] of [['RAIL GARDEN', '#14405a'], ['JUMP LINE', '#5a2a10'], ['GAP JUMP', '#0f4a3a'], ['WALL RIDE', '#4a2a5a'], ['MEGA JUMP', '#5a1030'], ['SKI VILLAGE', '#6a1f1f'], ['CABLE CAR', '#0d3d66']])
+    for (const [text, col] of [['RAIL GARDEN', '#14405a'], ['JUMP LINE', '#5a2a10'], ['GAP JUMP', '#0f4a3a'], ['WALL RIDE', '#4a2a5a'], ['MEGA JUMP', '#5a1030'], ['SKI VILLAGE', '#6a1f1f']])
       banners[text] = new T.MeshStandardMaterial({ map: bannerTexture(text, col), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
     const railMat2 = new T.MeshStandardMaterial({ color: '#2fd6a0', metalness: 0.6, roughness: 0.3 });
     const wallMat = new T.MeshStandardMaterial({ color: '#b98a55', roughness: 0.8 });
@@ -594,9 +593,6 @@
     const smoke = points(400, 1.9, '#d4d9e2', 0.35);
     const snowmen = new T.InstancedMesh(snowmanGeo(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), 40);
     snowmen.count = 0; snowmen.frustumCulled = false; snowmen.castShadow = true; scene.add(snowmen);
-    // The cable car's gondolas, hanging from their grips.
-    const gondolas = new T.InstancedMesh(gondolaGeo(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.2 }), 60);
-    gondolas.count = 0; gondolas.frustumCulled = false; gondolas.castShadow = true; scene.add(gondolas);
     const cableMat = new T.MeshStandardMaterial({ color: '#2a2d36', roughness: 0.5, metalness: 0.6 });
     const iceMat = new T.MeshStandardMaterial({ color: '#cdeefc', roughness: 0.08, metalness: 0.1 });
     const starMat = new T.MeshStandardMaterial({ color: '#ffd23f', emissive: '#ffb000', emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.5 });
@@ -613,7 +609,7 @@
     })).mat;
     for (const k of Object.keys(boards)) boards[k].draw();
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, banners, railMat2, fencePosts, fenceNet, lightPoles, lampMat, lamps, glow, towers, cables, chairs, boothGlow, boothGlow2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, box1, icicle, clock, spire, houseMat, winMat, bulbMat, smoke, snowmen, gondolas, cableMat, iceMat, starMat, treeMat, sjBoard, distBoard: (t, c) => { const m = distBoard(t, c); boards[t].draw(); return m; }, sjMesh: null, built: '' };
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, banners, railMat2, fencePosts, fenceNet, lightPoles, lampMat, lamps, glow, towers, cables, chairs, boothGlow, boothGlow2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, box1, icicle, clock, spire, houseMat, winMat, bulbMat, smoke, snowmen, cableMat, iceMat, starMat, treeMat, sjBoard, distBoard: (t, c) => { const m = distBoard(t, c); boards[t].draw(); return m; }, sjMesh: null, built: '' };
   }
   const TRACK = 90;
 
@@ -664,7 +660,7 @@
   }
   // A rail on a roof sits on the roof (f.base), not on the snow.
   const railTop = (f, d) => (f.yAt ? f.yAt(d) : (f.base != null ? f.base : height(center(d) + f.u, d)) + f.top + bendAt(f, clamp((d - f.d) / f.len, 0, 1)));
-  // Where a rail is across the run. Most follow the valley; a cable or a gap rail has its own straight line.
+  // Where a rail is across the run. Most follow the valley; a rail from roof to roof has its own line.
   const railX = (f, d) => (f.xAt ? f.xAt(d) : center(d) + f.u);
 
   /* ---------- The ski village ----------
@@ -717,7 +713,6 @@
     else if (f.type === 'rail') {
       m = new T.Group();
       const pts = [];
-      if (f.hidden) { m.feat = f; return m; } // A cable is drawn with its cableway.
       for (let s = 0; s <= f.len + 0.01; s += 0.5) { const d = f.d + s, x = railX(f, d); pts.push(new T.Vector3(x, railTop(f, d) - 0.05, -d)); }
       const bar = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 2, 0.07, 8), f.shape ? S.railMat2 : S.railMat);
       bar.castShadow = true; m.add(bar);
@@ -775,7 +770,6 @@
   // A house: walls with windows, doors, lanterns and wooden trim, a snowy roof with icicles and
   // a string of coloured lights, a chimney, and for the church a tower with a clock and a spire.
   function houseMesh(f) {
-    if (f.kind === 'station') return stationMesh(f);
     const g = new T.Group(); g.position.set(f.xm, 0, -f.dm); g.rotation.y = -Math.atan(f.k);
     const P = [], panes = [], lamps = [], bulbs = [], bulbCol = [];
     const box = (list, x, y, z, sx, sy, sz, color, rz = 0) => list.push({ geo: S.box1, m: atR(x, y, z, 0, 0, rz, sx, sy, sz), color });
@@ -901,67 +895,6 @@
     o.geo = (g) => { o.own.push(g); return g; };
     o.bulb = (x, y, z, i) => { const c = new T.Color(BULBS[((i % BULBS.length) + BULBS.length) % BULBS.length]); o.bulbs.push(x, y, z); o.bulbCol.push(c.r, c.g, c.b); };
     return o;
-  }
-  /* The cable car station: concrete and glass, a big sign over the doors, a long flat roof with orange lines that
-     lead you to the cables, and an open downhill end where the cables come out round the turning bull wheel. */
-  function stationMesh(f) {
-    const g = new T.Group(); g.position.set(f.xm, 0, -f.dm); g.rotation.y = -Math.atan(f.k);
-    const K = kit(), { P, panes, lamps } = K, box = K.box;
-    const L = f.L, hw = f.hw, E = f.eave, ov = f.ov, cy = f.cableY;
-    const gnd = (c, a) => { const w = toWorld(f, c, a); return height(w.x, w.d); };
-    let yb = Infinity; for (const c of [-hw, 0, hw]) for (const a of [-L / 2, 0, L / 2]) yb = Math.min(yb, gnd(c, a)); yb -= 1.2;
-    const CON = '#c9ccd4', CON2 = '#8e95a3', RED = '#c8302b', DARK = '#1d2130', floor = cy - 4.7, top = cy + 1.6, zb = -L / 2;
-    // The long sides: concrete, a red stripe, and a band of glass along the top floor.
-    for (const s2 of [-1, 1]) {
-      box(P, s2 * hw, (E + yb) / 2, 0, 0.5, E - yb, L, CON);
-      box(panes, s2 * (hw + 0.27), E - 1.5, 0, 0.05, 1.9, L - 1.5, '#ffffff');
-      for (let a = -L / 2 + 0.75; a <= L / 2 - 0.7; a += 2.5) box(P, s2 * (hw + 0.3), E - 1.5, -a, 0.12, 2.0, 0.16, DARK);
-      box(P, s2 * (hw + 0.29), E - 2.75, 0, 0.06, 0.4, L, RED);
-      for (let a = -L / 2 + 2; a < L / 2 - 1; a += 3) for (let y = E - 4.5; y - 0.7 > gnd(s2 * hw, a) + 0.4; y -= 3) box(panes, s2 * (hw + 0.27), y, -a, 0.05, 1.2, 1.6, '#ffffff');
-      box(P, s2 * (hw + 0.1), (E + yb) / 2, -zb, 0.7, E - yb, 0.7, CON2); // Corner pillars.
-      box(P, s2 * (hw + 0.1), (E + yb) / 2, zb, 0.7, E - yb, 0.7, CON2);
-    }
-    // The front, facing up the hill: glass doors, lamps and the big CABLE CAR sign.
-    const gf = gnd(0, -L / 2);
-    box(P, 0, (E + yb) / 2, L / 2, 2 * hw, E - yb, 0.5, CON);
-    box(panes, 0, gf + 1.3, L / 2 + 0.27, 5, 2.5, 0.05, '#ffffff');
-    for (const x of [-2.5, 0, 2.5]) box(P, x, gf + 1.3, L / 2 + 0.3, 0.12, 2.6, 0.08, DARK);
-    box(P, 0, gf + 2.75, L / 2 + 0.9, 6.4, 0.18, 1.6, CON2);
-    for (const x of [-4.8, 4.8]) { box(P, x, gf + 1.6, L / 2 + 0.25, 0.4, 0.4, 0.2, DARK); box(K.lamps, x, gf + 2.0, L / 2 + 0.4, 0.35, 0.45, 0.3, '#ffffff'); }
-    for (const x of [-5.5, 5.5]) box(panes, x, gf + 1.6, L / 2 + 0.27, 2, 1.4, 0.05, '#ffffff');
-    // The open end, downhill: a lintel above the opening, walls below the platform, and dark inside.
-    box(P, 0, (top + E) / 2, zb, 2 * hw, E - top, 0.5, CON);
-    box(P, 0, (yb + floor) / 2, zb, 2 * hw, floor - yb, 0.5, CON);
-    for (const s2 of [-1, 1]) box(P, s2 * (hw - 0.9), (floor + top) / 2, zb, 1.8, top - floor, 0.5, CON);
-    box(P, 0, top + 0.25, zb - 0.3, 2 * hw - 3.2, 0.5, 0.2, RED);
-    box(P, 0, floor - 0.1, zb + 5, 2 * hw - 1, 0.2, 10, '#6d7686'); // The platform inside.
-    box(P, 0, (floor + top) / 2, zb + 10, 2 * hw - 1, top - floor, 0.2, DARK);
-    box(P, 0, top - 0.1, zb + 5, 2 * hw - 1, 0.2, 10, '#2b3040');
-    for (const s2 of [-1, 1]) box(P, s2 * (hw - 0.7), (floor + top) / 2, zb + 5, 0.2, top - floor, 10, '#2b3040');
-    for (const x of [-4, 0, 4]) box(lamps, x, top - 0.3, zb + 4, 1.4, 0.12, 0.4, '#ffffff');
-    for (const s2 of [-1, 1]) { box(P, s2 * 3, cy, zb + 1.75, 0.08, 0.08, 3.5, '#2a2d36'); box(P, s2 * 6.6, floor + 1, zb + 4, 0.6, 2, 2, '#ffb020'); }
-    box(P, 0, (cy + top) / 2 + 0.2, zb + 3.5, 0.5, top - cy, 0.5, '#59606f'); // The wheel's shaft.
-    // The bull wheel turns the cable round. It spins in sync().
-    const wp = [
-      { geo: K.geo(new T.TorusGeometry(3, 0.16, 8, 40).rotateX(Math.PI / 2)), m: new T.Matrix4(), color: '#ffd23f' },
-      { geo: K.geo(new T.CylinderGeometry(0.5, 0.5, 0.5, 12)), m: new T.Matrix4(), color: '#59606f' },
-    ];
-    for (let i = 0; i < 4; i++) wp.push({ geo: S.box1, m: atR(0, 0, 0, 0, (i * Math.PI) / 4, 0, 6, 0.12, 0.2), color: '#59606f' });
-    const wheel = new T.Mesh(merged(wp), S.houseMat); wheel.position.set(0, cy, zb + 3.5); wheel.castShadow = true;
-    // The roof: snow on a thick edge, orange lines on the snow that lead to the cables, lights along the eaves.
-    box(P, 0, E + 0.15, 0, 2 * (hw + ov), 0.3, L + 2 * ov, CON2);
-    box(P, 0, f.roof - 0.06, 0, 2 * (hw + ov) - 0.04, 0.14, L + 2 * ov - 0.04, SNOWC);
-    for (const x of [-3, 3]) for (let a = -L / 2 + 2; a < L / 2; a += 2.5) box(P, x, f.roof + 0.02, -a, 0.18, 0.04, 1.4, '#ff6a1a');
-    for (const s2 of [-1, 1]) for (let a = -L / 2 - ov + 0.3; a < L / 2 + ov; a += 0.7) {
-      if (Math.random() < 0.6) { const sy = rand(0.5, 1.5); P.push({ geo: S.icicle, m: atR(s2 * (hw + ov - 0.08), E - 0.25 * sy, -a, Math.PI, 0, 0, 1, sy, 1), color: ICE }); }
-      K.bulb(s2 * (hw + ov + 0.03), E - 0.1, -a, Math.round(a / 0.7) + (s2 > 0 ? 2 : 0));
-    }
-    const grp = partsGroup(K); grp.children.slice().forEach((c) => g.add(c));
-    // The big sign over the front.
-    const sign = new T.Mesh(new T.BoxGeometry(2 * hw - 1.5, 1.7, 0.25), [S.bannerSide, S.bannerSide, S.bannerSide, S.bannerSide, S.banners['CABLE CAR'], S.bannerSide]);
-    sign.position.set(0, E - 1.1, L / 2 + 0.4); g.add(sign, wheel);
-    g.spin = wheel;
-    return g;
   }
   const VILLAGE_MESH = {
     // Strings of coloured lights across a street, between two lamp posts, with little flags.
@@ -1092,41 +1025,6 @@
       box(P, cx, y + 35.5, z, 0.12, 1.6, 0.12, '#ffd23f');
       return partsGroup(K);
     },
-    // One span of the cable car: the two cables, and the tower at the far end (the last span goes into the bottom station).
-    cablespan(f) {
-      const W = f.W, a = W.pts[f.i - 1], b = W.pts[f.i], K = kit(), last = f.i === W.pts.length - 1, yaw = Math.atan2(b.x - a.x, b.d - a.d);
-      const g = new T.Group();
-      for (const off of [-3, 3]) {
-        const pts = [];
-        for (let k = 0; k <= 30; k++) { const t = k / 30; pts.push(new T.Vector3(a.x + (b.x - a.x) * t + off, a.y + (b.y - a.y) * t - b.sag * 4 * t * (1 - t), -(a.d + (b.d - a.d) * t))); }
-        const c = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 60, 0.06, 5), S.cableMat); c.castShadow = true; g.add(c);
-      }
-      const gy = Math.min(height(b.x - 2, b.d), height(b.x + 2, b.d)) - 0.5, R = (x, z) => [b.x + x * Math.cos(yaw) + z * Math.sin(yaw), -(b.d - x * Math.sin(yaw) + z * Math.cos(yaw))];
-      const bx = (list, x, yy, zz, sx, sy, sz, color) => { const [wx, wz] = R(x, zz); K.box(list, wx, yy, wz, sx, sy, sz, color, 0, yaw, 0); };
-      if (!last) {
-        // A steel tower: a tapering column, a crossbar with the wheels the cables run over, a ladder and a red light.
-        const h = b.y - 0.7 - gy;
-        K.P.push({ geo: K.geo(new T.CylinderGeometry(0.45, 0.85, h, 4)), m: atR(b.x, gy + h / 2, -b.d, 0, yaw + Math.PI / 4, 0), color: '#7a8292' });
-        for (let yy = gy + 2; yy < b.y - 2; yy += 2.6) bx(K.P, 0, yy, 0, 1.9 - (yy - gy) / h * 0.8, 0.12, 0.12, '#59606f');
-        bx(K.P, 0, b.y - 0.7, 0, 8.4, 0.45, 0.6, '#7a8292');
-        for (const off of [-3, 3]) { bx(K.P, off, b.y - 0.3, 0, 0.35, 0.35, 2.6, '#2a2d36'); for (const zz of [-0.9, 0, 0.9]) bx(K.P, off, b.y - 0.15, zz, 0.12, 0.42, 0.42, '#ffd23f'); }
-        bx(K.P, 0, b.y - 1.4, 0.75, 0.5, 0.8, 0.1, '#f4f4f4'); bx(K.P, 0, b.y - 1.4, 0.8, 0.5, 0.25, 0.05, '#e8333a');
-        bx(K.P, 0.62, gy + h / 2, 0.62, 0.06, h - 1, 0.06, '#59606f');
-        bx(K.lamps, 0, b.y + 0.15, 0, 0.3, 0.3, 0.3, '#ff3030');
-        bx(K.P, 0, gy + 0.4, 0, 2.2, 0.8, 2.2, '#8e95a3');
-      } else {
-        // The bottom station, up on the valley side.
-        const fy = gy, top = b.y + 3;
-        bx(K.P, 0, (fy + top) / 2, 4, 11, top - fy, 9, '#c9ccd4'); bx(K.P, 0, top + 0.2, 4, 11.6, 0.4, 9.6, '#8e95a3'); bx(K.P, 0, top + 0.45, 4, 11.4, 0.14, 9.4, SNOWC);
-        bx(K.P, 0, b.y + 1.9, -0.45, 9, 0.5, 0.1, '#c8302b');
-        bx(K.P, 0, (fy + b.y - 3) / 2, -0.45, 11, b.y - 3 - fy, 0.2, '#c9ccd4');
-        bx(K.P, 0, b.y - 0.5, -0.4, 9, 5, 0.1, '#1d2130');
-        for (const sx of [-1, 1]) bx(K.panes, sx * 5.53, b.y, 4, 0.05, 1.6, 7, '#ffffff');
-        bx(K.lamps, 0, b.y + 1.5, -0.6, 6, 0.12, 0.12, '#ffffff');
-      }
-      const pg = partsGroup(K); pg.children.slice().forEach((c) => g.add(c));
-      return g;
-    },
   };
   // A snowy kicker on the end of a flat roof: y0 is the roof, it rises by h along the last part (a0 to a1).
   function lipGeo(hw, a0, a1, y0, h) {
@@ -1142,21 +1040,6 @@
     quad(pt(1, -hw, 1), pt(1, hw, 1), pt(1, hw, 0), pt(1, -hw, 0));
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
     return g;
-  }
-  // A gondola: the grip on the cable at the top (y = 0), the hanger, and a red cabin with big windows.
-  function gondolaGeo() {
-    const b = new T.BoxGeometry(1, 1, 1), parts = [
-      { geo: b, m: atR(0, 0.1, 0, 0, 0, 0, 0.45, 0.35, 0.9), color: '#3a3f4a' },
-      { geo: new T.CylinderGeometry(0.06, 0.06, 1.5, 6), m: at(0, -0.75, 0), color: '#3a3f4a' },
-      { geo: b, m: atR(0, -1.5, 0, 0, 0, 0, 1.4, 0.16, 1.4), color: '#3a3f4a' },
-      { geo: b, m: atR(0, -1.68, 0, 0, 0, 0, 2.25, 0.2, 2.25), color: '#c8302b' },
-      { geo: b, m: atR(0, -2.4, 0, 0, 0, 0, 2.08, 1.25, 2.08), color: '#22304a' },
-      { geo: b, m: atR(0, -3.5, 0, 0, 0, 0, 2.2, 0.95, 2.2), color: '#c8302b' },
-      { geo: b, m: atR(0, -3.1, 0, 0, 0, 0, 2.24, 0.12, 2.24), color: '#f4f4f4' },
-      { geo: b, m: atR(0, -4.02, 0, 0, 0, 0, 1.9, 0.1, 1.9), color: '#2a2d36' },
-    ];
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push({ geo: b, m: atR(sx * 1.03, -2.4, sz * 1.03, 0, 0, 0, 0.16, 1.3, 0.16), color: '#c8302b' });
-    return merged(parts);
   }
   // A snowman with a carrot nose, a hat, a scarf and stick arms, looking up the hill.
   function snowmanGeo() {
@@ -1175,19 +1058,6 @@
     }
     for (const y of [1.2, 1.4, 1.6]) parts.push({ geo: ball, m: atR(0, y, Math.sqrt(Math.max(0, 0.44 * 0.44 - (y - 1.35) ** 2)) - 0.01, 0, 0, 0, 0.045, 0.045, 0.045), color: '#1a1c24' });
     return merged(parts);
-  }
-  /* A cable car line through points {x, d, y, sag}: the cable sags by `sag` in the middle of the span that ends at
-     that point. pos(q, off) is the point q metres along it, off metres to the side, and which span it is in. */
-  function cableway(pts) {
-    const len = [], cum = [0];
-    for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i]; len.push(Math.hypot(b.x - a.x, b.d - a.d, b.y - a.y)); cum.push(cum[i - 1] + len[i - 1]); }
-    const Lc = cum[cum.length - 1], loop = 2 * Lc, count = Math.floor(loop / GOND_GAP);
-    const pos = (q, off) => {
-      let i = 0; while (i < len.length - 1 && q > cum[i + 1]) i++;
-      const a = pts[i], b = pts[i + 1], t = clamp((q - cum[i]) / len[i], 0, 1);
-      return { x: a.x + (b.x - a.x) * t + off, d: a.d + (b.d - a.d) * t, y: a.y + (b.y - a.y) * t - b.sag * 4 * t * (1 - t), seg: i, yaw: Math.atan2(b.x - a.x, b.d - a.d) };
-    };
-    return { pts, Lc, loop, count, gap: GOND_GAP, pos, made: pts.map(() => false), prev: new Float32Array(count).fill(NaN), endD: pts[pts.length - 1].d };
   }
   /* The ski jump, built once per run: the in-run on steel stilts with its tracks and red side walls, the start
      hut and lift tower at the top, the lip, and down the landing hill the K and HS lines, green lines along the
@@ -1295,7 +1165,7 @@
     get H() { return H; },
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
-    intro: PARK_ONLY ? 'Start with a ski jump, then ski down an endless 3D terrain park. Grind rails, ride walls, ski over the village rooftops, grind the cable car cables and fly off the mega jump. Land your tricks clean and stay off the fence.'
+    intro: PARK_ONLY ? 'Start with a ski jump, then ski down an endless 3D terrain park. Grind rails, ride walls, ski over the village rooftops and fly off the mega jump. Land your tricks clean and stay off the fence.'
       : 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
     hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
 
@@ -1320,7 +1190,7 @@
       this.wallR = null; this.line = 0; this.lineT = 0; this.bestLine = 0; this.parkStart = 0;
       this.zoneK = -1; this.gateHit = 0; this.gateStreak = 0; this.gateN = 0; this.gateI = 0; this.ava = null;
       this.storm = 0; this.wind = 0; this.windX = 0; this.fallT = 0; this.ice = 0;
-      this.villages = []; this.marks = []; this.onRoof = null; this.roofFrom = null; this.roofRunV = null; this.cableways = []; this.gonds = []; this.lastCable = null; this.cableHop = null;
+      this.villages = []; this.marks = []; this.onRoof = null; this.roofFrom = null; this.roofRunV = null;
       this.fans(JUMP_LIP + 150, JUMP_LIP + 215, 3); // A crowd along the ski jump's outrun.
       this.gen();
       if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.feats.forEach(dropMesh); S.feats = []; S.built = ''; if (S.sjMesh) { dropMesh(S.sjMesh); S.sjMesh = null; } }
@@ -1423,7 +1293,7 @@
       while (this.planD < d0 + CL + 80) {
         if (!inPark(this.planD)) { this.planD = PARK_AT + Math.ceil((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY; continue; }
         if (!PARK_ONLY && this.planD > PARK_AT + Math.floor((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY + PARK_LEN - 150) { this.planD += 50; continue; }
-        if (!this.order.length) this.order = this.sections++ === 0 ? ['rails', 'village', 'jumps', 'cable', 'gap', 'walls', 'mega'] : ['rails', 'jumps', 'gap', 'walls', 'village', 'cable'].sort(() => Math.random() - 0.5).concat('mega');
+        if (!this.order.length) this.order = this.sections++ === 0 ? ['rails', 'village', 'jumps', 'gap', 'walls', 'mega'] : ['rails', 'jumps', 'gap', 'walls', 'village'].sort(() => Math.random() - 0.5).concat('mega');
         this.planD += this['sec_' + this.order.shift()](this.planD) + 12;
       }
       const keep = [];
@@ -1614,77 +1484,11 @@
       } });
       return gd + 30 - d;
     },
-    /* The cable car station. A kicker takes you up onto the station's long flat roof. Off its far end you drop
-       onto one of the two cables and grind it all the way to the first tower, jumping the gondolas as they come.
-       Or ski round the station on either side, under the line. */
-    sec_cable(d) {
-      this.sign(d, 'CABLE CAR', { tall: 12 }); this.fans(d - 6, d + 8, 1); this.speakers(d + 4);
-      const rd = d + 18, rl = 16, sd = rd + rl, len = 30, e0 = 3.5;
-      const roof = height(center(sd), sd) + e0 + SN, cy = roof - 2.6, de = sd + len, dt = de + 70, d2 = dt + 70, d3 = d2 + 75;
-      const H = (u, dd, up, sag) => { const x = center(dd) + u; return { x, d: dd, y: height(x, dd) + up, sag }; };
-      // The line: round the bull wheel in the station, out of its open end, over the towers and up the valley side.
-      const pts = [{ x: center(de - 3.5), d: de - 3.5, y: cy, sag: 0 }, { x: center(de), d: de, y: cy, sag: 0 }, H(0, dt, 11, 1.6), H(34, d2, 12, 1.8), H(62, d3, 5, 1.2)];
-      const W = cableway(pts); this.cableways.push(W);
-      this.at(rd, (ch) => ch.feats.push({ type: 'ramp', follow: true, x: center(sd), u: 0, d: rd, len: rl - EDGE, w: 7.6, h: e0 + SN }));
-      this.at(sd, (ch) => {
-        const f = this.house(ch, sd, 0, len, 'station'); f.cableY = cy; f.W = W; W.made[0] = true;
-        for (const u of [-3, 3]) for (let s = 3; s < len - 1; s += 3) { const dd = sd + s; ch.coins.push({ x: center(dd) + u, d: dd, y: roof + 0.9 }); }
-      });
-      for (let k = 2; k < pts.length; k++) {
-        const i = k;
-        this.at(pts[i].d, (ch) => {
-          ch.feats.push({ type: 'cablespan', d: pts[i - 1].d, len: 0, x: pts[i].x, u: 0, W, i });
-          W.made[i - 1] = true;
-          if (i !== 2) return;
-          // The first span is the one you can grind, on either cable. Coins ride along it.
-          const a = pts[1], b = pts[2];
-          for (const off of [-3, 3]) {
-            const tt = (dd) => clamp((dd - a.d) / (b.d - a.d), 0, 1);
-            const r = { type: 'rail', cable: true, hidden: true, x: a.x + off, u: off, d: a.d, len: b.d - a.d, top: 0, w: 0.12,
-              xAt: (dd) => a.x + (b.x - a.x) * tt(dd) + off, yAt: (dd) => { const t = tt(dd); return a.y + (b.y - a.y) * t - b.sag * 4 * t * (1 - t); } };
-            ch.feats.push(r);
-            for (let s = 8; s < r.len - 6; s += 7) ch.coins.push({ x: r.xAt(a.d + s), d: a.d + s, y: r.yAt(a.d + s) + 0.9 });
-          }
-          ch.blocks.push({ d: b.d, u: 0, hw: 0.8, hd: 0.8, y0: -1e9, y1: b.y - 0.8, name: 'a cable car tower' });
-        });
-      }
-      // Beside the station and under the line: rails, boxes and kickers.
-      for (const m of [6, 24]) for (const u of [-17, 17]) this.any(sd + m, u + rand(-1, 1), false);
-      this.any(de + 22, -11, false); this.any(de + 22, 11, false); this.hip(de + 40, Math.random() < 0.5 ? -1 : 1);
-      return dt + 45 - d;
-    },
-    // The cable car: gondolas going round, down one cable and back up the other. Grind into one and you crash.
-    // Jump over it for points, or come down on its roof and bounce off.
-    gondolas(dt) {
-      const out = this.gonds = [];
-      this.cableways = this.cableways.filter((w) => this.d < w.endD + 60);
-      for (const w of this.cableways) for (let i = 0; i < w.count; i++) {
-        const s = (this.t * GOND_V + i * GOND_GAP) % w.loop, back = s >= w.Lc, p = w.pos(back ? w.loop - s : s, back ? -3 : 3);
-        if (!w.made[p.seg]) { w.prev[i] = NaN; continue; }
-        out.push(p);
-        const rel = p.d - this.d, dx = this.x - p.x, was = w.prev[i]; w.prev[i] = rel;
-        if (this.crash || Math.abs(dx) > 1.8 || Math.abs(rel) > 3) continue;
-        const roof = p.y - 1.6;
-        if (this.air && this.vy < 0 && Math.abs(rel) < 1.2 && Math.abs(dx) < 1.15 && this.y < roof + 0.4 && this.y > roof - 0.6) {
-          this.y = roof; this.vy = 8; this.airT = Math.max(this.airT, 0.3);
-          const pts = 300 * this.mult; this.bonus += pts; this.pop('GONDOLA BOUNCE', '+' + pts, '#7fe3ff'); snd.trick(); this.lineHit();
-          continue;
-        }
-        if ((was > 0 && rel <= 0) || (was < 0 && rel >= 0)) { // Passing it right now.
-          if (Math.abs(dx) < 1.2 && this.y > p.y - 4.1 && this.y < p.y + 0.4) { this.hit('a gondola', this.grind ? 'You grinded into a gondola' : 'You hit a gondola'); return true; }
-          if (this.air && Math.abs(dx) < 1.8 && this.y >= p.y + 0.4 && this.y < p.y + 6) {
-            const pts = 200 * this.mult; this.bonus += pts; this.pop('GONDOLA HOP', '+' + pts, '#7fe3ff'); snd.trick(); this.lineHit();
-          }
-        }
-      }
-      return false;
-    },
     // A house, turned to follow the valley, with a level roof. kind: lodge, shop, hotel or flat (flat roofs), chalet or church.
     house(ch, d, u, len, kind) {
       const xf = center(d) + u, xb = center(d + len) + u, k = (xb - xf) / len, n = Math.hypot(1, k);
       const church = kind === 'church', flat = kind !== 'chalet' && !church;
-      const station = kind === 'station';
-      const hw = station ? 7.5 : kind === 'lodge' || kind === 'hotel' ? 4.5 : church ? 4.6 : u ? 3.8 : 4, e0 = station ? 3.5 : church ? 5.2 : 3;
+      const hw = kind === 'lodge' || kind === 'hotel' ? 4.5 : church ? 4.6 : u ? 3.8 : 4, e0 = church ? 5.2 : 3;
       const f = { type: 'house', kind, u, x: (xf + xb) / 2, xm: (xf + xb) / 2, d, dm: d + len / 2, len, k, n, L: len * n, hw, ov: 0.5,
         eave: height(xf, d) + e0, pitch: flat ? 0 : church ? 0.8 : 0.42, chims: [],
         col: church ? '#ece6d8' : WALLS[(Math.random() * WALLS.length) | 0], shut: Math.random() < 0.6 ? SHUTTERS[(Math.random() * SHUTTERS.length) | 0] : null };
@@ -1909,7 +1713,6 @@
         const y0 = this.y;
         this.d += this.v * dt; this.x += (this.vx + bend * this.v * 0.5) * dt;
         if (inrun) this.x = center(this.d);
-        if (this.cableHop) { if (this.air && this.d < this.cableHop.d + this.cableHop.len) this.x = railX(this.cableHop, this.d); else this.cableHop = null; }
 
         // Stay on the snow, or fly when it drops away faster than gravity can pull you down.
         const g = this.ground(this.x, this.d), gv = (g - this.lastG) / dt; this.lastG = g;
@@ -1933,8 +1736,8 @@
         const f = this.railAt(this.x, this.d);
         if (f) {
           const top = railTop(f, this.d), fromAbove = y0 >= top - (f.type === 'box' ? 0.75 : 0.3);
-          if (fromAbove && this.y <= top + 0.6 && !(f.cable && this.vy > 0)) { this.startGrind(f, top); if (this.crash) return; } // Close enough: you pop onto it. (Jumping on a cable, you come back down onto it.)
-          else if (!fromAbove && f.type === 'rail' && !f.cable && Math.abs(this.x - railX(f, this.d)) < 0.3 && this.y < top - 0.3 && !this.bump) {
+          if (fromAbove && this.y <= top + 0.6) { this.startGrind(f, top); if (this.crash) return; } // Close enough: you pop onto it.
+          else if (!fromAbove && f.type === 'rail' && Math.abs(this.x - railX(f, this.d)) < 0.3 && this.y < top - 0.3 && !this.bump) {
             const side = this.x >= railX(f, this.d) ? 1 : -1;
             this.x = railX(f, this.d) + side * 0.45; this.vx = side * 6; this.v *= 0.7; this.bump = 0.5;
             this.mult = 1; this.multT = 0; this.shake = 0.6; snd.clank(); this.pop('OUCH!', 'SPEED LOST', '#ff6b9a');
@@ -1974,7 +1777,6 @@
       if (this.villages.length && this.villages[0].done) this.villages.shift();
       for (const m of this.marks) if (!m.done && this.d >= m.d) { m.done = true; m.fn(); }
       this.marks = this.marks.filter((m) => !m.done);
-      if (this.gondolas(dt)) return;
       // The safety fence along the edges of the park.
       if (inPark(this.d) && Math.abs(this.x - center(this.d)) > FENCE - 0.35) return this.hit('the safety fence');
       if (this.critters(dt)) return;
@@ -2089,13 +1891,7 @@
     // Space (or swipe up): pop off the snow, or off a rail.
     jump() {
       if (this.crash) return;
-      if (this.grind) {
-        if (this.grindT > 0.05) {
-          const f = this.grind; this.endGrind(0); this.vy += OLLIE - 3; this.crouch = 0; snd.jump();
-          if (f.cable && this.d < f.d + f.len - 1) this.cableHop = f; // Jumping a gondola: you stay over the cable.
-        }
-        return;
-      }
+      if (this.grind) { if (this.grindT > 0.05) { this.endGrind(0); this.vy += OLLIE - 3; this.crouch = 0; snd.jump(); } return; }
       // You can hop any time you are on the snow, or only just off it (a bump threw you up a little).
       // Pressed a moment too early in the air, the hop happens as soon as you touch down.
       const g = this.ground(this.x, this.d), near = this.air && !this.ollie && !this.fromRail && this.y - g < 0.6 && this.airT < 0.5;
@@ -2116,11 +1912,10 @@
       const n = Math.round(this.spin / Math.PI), flips = this.flip / (Math.PI * 2), nf = Math.round(flips);
       if (Math.abs(flips - nf) > 0.22) { this.spin = this.flip = 0; return this.hit('the rail upside down'); }
       if (Math.abs(n) % 2) this.sw = !this.sw; // Land a 180 onto it and you slide backwards.
-      if (f.yAt) this.roofFrom = null; // Onto a cable or a rail between two roofs: not a roof drop.
+      if (f.yAt) this.roofFrom = null; // Onto the rail between two roofs: not a roof drop.
       else this.roofScore(f.base != null ? this.roofAt(this.x, this.d, top, 1.2) : null, top, this.airT);
-      const names = f.cable ? ['CABLE GRIND'] : f.type === 'rail' ? RAILS : BOXES, base = names[(Math.random() * names.length) | 0];
-      if (f.cable && this.lastCable !== f) { this.lastCable = f; this.pop('ON THE CABLE!', 'JUMP OVER THE GONDOLAS', '#7fe3ff'); }
-      this.grind = f; this.grindCable = !!f.cable; this.cableHop = null; this.grindT = 0; this.grindSwT = 0; this.grindSwaps = 0; this.air = false; this.y = top; this.vy = 0;
+      const names = f.type === 'rail' ? RAILS : BOXES, base = names[(Math.random() * names.length) | 0];
+      this.grind = f; this.grindT = 0; this.grindSwT = 0; this.grindSwaps = 0; this.air = false; this.y = top; this.vy = 0;
       this.grindSide = SIDEWAYS.includes(base);
       this.grindName = [this.sw ? 'SWITCH' : '', flipName(nf), n ? Math.abs(n) * 180 : '', base].filter(Boolean).join(' ');
       this.grindBonus = Math.round(spinPts(Math.abs(n)) * 0.75) + 300 * Math.abs(nf) + (this.airT > 0.55 ? Math.round(this.airT * 100) : 0);
@@ -2140,7 +1935,6 @@
       snd.hiss(0.6, 0.08, 'bandpass', 400, 3200);
     },
     endGrind(push) {
-      const g = this.grind, cableEnd = g && g.cable && this.d > g.d + g.len - 0.5;
       // Points for every second on the rail (half as much again riding backwards), switch-ups, and the trick you landed on it with.
       const sw = this.grindSwaps;
       const pts = (60 + Math.round(this.grindT * 160 + this.grindSwT * 80) + this.grindBonus + 75 * sw) * this.mult;
@@ -2148,8 +1942,7 @@
       this.pop(this.grindName + (sw ? ' + ' + sw + ' SWITCH-UP' + (sw > 1 ? 'S' : '') : ''), '+' + pts + (this.mult > 1 ? '  (x' + this.mult + ')' : ''), '#7fe3ff');
       this.speedUp(Math.min(0.08 + 0.05 * Math.min(this.grindT, 3) + 0.05 * sw, 0.3));
       snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7; this.lineHit();
-      this.grind = null; this.swapT = 0; this.takeoff(false); this.fromRail = true; this.vy += cableEnd ? 6 : 3; this.vx = push; // Off the end of a cable you pop up over the tower.
-      if (cableEnd) this.lastCable = null;
+      this.grind = null; this.swapT = 0; this.takeoff(false); this.fromRail = true; this.vy += 3; this.vx = push;
       this.lastG = this.ground(this.x, this.d);
     },
     // ROOFTOP RUN: every roof of the middle row, one after another, without touching the snow in between.
@@ -2408,14 +2201,6 @@
         s.crowdBody.count = s.crowdHead.count = n; s.speakers.count = sp;
         s.crowdBody.instanceMatrix.needsUpdate = s.crowdHead.instanceMatrix.needsUpdate = s.speakers.instanceMatrix.needsUpdate = true;
         if (s.crowdBody.instanceColor) s.crowdBody.instanceColor.needsUpdate = true;
-      }
-      // The cable car: gondolas swinging gently on their cables, and the bull wheel in the station turning.
-      {
-        const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), one = new T.Vector3(1, 1, 1);
-        let n = 0;
-        for (const g of this.gonds || []) { if (n >= 60) break; q.setFromEuler(e.set(Math.sin(this.t * 1.3 + g.d * 0.1) * 0.03, g.yaw, 0)); p.set(g.x, g.y, -g.d); s.gondolas.setMatrixAt(n++, m.compose(p, q, one)); }
-        s.gondolas.count = n; s.gondolas.instanceMatrix.needsUpdate = true;
-        for (const mesh of s.feats) if (mesh.spin) mesh.spin.rotation.y = -this.t * GOND_V / 3;
       }
       // The avalanche: big clouds of snow tumbling over each other right across the valley.
       {
