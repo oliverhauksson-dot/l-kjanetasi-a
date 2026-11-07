@@ -74,6 +74,8 @@
   const SPIN_PTS = [0, 100, 200, 350, 500, 700, 900];
   // Clean tricks give a speed boost on top of cruising speed, as a share of it, that fades over a few seconds.
   const BOOST_MAX = 0.6, BOOST_FADE = 0.6;
+  // The speed limit: 200 km/h. Nothing takes you faster, and tricks give no more boost once you are there.
+  const VMAX = 200 / 3.6;
   const spinPts = (k) => (k < SPIN_PTS.length ? SPIN_PTS[k] : 900 + (k - 6) * 200);
   const flipName = (n) => { const a = Math.abs(n); return a ? (a === 1 ? '' : ['', '', 'DOUBLE ', 'TRIPLE '][a] || a + 'X ') + (n > 0 ? 'FRONTFLIP' : 'BACKFLIP') : ''; };
 
@@ -490,7 +492,7 @@
     const bannerSide = new T.MeshStandardMaterial({ color: '#1b2350', roughness: 0.7 });
     // One banner for each park section, each in its own colour.
     const banners = {};
-    for (const [text, col] of [['RAIL GARDEN', '#14405a'], ['JUMP LINE', '#5a2a10'], ['GAP JUMP', '#0f4a3a'], ['WALL RIDE', '#4a2a5a'], ['MEGA JUMP', '#5a1030']])
+    for (const [text, col] of [['RAIL GARDEN', '#14405a'], ['JUMP LINE', '#5a2a10'], ['GAP JUMP', '#0f4a3a'], ['WALL RIDE', '#4a2a5a'], ['MEGA JUMP', '#5a1030'], ['SKI VILLAGE', '#6a1f1f']])
       banners[text] = new T.MeshStandardMaterial({ map: bannerTexture(text, col), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
     const railMat2 = new T.MeshStandardMaterial({ color: '#2fd6a0', metalness: 0.6, roughness: 0.3 });
     const wallMat = new T.MeshStandardMaterial({ color: '#b98a55', roughness: 0.8 });
@@ -551,8 +553,17 @@
     const avalanche = new T.InstancedMesh(new T.IcosahedronGeometry(1, 1),
       new T.MeshStandardMaterial({ color: '#f3f6fb', roughness: 1, flatShading: true, transparent: true, opacity: 0.95 }), 90);
     avalanche.count = 0; avalanche.frustumCulled = false; scene.add(avalanche);
+    // The village: houses, glowing windows, coloured lights along the eaves, chimney smoke and snowmen.
+    const box1 = new T.BoxGeometry(1, 1, 1), icicle = new T.ConeGeometry(0.06, 0.5, 4);
+    const clock = new T.CylinderGeometry(0.75, 0.75, 0.08, 20).rotateX(Math.PI / 2), spire = new T.ConeGeometry(2.4, 5.2, 4);
+    const houseMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+    const winMat = new T.MeshStandardMaterial({ color: '#2a3550', emissive: '#ffc96a', emissiveIntensity: 0.1, roughness: 0.2, metalness: 0.3 });
+    const bulbMat = new T.PointsMaterial({ map: dot, size: 0.5, vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false });
+    const smoke = points(400, 1.9, '#d4d9e2', 0.35);
+    const snowmen = new T.InstancedMesh(snowmanGeo(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), 40);
+    snowmen.count = 0; snowmen.frustumCulled = false; snowmen.castShadow = true; scene.add(snowmen);
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, banners, railMat2, fencePosts, fenceNet, lightPoles, lampMat, lamps, glow, towers, cables, chairs, boothGlow, boothGlow2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, built: '' };
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, banners, railMat2, fencePosts, fenceNet, lightPoles, lampMat, lamps, glow, towers, cables, chairs, boothGlow, boothGlow2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, box1, icicle, clock, spire, houseMat, winMat, bulbMat, smoke, snowmen, built: '' };
   }
   const TRACK = 90;
 
@@ -587,7 +598,9 @@
   }
   // Park features. Kickers are curved wedges of snow with a coloured lip, boxes are flat-topped slides,
   // and rails are metal bars on legs. All of them follow the slope.
-  const LIPS = { kick: '#ff6a2c', big: '#ff2f55', hip: '#2fb5ff', mega: '#ffd23f', deck: '#ff2f55' };
+  const LIPS = { kick: '#ff6a2c', big: '#ff2f55', hip: '#2fb5ff', mega: '#ffd23f', deck: '#ff2f55', ramp: '#2fd6a0' };
+  // Where a kicker is across the run at d. Most stand still, a ramp that follows the valley bends with it.
+  const fxAt = (f, d) => (f.follow ? center(d) + f.u : f.x);
   // How high a kicker (or the landing deck of a gap jump) lifts the snow, s from 0 to 1 along it.
   function lift(f, s) {
     if (f.type === 'deck') return f.h * (s < 0.08 ? s / 0.08 : s > 0.75 ? (1 - s) / 0.25 : 1);
@@ -599,11 +612,39 @@
     if (f.shape === 'kink') return s < 0.38 ? 0 : s < 0.55 ? -0.75 * (s - 0.38) / 0.17 : -0.75;
     return 0;
   }
-  const railTop = (f, d) => height(center(d) + f.u, d) + f.top + bendAt(f, clamp((d - f.d) / f.len, 0, 1));
+  // A rail on a roof sits on the roof (f.base), not on the snow.
+  const railTop = (f, d) => (f.base != null ? f.base : height(center(d) + f.u, d)) + f.top + bendAt(f, clamp((d - f.d) / f.len, 0, 1));
+
+  /* ---------- The ski village ----------
+     Wooden houses in three rows: one down the middle of the run, with a kicker up onto its first roof,
+     and one along each side. Roofs are level, so on the slope every house is a step lower than the one
+     before: ski off the end of a roof and you drop onto the next one. A house is turned to follow the valley.
+     In a house, c is across it (from the middle) and a is along it (from the middle, downhill). */
+  const SN = 0.35; // Snow lying on a roof.
+  const EDGE = 0.25; // How far past the walls a roof holds you. The eaves stick out further, but only to look at.
+  const WALLS = ['#9a6a43', '#b5462f', '#e6cf9c', '#5f86b0', '#7d9a55', '#e9e4d8', '#c27a3a', '#8a3b52'];
+  const SHUTTERS = ['#2f5d3a', '#8a2a22', '#2d4a7a', '#f2efe6'];
+  const BULBS = ['#ff4d4d', '#ffd23f', '#4dd2ff', '#6dff8a', '#ff7ae0'];
+  const TRIM = '#3b2a1e', FRAME = '#f4efe4', SNOWC = '#f4f7fc', ROOFWOOD = '#5a3a26', STONE = '#7b7f8a', ICE = '#dff3ff';
+  function houseLocal(f, x, d) { const X = x - f.xm, D = d - f.dm; return [(X - f.k * D) / f.n, (D + f.k * X) / f.n]; }
+  function toWorld(f, c, a) { return { x: f.xm + (c + f.k * a) / f.n, d: f.dm + (a - f.k * c) / f.n }; }
+  // The top of the snow on a roof, or the church tower.
+  function roofLocal(f, c, a) {
+    if (f.tower && a < -f.L / 2 + 3.4 && Math.abs(c) < 1.7) return f.towerTop;
+    let y = f.roof + f.pitch * (f.hw - Math.abs(c));
+    if (f.lip) { const q = (a - (f.L / 2 + EDGE - f.lip.len)) / f.lip.len; if (q > 0) y += f.lip.h * q * q; }
+    return y;
+  }
+  // The roof height over a point, or null if the point is not over the house. Below it is the house itself.
+  function roofY(f, x, d) {
+    const [c, a] = houseLocal(f, x, d);
+    if (Math.abs(a) > f.L / 2 + EDGE || Math.abs(c) > f.hw + EDGE) return null;
+    return roofLocal(f, c, a);
+  }
   function wedge(f, lift, top, side, edge) {
     const pos = [], col = [], n = 10;
     const quad = (a, b, c, e, cl) => { for (const p of [a, b, c, a, c, e]) { pos.push(p[0], p[1], p[2]); col.push(cl.r, cl.g, cl.b); } };
-    const pt = (s, sd, up) => { const d = f.d + s * f.len, x = (f.type === 'box' ? center(d) + f.u : f.x) + sd * f.w; return [x, height(x, d) + (up ? lift(s) : -0.3), -d]; };
+    const pt = (s, sd, up) => { const d = f.d + s * f.len, x = (f.type === 'box' ? center(d) + f.u : fxAt(f, d)) + sd * f.w; return [x, height(x, d) + (up ? lift(s) : -0.3), -d]; };
     for (let i = 0; i < n; i++) {
       const s0 = i / n, s1 = (i + 1) / n;
       quad(pt(s0, -1, 1), pt(s0, 1, 1), pt(s1, 1, 1), pt(s1, -1, 1), edge && i === n - 1 ? edge : top);
@@ -628,7 +669,7 @@
       const bar = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 2, 0.07, 8), f.shape ? S.railMat2 : S.railMat);
       bar.castShadow = true; m.add(bar);
       for (let s = 0.3; s < f.len; s += 3) {
-        const d = f.d + Math.min(s, f.len - 0.3), x = center(d) + f.u, y = height(x, d), h = railTop(f, d) - y;
+        const d = f.d + Math.min(s, f.len - 0.3), x = center(d) + f.u, y = f.base != null ? f.base : height(x, d), h = railTop(f, d) - y;
         const leg = new T.Mesh(new T.CylinderGeometry(0.05, 0.07, h + 0.3, 6), S.legMat);
         leg.position.set(x, y + (h - 0.3) / 2, -d); leg.castShadow = true; m.add(leg);
       }
@@ -664,7 +705,8 @@
       box(5.4, 0.25, 0.25, S.boothGlow2, 0, 5.2, 1.6);
       const dj = new T.Mesh(new T.CapsuleGeometry(0.3, 0.8, 3, 8), S.boothGlow2); dj.position.set(0, 2.25, 0.3); g.add(dj);
       const head = new T.Mesh(new T.SphereGeometry(0.2, 10, 8), S.legMat); head.position.set(0, 3.0, 0.3); g.add(head);
-    } else if (f.type === 'wall') {
+    } else if (f.type === 'house') m = houseMesh(f);
+    else if (f.type === 'wall') {
       // A wooden wall at the side of the run, leaning out a little, on two posts.
       m = new T.Group();
       const dm = f.d + f.len / 2, x = center(dm) + f.u, y = height(x, dm);
@@ -675,6 +717,146 @@
     } else m = wedge(f, (s) => lift(f, s), new T.Color('#f7f9ff'), new T.Color(f.type === 'deck' ? '#c4d3ee' : '#9fb5dc'), new T.Color(LIPS[f.type]));
     m.feat = f;
     return m;
+  }
+  // A house: walls with windows, doors, lanterns and wooden trim, a snowy roof with icicles and
+  // a string of coloured lights, a chimney, and for the church a tower with a clock and a spire.
+  function houseMesh(f) {
+    const g = new T.Group(); g.position.set(f.xm, 0, -f.dm); g.rotation.y = -Math.atan(f.k);
+    const P = [], panes = [], lamps = [], bulbs = [], bulbCol = [];
+    const box = (list, x, y, z, sx, sy, sz, color, rz = 0) => list.push({ geo: S.box1, m: atR(x, y, z, 0, 0, rz, sx, sy, sz), color });
+    const L = f.L, hw = f.hw, E = f.eave, ov = f.ov, p = f.pitch;
+    const gnd = (c, a) => { const w = toWorld(f, c, a); return height(w.x, w.d); };
+    let yb = Infinity;
+    for (const c of [-hw, 0, hw]) for (const a of [-L / 2, 0, L / 2]) yb = Math.min(yb, gnd(c, a));
+    yb -= 1.2;
+    // Walls, corner posts and bands of trim between the floors.
+    box(P, 0, (E + yb) / 2, 0, 2 * hw, E - yb, L, f.col);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(P, sx * hw, (E + yb) / 2, sz * L / 2, 0.32, E - yb, 0.32, TRIM);
+    box(P, 0, E - 0.12, 0, 2 * hw + 0.12, 0.24, L + 0.12, TRIM);
+    for (let y = E - 2.8; y > yb + 1.4; y -= 2.8) box(P, 0, y, 0, 2 * hw + 0.06, 0.14, L + 0.06, TRIM);
+    const win = (x, y, z, across) => { // A window with a frame, a cross and shutters. across: the window faces sideways.
+      const W2 = across ? [0.08, 1.35, 1.1] : [1.1, 1.35, 0.08], o = across ? [Math.sign(x), 0] : [0, Math.sign(z)];
+      box(P, x, y, z, ...W2, FRAME);
+      box(panes, x + o[0] * 0.05, y, z + o[1] * 0.05, across ? 0.04 : 0.85, 1.1, across ? 0.85 : 0.04, '#ffffff');
+      box(P, x + o[0] * 0.07, y, z + o[1] * 0.07, across ? 0.03 : 0.07, 1.1, across ? 0.07 : 0.03, FRAME);
+      box(P, x + o[0] * 0.07, y, z + o[1] * 0.07, across ? 0.03 : 0.85, 0.07, across ? 0.85 : 0.03, FRAME);
+      if (f.shut) for (const k of [-1, 1]) box(P, x + o[0] * 0.02 + (across ? 0 : k * 0.8), y, z + o[1] * 0.02 + (across ? k * 0.8 : 0), across ? 0.05 : 0.42, 1.3, across ? 0.42 : 0.05, f.shut);
+    };
+    // The long sides that face a street get a door, a lantern and rows of windows.
+    const sides = f.u === 0 ? [-1, 1] : [-Math.sign(f.u)];
+    for (const s of sides) {
+      const ad = -L / 2 + rand(2.2, Math.max(2.4, L * 0.35)), gd = gnd(s * hw, ad), x = s * (hw + 0.04);
+      box(P, x, gd + 1.12, -ad, 0.08, 2.3, 1.45, FRAME);
+      box(P, x + s * 0.03, gd + 1.05, -ad, 0.08, 2.1, 1.2, '#4a2c1a');
+      box(P, s * (hw + 0.5), gd + 2.42, -ad, 1.0, 0.12, 1.8, TRIM);
+      box(P, s * (hw + 0.5), gd + 2.52, -ad, 1.0, 0.1, 1.8, SNOWC);
+      box(lamps, s * (hw + 0.16), gd + 2.0, -(ad + 1.05), 0.22, 0.32, 0.22, '#ffffff');
+      for (let a = -L / 2 + 1.6; a <= L / 2 - 1.3; a += 2.8) {
+        for (let y = E - 1.35; ; y -= 2.8) {
+          if (y - 0.7 < gnd(s * hw, a) + 0.5) break;
+          if (Math.abs(a - ad) < 1.5 && y < gd + 3.2) continue;
+          win(x, y, -a, true);
+        }
+      }
+    }
+    // Windows on both ends. The downhill end stands tall on the slope, so it has more floors.
+    for (const e of [-1, 1]) {
+      const a = e * L / 2;
+      for (const c of hw > 3 ? [-hw * 0.5, hw * 0.5] : [0])
+        for (let y = E - 1.35; y - 0.7 > gnd(c, a) + 0.5; y -= 2.8) win(c, y, -(a + e * 0.04), false);
+      if (p * hw > 1.4) win(0, E + p * hw * 0.38, -(a + e * 0.04), false);
+    }
+    // A balcony on the downhill end of the chalets.
+    if (p && !f.tower && E - 2.75 - gnd(0, L / 2) > 1.4) {
+      const y = E - 2.75, z = -(L / 2 + 0.6), w = hw * 1.3;
+      box(P, 0, y, z, w, 0.14, 1.2, TRIM); box(P, 0, y + 0.1, z, w, 0.08, 1.2, SNOWC);
+      box(P, 0, y + 0.95, z - 0.55, w, 0.08, 0.08, TRIM);
+      for (let x = -w / 2; x <= w / 2 + 0.01; x += 0.3) box(P, x, y + 0.5, z - 0.55, 0.05, 0.9, 0.05, TRIM);
+    }
+    // The roof: snow on top of dark wood, with icicles and lights along the eaves.
+    let eaveY;
+    if (p) {
+      const phi = Math.atan(p), cs = Math.cos(phi), sn = Math.sin(phi), Rt = f.roof + p * hw, w = (hw + ov) / cs, len = L + 2 * ov;
+      for (const s of [-1, 1]) {
+        const tcx = s * (hw + ov) / 2, tcy = Rt - p * (hw + ov) / 2, nx = s * sn, ny = cs;
+        box(P, tcx - nx * 0.11, tcy - ny * 0.11, 0, w, 0.22, len, SNOWC, -s * phi);
+        box(P, tcx - nx * 0.31 + s * cs * 0.06, tcy - ny * 0.31 - sn * 0.06, 0, w + 0.12, 0.18, len + 0.1, ROOFWOOD, -s * phi);
+      }
+      box(P, 0, Rt + 0.02, 0, 0.4, 0.16, len, SNOWC);
+      const tri = new T.ExtrudeGeometry(new T.Shape([new T.Vector2(-hw, 0), new T.Vector2(hw, 0), new T.Vector2(0, p * hw)]), { depth: 0.2, bevelEnabled: false });
+      P.push({ geo: tri, m: at(0, E, L / 2 - 0.2), color: f.col }, { geo: tri, m: at(0, E, -L / 2), color: f.col });
+      eaveY = f.roof - p * ov - 0.42;
+    } else {
+      box(P, 0, E + 0.15, 0, 2 * (hw + ov), 0.3, L + 2 * ov, TRIM);
+      box(P, 0, f.roof - 0.06, 0, 2 * (hw + ov) - 0.04, 0.14, L + 2 * ov - 0.04, SNOWC);
+      if (f.lip) P.push({ geo: lipGeo(hw + ov - 0.05, L / 2 + EDGE - f.lip.len, L / 2 + EDGE, f.roof, f.lip.h), m: new T.Matrix4(), color: SNOWC });
+      eaveY = E - 0.02;
+    }
+    for (const s of [-1, 1]) for (let a = -L / 2 - ov + 0.3; a < L / 2 + ov; a += 0.7) {
+      if (Math.random() < 0.65) { const sy = rand(0.5, 1.5); P.push({ geo: S.icicle, m: atR(s * (hw + ov - 0.08), eaveY - 0.25 * sy, -a, Math.PI, 0, 0, 1, sy, 1), color: ICE }); }
+      const bc = new T.Color(BULBS[(Math.round(a / 0.7) + (s > 0 ? 2 : 0)) % BULBS.length] || BULBS[0]);
+      bulbs.push(s * (hw + ov + 0.03), eaveY - 0.08 - 0.1 * Math.abs(Math.sin(a * 1.6)), -a); bulbCol.push(bc.r, bc.g, bc.b);
+    }
+    // Chimneys.
+    for (const c of f.chims) {
+      const base = roofLocal(f, c.c, c.a) - 0.6;
+      box(P, c.c, (base + c.top) / 2, -c.a, 0.75, c.top - base, 0.75, STONE);
+      box(P, c.c, c.top + 0.06, -c.a, 0.95, 0.14, 0.95, TRIM);
+      box(P, c.c, c.top + 0.17, -c.a, 0.95, 0.1, 0.95, SNOWC);
+    }
+    // The church tower, with a clock, bell openings, a spire and a gold cross.
+    if (f.tower) {
+      const T0 = f.towerY, z = L / 2 - 1.7;
+      box(P, 0, (yb + T0) / 2, z, 3.2, T0 - yb, 3.2, f.col);
+      box(P, 0, T0, z, 3.5, 0.3, 3.5, TRIM);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(P, sx * 1.6, (yb + T0) / 2, z + sz * 1.6, 0.3, T0 - yb, 0.3, TRIM);
+      for (const [dx, dz, sx, sz] of [[0, 1.62, 1, 0.06], [0, -1.62, 1, 0.06], [1.62, 0, 0.06, 1], [-1.62, 0, 0.06, 1]]) box(P, dx, T0 - 1.0, z + dz, sx, 1.3, sz, '#1d2130');
+      P.push({ geo: S.clock, m: at(0, T0 - 3.0, z + 1.62), color: '#f6f1e2' });
+      box(P, 0, T0 - 2.78, z + 1.68, 0.08, 0.5, 0.03, TRIM); box(P, 0.17, T0 - 3.0, z + 1.68, 0.36, 0.07, 0.03, TRIM);
+      P.push({ geo: S.spire, m: at(0, T0 + 2.6, z, Math.PI / 4), color: '#3d4a5c' });
+      box(P, 0, T0 + 5.6, z, 0.12, 0.9, 0.12, '#ffd23f'); box(P, 0, T0 + 5.75, z, 0.5, 0.12, 0.12, '#ffd23f');
+    }
+    const body = new T.Mesh(merged(P), S.houseMat); body.castShadow = body.receiveShadow = true; g.add(body);
+    if (panes.length) g.add(new T.Mesh(merged(panes), S.winMat));
+    if (lamps.length) g.add(new T.Mesh(merged(lamps), S.lampMat));
+    const bg = new T.BufferGeometry();
+    bg.setAttribute('position', new T.Float32BufferAttribute(bulbs, 3)); bg.setAttribute('color', new T.Float32BufferAttribute(bulbCol, 3));
+    g.add(new T.Points(bg, S.bulbMat));
+    for (const part of P) if (part.geo !== S.box1 && part.geo !== S.icicle && part.geo !== S.clock && part.geo !== S.spire) part.geo.dispose();
+    return g;
+  }
+  // A snowy kicker on the end of a flat roof: y0 is the roof, it rises by h along the last part (a0 to a1).
+  function lipGeo(hw, a0, a1, y0, h) {
+    const pos = [], n = 8;
+    const pt = (q, c, up) => [c, y0 + (up ? h * q * q : -0.05), -(a0 + (a1 - a0) * q)];
+    const quad = (a, b, c, e) => { for (const v of [a, b, c, a, c, e]) pos.push(v[0], v[1], v[2]); };
+    for (let i = 0; i < n; i++) {
+      const q0 = i / n, q1 = (i + 1) / n;
+      quad(pt(q0, -hw, 1), pt(q0, hw, 1), pt(q1, hw, 1), pt(q1, -hw, 1));
+      quad(pt(q0, -hw, 0), pt(q0, -hw, 1), pt(q1, -hw, 1), pt(q1, -hw, 0));
+      quad(pt(q0, hw, 1), pt(q0, hw, 0), pt(q1, hw, 0), pt(q1, hw, 1));
+    }
+    quad(pt(1, -hw, 1), pt(1, hw, 1), pt(1, hw, 0), pt(1, -hw, 0));
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+    return g;
+  }
+  // A snowman with a carrot nose, a hat, a scarf and stick arms, looking up the hill.
+  function snowmanGeo() {
+    const ball = new T.SphereGeometry(1, 14, 10), parts = [
+      { geo: ball, m: atR(0, 0.55, 0, 0, 0, 0, 0.6, 0.58, 0.6), color: '#f4f7fc' },
+      { geo: ball, m: atR(0, 1.35, 0, 0, 0, 0, 0.44, 0.44, 0.44), color: '#f4f7fc' },
+      { geo: ball, m: atR(0, 1.95, 0, 0, 0, 0, 0.3, 0.3, 0.3), color: '#f4f7fc' },
+      { geo: new T.ConeGeometry(0.06, 0.35, 6).rotateX(Math.PI / 2), m: at(0, 1.95, 0.42), color: '#ff7a1a' },
+      { geo: new T.CylinderGeometry(0.24, 0.24, 0.34, 12), m: at(0, 2.36, 0), color: '#1a1c24' },
+      { geo: new T.CylinderGeometry(0.38, 0.38, 0.04, 14), m: at(0, 2.2, 0), color: '#1a1c24' },
+      { geo: new T.CylinderGeometry(0.31, 0.34, 0.12, 12), m: at(0, 1.72, 0), color: '#e8333a' },
+    ];
+    for (const s of [-1, 1]) {
+      parts.push({ geo: ball, m: atR(s * 0.1, 2.03, 0.26, 0, 0, 0, 0.045, 0.045, 0.045), color: '#1a1c24' });
+      parts.push({ geo: new T.CylinderGeometry(0.025, 0.03, 0.9, 4), m: atR(s * 0.7, 1.55, 0, 0, 0, s * 1.05), color: '#5a3a22' });
+    }
+    for (const y of [1.2, 1.4, 1.6]) parts.push({ geo: ball, m: atR(0, y, Math.sqrt(Math.max(0, 0.44 * 0.44 - (y - 1.35) ** 2)) - 0.01, 0, 0, 0, 0.045, 0.045, 0.045), color: '#1a1c24' });
+    return merged(parts);
   }
   function bannerTexture(word = 'TERRAIN PARK', col = '#1b2350') {
     const c = document.createElement('canvas'); c.width = 1024; c.height = 64;
@@ -696,7 +878,7 @@
     get H() { return H; },
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
-    intro: PARK_ONLY ? 'Ski down an endless 3D terrain park. Grind rails, ride walls, clear the gap and fly off the mega jump. Land your tricks clean and stay off the fence.'
+    intro: PARK_ONLY ? 'Ski down an endless 3D terrain park. Grind rails, ride walls, ski over the village rooftops and fly off the mega jump. Land your tricks clean and stay off the fence.'
       : 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
     hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
 
@@ -718,6 +900,7 @@
       this.wallR = null; this.line = 0; this.lineT = 0; this.bestLine = 0; this.parkStart = 0;
       this.zoneK = -1; this.gateHit = 0; this.gateStreak = 0; this.gateN = 0; this.gateI = 0; this.ava = null;
       this.storm = 0; this.wind = 0; this.windX = 0; this.fallT = 0; this.ice = 0;
+      this.villages = []; this.onRoof = null; this.roofFrom = null;
       this.gen();
       if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.feats.forEach(dropMesh); S.feats = []; S.built = ''; }
     },
@@ -747,7 +930,7 @@
       while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
     },
     makeChunk(d0) {
-      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [], gates: [], animals: [], crowd: [], speakers: [], booths: [], fence: [], lights: [], towers: [] }, lv = level(d0);
+      const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [], gates: [], animals: [], crowd: [], speakers: [], booths: [], fence: [], lights: [], towers: [], snowmen: [] }, lv = level(d0);
       const put = (list, x, d, s) => list.push({ x, d, s, y: height(x, d), r: rand(0, 6.3), h: rand(0.9, 1.15) });
       // No kickers on the ice or in the middle of a slalom.
       const calm = (d) => { const z = zoneAt(d); return !z || (z.type !== 'lake' && z.type !== 'slalom'); };
@@ -819,7 +1002,7 @@
       while (this.planD < d0 + CL + 80) {
         if (!inPark(this.planD)) { this.planD = PARK_AT + Math.ceil((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY; continue; }
         if (!PARK_ONLY && this.planD > PARK_AT + Math.floor((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY + PARK_LEN - 150) { this.planD += 50; continue; }
-        if (!this.order.length) this.order = this.sections++ === 0 ? ['rails', 'jumps', 'gap', 'walls', 'mega'] : ['rails', 'jumps', 'gap', 'walls'].sort(() => Math.random() - 0.5).concat('mega');
+        if (!this.order.length) this.order = this.sections++ === 0 ? ['rails', 'village', 'jumps', 'gap', 'walls', 'mega'] : ['rails', 'jumps', 'gap', 'walls', 'village'].sort(() => Math.random() - 0.5).concat('mega');
         this.planD += this['sec_' + this.order.shift()](this.planD) + 12;
       }
       const keep = [];
@@ -912,6 +1095,87 @@
       this.at(bd, (ch) => { const x = center(bd) + side * (FLOOR + 5); ch.feats.push({ type: 'booth', x, u: side * (FLOOR + 5), d: bd, len: 0, y: height(x, bd), side }); });
       return land + 30 - d;
     },
+    /* The ski village. A kicker takes you up onto the first roof of the middle row, then each roof is a step
+       lower than the last, so you can ski from roof to roof. Two of the chalets have a rail along the ridge,
+       the shop has one on its flat roof, and the hotel at the end has a snow kicker to fly off.
+       Houses line both sides, with the church on one of them, and snowmen and boxes stand in the streets. */
+    sec_village(d) {
+      this.sign(d, 'SKI VILLAGE', { tall: 10 }); this.fans(d - 6, d + 8, 1);
+      this.villages.push({ a: d, done: false });
+      const rd = d + 22, rl = 14, hd = rd + rl, GAP = 4.5;
+      // The kicker ends just where the roof starts, so you take off from the snow, not from the roof.
+      this.at(rd, (ch) => ch.feats.push({ type: 'ramp', follow: true, x: center(hd), u: 0, d: rd, len: rl - EDGE, w: 4.6, h: 3 + SN }));
+      let k = hd;
+      for (const [kind, len, extra] of [['lodge', 20], ['chalet', 14, 'ridge'], ['chalet', 13], ['shop', 16, 'rail'], ['chalet', 14, 'ridge'], ['hotel', 18]]) {
+        const at = k;
+        this.at(at, (ch) => {
+          const f = this.house(ch, at, 0, len, kind);
+          if (kind === 'lodge') { this.roofRail(ch, f, at + 9, 9); this.roofCoins(ch, f, 1, 8); }
+          else if (kind === 'hotel') this.roofCoins(ch, f, 1, len - 6);
+          else if (extra === 'ridge') this.roofRail(ch, f, at + 1.5, len - 3, true);
+          else if (extra === 'rail') this.roofRail(ch, f, at + 2, len - 4);
+          else this.roofCoins(ch, f, 1, len);
+        });
+        k += len + GAP;
+      }
+      const end = k - GAP;
+      // The side rows. Now and then a big pine or a snowman stands in a gap between two houses.
+      const churchSide = Math.random() < 0.5 ? -1 : 1;
+      for (const side of [-1, 1]) {
+        let s = d + 20 + rand(0, 6), churchAt = side === churchSide ? rand(hd + 15, end - 45) : Infinity;
+        while (s < end - 6) {
+          const church = s >= churchAt, len = church ? 18 : rand(10, 15), sd = s, u = side * 18.6;
+          const kind = church ? 'church' : Math.random() < 0.3 ? 'flat' : 'chalet';
+          if (church) churchAt = Infinity;
+          this.at(sd, (ch) => this.house(ch, sd, u, len, kind));
+          const gap = rand(5, 10), gd = s + len + gap / 2;
+          s += len + gap;
+          if (s < end - 6 && Math.random() < 0.55) {
+            const tree = Math.random() < 0.6;
+            this.at(gd, (ch) => {
+              const x = center(gd) + u + rand(-1, 1), y = height(x, gd);
+              if (tree) ch.trees.push({ x, d: gd, s: rand(1.4, 1.8), y, r: rand(0, 6.3), h: rand(0.95, 1.1) });
+              else ch.snowmen.push({ x, d: gd, y, r: rand(-0.4, 0.4) });
+            });
+          }
+        }
+      }
+      // In the streets: snowmen to dodge, and a box on each side.
+      for (const [m, side] of [[22, -1], [56, 1], [96, -1]]) {
+        const sd = hd + m, u = side * rand(8, 11);
+        this.at(sd, (ch) => { const x = center(sd) + u; ch.snowmen.push({ x, d: sd, y: height(x, sd), r: rand(-0.4, 0.4) }); });
+      }
+      for (const [m, side] of [[38, 1], [76, -1]]) { const bd = hd + m; this.at(bd, (ch) => this.rail(ch, bd, side * 9.5, 12, true)); }
+      return end + 60 - d;
+    },
+    // A house, turned to follow the valley, with a level roof. kind: lodge, shop, hotel or flat (flat roofs), chalet or church.
+    house(ch, d, u, len, kind) {
+      const xf = center(d) + u, xb = center(d + len) + u, k = (xb - xf) / len, n = Math.hypot(1, k);
+      const church = kind === 'church', flat = kind !== 'chalet' && !church;
+      const hw = kind === 'lodge' || kind === 'hotel' ? 4.5 : church ? 4.6 : u ? 3.8 : 4, e0 = church ? 5.2 : 3;
+      const f = { type: 'house', kind, u, x: (xf + xb) / 2, xm: (xf + xb) / 2, d, dm: d + len / 2, len, k, n, L: len * n, hw, ov: 0.5,
+        eave: height(xf, d) + e0, pitch: flat ? 0 : church ? 0.8 : 0.42, chims: [],
+        col: church ? '#ece6d8' : WALLS[(Math.random() * WALLS.length) | 0], shut: Math.random() < 0.6 ? SHUTTERS[(Math.random() * SHUTTERS.length) | 0] : null };
+      f.roof = f.eave + SN;
+      if (kind === 'hotel') f.lip = { len: 5, h: 0.6 };
+      if (church) { f.tower = true; f.towerY = f.eave + 8; f.towerTop = f.towerY + 4; }
+      if (kind === 'chalet' || kind === 'flat') {
+        const c = (Math.random() < 0.5 ? -1 : 1) * f.hw * (u ? 0.62 : 0.85), a = rand(-f.L / 2 + 2, f.L / 2 - 2), w = toWorld(f, c, a);
+        f.chims.push({ c, a, top: roofLocal(f, c, a) + 1.4, x: w.x, d: w.d });
+      }
+      ch.feats.push(f);
+      return f;
+    },
+    // A low rail along the middle of a roof, so you ride straight onto it: on a flat roof it stands on short legs,
+    // on a chalet it runs along the ridge.
+    roofRail(ch, f, d, len, ridge) {
+      const r = { type: 'rail', x: center(d) + f.u, u: f.u, d, len, top: ridge ? 0.12 : 0.25, w: 0.12, base: ridge ? f.roof + f.pitch * f.hw : f.roof };
+      ch.feats.push(r);
+      for (let s = 2; s < len; s += 3) { const dd = d + s; ch.coins.push({ x: center(dd) + f.u, d: dd, y: railTop(r, dd) + 0.9 }); }
+    },
+    roofCoins(ch, f, a, b) {
+      for (let s = a; s < b; s += 3) { const dd = f.d + s, x = center(dd) + f.u, y = roofY(f, x, dd); if (y != null) ch.coins.push({ x, d: dd, y: y + 0.9 }); }
+    },
     // Along both edges of the park: the safety fence with flags, light towers, and the chairlift up the left side.
     parkEdges(ch, d0) {
       for (let d = Math.ceil(d0 / 4) * 4; d < d0 + CL; d += 4) if (inPark(d)) for (const s of [-1, 1]) {
@@ -945,16 +1209,34 @@
       }
     },
     // The snow height under a point, kickers included.
+    // The snow height under a point, kickers and roofs included.
     ground(x, d) {
-      let y = height(x, d);
+      let y = height(x, d), roof = -Infinity;
       for (const ch of this.chunks) {
-        if (d < ch.d0 - 20 || d > ch.d0 + CL + 20) continue;
-        for (const f of ch.feats) if (f.h && d >= f.d && d <= f.d + f.len && Math.abs(x - f.x) < f.w) y += lift(f, (d - f.d) / f.len);
+        if (d < ch.d0 - 30 || d > ch.d0 + CL + 30) continue;
+        for (const f of ch.feats) {
+          if (f.type === 'house') { if (d > f.d - 2 && d < f.d + f.len + 2) { const r = roofY(f, x, d); if (r != null && r > roof) roof = r; } }
+          else if (f.h && d >= f.d && d <= f.d + f.len && Math.abs(x - fxAt(f, d)) < f.w) y += lift(f, (d - f.d) / f.len);
+        }
       }
-      return y;
+      return Math.max(y, roof);
     },
     kickerAt(x, d) {
-      for (const ch of this.chunks) for (const f of ch.feats) if (f.h && d >= f.d - 0.5 && d <= f.d + f.len + 0.5 && Math.abs(x - f.x) < f.w + 0.3) return f;
+      for (const ch of this.chunks) for (const f of ch.feats) if (f.h && d >= f.d - 0.5 && d <= f.d + f.len + 0.5 && Math.abs(x - fxAt(f, d)) < f.w + 0.3) return f;
+      return null;
+    },
+    // The house at a point.
+    houseAt(x, d) {
+      for (const ch of this.chunks) for (const f of ch.feats) if (f.type === 'house' && d > f.d - 2 && d < f.d + f.len + 2 && roofY(f, x, d) != null) return f;
+      return null;
+    },
+    // The house whose roof you are on (or just above, by up to `above`).
+    roofAt(x, d, y, above = 0.25) {
+      for (const ch of this.chunks) for (const f of ch.feats) {
+        if (f.type !== 'house' || d < f.d - 2 || d > f.d + f.len + 2) continue;
+        const r = roofY(f, x, d);
+        if (r != null && y >= r - 0.25 && y <= r + above) return f;
+      }
       return null;
     },
     wallAt(x, d) {
@@ -1042,6 +1324,7 @@
         this.vy = (top - this.y) / dt; this.y = top; this.grindT += dt;
         if (this.sw) this.grindSwT += dt;
         this.lastG = this.ground(this.x, this.d);
+        this.onRoof = this.roofAt(this.x, this.d, this.y, 1.2);
         if (Math.random() < dt * 50) this.parts.push({ x: this.x + rand(-0.3, 0.3), y: this.y, d: this.d, vx: rand(-2, 2), vy: rand(1, 3), vd: this.v * rand(0.6, 0.9), life: rand(0.2, 0.5), max: 0.5 });
         if (f.type === 'rail' && Math.random() < dt * 40) this.puff(1, this.x, this.y, this.d, 2, 2, this.sparks);
         if (this.d > f.d + f.len) this.endGrind(0);
@@ -1050,7 +1333,7 @@
         // Speed creeps up the further you go. Climbing the valley side slows you and pushes you back down.
         if (!this.air) {
           // On ice you go a bit faster, and turning hardly bites, so you slide on sideways.
-          const want = cruise(this.d) * (wall > 0 ? 0.75 : 1) * (1 + 0.12 * this.ice) + this.boost;
+          const want = Math.min(VMAX, cruise(this.d) * (wall > 0 ? 0.75 : 1) * (1 + 0.12 * this.ice) + this.boost);
           this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
           this.vx += (dir * maxSide + this.wind - this.vx) * Math.min(1, dt * (5 - 4.3 * this.ice));
           this.vx -= Math.sign(u) * wall * 1.6 * dt;
@@ -1067,6 +1350,12 @@
 
         // Stay on the snow, or fly when it drops away faster than gravity can pull you down.
         const g = this.ground(this.x, this.d), gv = (g - this.lastG) / dt; this.lastG = g;
+        // The village: ski into a wall and you crash. Come in high enough and you are on the roof.
+        const hs = this.houseAt(this.x, this.d);
+        if (hs && y0 < roofY(hs, this.x, this.d) - 1.4) {
+          this.hit(hs.tower ? 'the church' : 'a house', hs.tower ? 'You skied into the church' : 'You skied into a house');
+          this.v = -1.5; this.vx = 0; return; // Bounce back off the wall.
+        }
         if (!this.air) {
           if (gv < this.vy - G * dt * 1.2) {
             this.takeoff(false); if (this.vy > 2) snd.jump();
@@ -1097,6 +1386,7 @@
           deck.hit = true; return this.hit('the gap deck', 'You came up short on the gap jump');
         }
         if (this.air && this.y <= g) { this.land(g, gv); if (this.crash) return; }
+        this.onRoof = this.air ? null : this.roofAt(this.x, this.d, this.y);
       }
 
       // Coins, trees and rocks near you.
@@ -1110,7 +1400,13 @@
         for (const o of ch.forest) if (Math.abs(o.x - this.x) < 1.6 && Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3) return this.hit('a tree');
         for (const o of ch.trees) if (Math.abs(o.d - this.d) < 0.7 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.75 * o.s + 0.3 && this.y - o.y < 4.5 * o.s) return this.hit('a tree');
         for (const o of ch.rocks) if (Math.abs(o.d - this.d) < 0.6 * o.s + 0.3 && Math.abs(o.x - this.x) < 0.6 * o.s + 0.3 && this.y - o.y < 0.8 * o.s) return this.hit('a rock');
+        for (const o of ch.snowmen) if (Math.abs(o.d - this.d) < 0.65 && Math.abs(o.x - this.x) < 0.65 && this.y - o.y < 2.1) return this.hit('a snowman');
       }
+      for (const ch of this.chunks) for (const f of ch.feats) if (f.chims) for (const o of f.chims)
+        if (Math.abs(o.d - this.d) < 0.55 && Math.abs(o.x - this.x) < 0.55 && this.y < o.top - 0.1 && this.y > o.top - 3) return this.hit('a chimney');
+      // Into the village.
+      for (const v of this.villages) if (!v.done && this.d >= v.a) { v.done = true; this.pop('SKI VILLAGE', 'SKI ON THE ROOFS!', '#ffd75e'); }
+      if (this.villages.length && this.villages[0].done) this.villages.shift();
       // The safety fence along the edges of the park.
       if (inPark(this.d) && Math.abs(this.x - center(this.d)) > FENCE - 0.35) return this.hit('the safety fence');
       if (this.critters(dt)) return;
@@ -1134,11 +1430,14 @@
       // Tracks in the snow.
       if (this.d - this.trailD > 0.5) {
         this.trailD = this.d;
-        this.trail.unshift(this.air || this.grind ? null : { x: this.x, d: this.d, h: Math.atan2(this.vx + bend * this.v * 0.5, this.v) });
+        this.trail.unshift(this.air || this.grind ? null : { x: this.x, d: this.d, h: Math.atan2(this.vx + bend * this.v * 0.5, this.v), r: this.onRoof ? this.y : null });
         if (this.trail.length > TRACK) this.trail.pop();
       }
 
       if (this.multT > 0 && !this.air && !this.grind && (this.multT -= dt) <= 0) this.mult = 1;
+      // Never faster than 200 km/h, and the boost can't build up past it either.
+      if (this.v > VMAX) this.v = VMAX;
+      this.boost = Math.min(this.boost, Math.max(0, VMAX - cruise(this.d)));
       const sc = Math.floor(this.d) + this.coins * 10 + this.bonus;
       if (sc !== this.score) { this.score = sc; setScore(sc); }
       this.moveBits(dt);
@@ -1213,6 +1512,9 @@
     },
     takeoff(ollie) {
       this.air = true; this.airT = 0; this.ollie = ollie; this.airSw = this.sw;
+      // Off a roof? Then the landing can be a roof gap or a roof drop. Off the village kicker counts as off the snow.
+      const k = this.kickerAt(this.x, this.d);
+      this.roofFrom = this.onRoof && !(k && k.type === 'ramp') ? this.onRoof : null; this.onRoof = null;
       this.grab = GRABS[(Math.random() * GRABS.length) | 0];
     },
     // Space (or swipe up): pop off the snow, or off a rail.
@@ -1239,6 +1541,7 @@
       const n = Math.round(this.spin / Math.PI), flips = this.flip / (Math.PI * 2), nf = Math.round(flips);
       if (Math.abs(flips - nf) > 0.22) { this.spin = this.flip = 0; return this.hit('the rail upside down'); }
       if (Math.abs(n) % 2) this.sw = !this.sw; // Land a 180 onto it and you slide backwards.
+      this.roofScore(f.base != null ? this.roofAt(this.x, this.d, top, 1.2) : null, top, this.airT);
       const names = f.type === 'rail' ? RAILS : BOXES, base = names[(Math.random() * names.length) | 0];
       this.grind = f; this.grindT = 0; this.grindSwT = 0; this.grindSwaps = 0; this.air = false; this.y = top; this.vy = 0;
       this.grindSide = SIDEWAYS.includes(base);
@@ -1254,8 +1557,8 @@
     },
     // A speed boost: share is how much faster than cruising, the trick multiplier makes it bigger.
     speedUp(share) {
-      const c = cruise(this.d), add = Math.min(share * (1 + 0.15 * (this.mult - 1)), BOOST_MAX - this.boost / c) * c;
-      if (add <= 0.2) return;
+      const c = cruise(this.d), add = Math.min(Math.min(share * (1 + 0.15 * (this.mult - 1)), BOOST_MAX - this.boost / c) * c, VMAX - this.v);
+      if (add <= 0.2) return; // Already at (or right by) 200 km/h: no boost.
       this.boost += add; this.v += add; this.boostT = 1.2;
       snd.hiss(0.6, 0.08, 'bandpass', 400, 3200);
     },
@@ -1270,6 +1573,17 @@
       this.grind = null; this.swapT = 0; this.takeoff(false); this.fromRail = true; this.vy += 3; this.vx = push;
       this.lastG = this.ground(this.x, this.d);
     },
+    // Roofs: up onto a roof from the snow, across to another roof, or off a roof down to the snow (or onto a rail).
+    // on is the house you came down on (or null), y how high you came down, t how long you were in the air.
+    roofScore(on, y, t) {
+      const from = this.roofFrom; this.roofFrom = null;
+      if (on && from && on !== from) { const pts = 250 * this.mult; this.bonus += pts; this.pop('ROOF GAP', '+' + pts, '#7fe3ff'); this.lineHit(); }
+      else if (on && !from && t > 0.2) { const pts = 150 * this.mult; this.bonus += pts; this.pop('ON THE ROOF', '+' + pts, '#7fe3ff'); this.lineHit(); }
+      else if (!on && from && t > 0.4) {
+        const drop = Math.max(0, from.roof - y), pts = (150 + Math.round(drop * 25)) * this.mult; this.bonus += pts;
+        this.pop('ROOF DROP ' + Math.round(drop) + ' M', '+' + pts, '#ff9d2f'); this.lineHit();
+      }
+    },
     land(g, gv) {
       this.y = g; this.vy = Math.min(gv, this.v * 0.5); this.air = false;
       const t = this.airT;
@@ -1281,6 +1595,7 @@
       this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.ollie = false; this.flipTouch = 0; this.jumpCd = 0.08;
       if (offF > 0.22) return this.hit('the snow head first');
       if (Math.abs(n) % 2) this.sw = !this.sw;
+      this.roofScore(this.roofAt(this.x, this.d, g), g, t);
       // Landed on top of a gap jump's deck: the gap is cleared.
       const dk = this.gapDeck && this.d > this.gapDeck.d + 1 ? this.gapDeck : this.kickerAt(this.x, this.d);
       this.gapDeck = null;
@@ -1319,7 +1634,7 @@
 
       // Camera: behind and above, swinging round with your direction.
       const head = Math.atan2(this.vx, this.v) * 0.6, k = Math.min(1, dt * 4);
-      const tx = this.x - Math.sin(head) * 10, td = this.d - Math.cos(head) * 10, ty = Math.max(this.y, height(tx, td)) + 5;
+      const tx = this.x - Math.sin(head) * 10, td = this.d - Math.cos(head) * 10, ty = Math.max(this.y, this.ground(tx, td)) + 5; // ground: stay above the roofs behind you too.
       if (!this.cam) this.cam = { x: tx, y: ty, d: td, h: head };
       const c = this.cam;
       c.x += (tx - c.x) * k; c.d = td; c.y += (ty - c.y) * Math.min(1, dt * 6); c.h += (head - c.h) * k;
@@ -1405,6 +1720,9 @@
         for (const ch of this.chunks) for (const o of ch.flags) { if (fl >= 200) break; p.set(o.x, o.y - 0.1, -o.d); s.flags.setMatrixAt(fl, m.compose(p, q.identity(), sc.set(1, 1, 1))); s.flags.setColorAt(fl++, flagCol[o.c]); }
         s.flags.count = fl; s.flags.instanceMatrix.needsUpdate = true; if (s.flags.instanceColor) s.flags.instanceColor.needsUpdate = true;
         this.buildEdges(s);
+        let sm = 0;
+        for (const ch of this.chunks) for (const o of ch.snowmen) { if (sm >= 40) break; q.setFromEuler(e.set(0, o.r, 0)); p.set(o.x, o.y - 0.1, -o.d); s.snowmen.setMatrixAt(sm++, m.compose(p, q, sc.set(1, 1, 1))); }
+        s.snowmen.count = sm; s.snowmen.instanceMatrix.needsUpdate = true;
         s.trees.count = n; s.rocks.count = r; s.forest.count = f; s.trees.instanceMatrix.needsUpdate = s.rocks.instanceMatrix.needsUpdate = s.forest.instanceMatrix.needsUpdate = true;
         const all = this.chunks.flatMap((c) => c.feats);
         s.feats = s.feats.filter((mesh) => { if (all.includes(mesh.feat)) return true; dropMesh(mesh); return false; });
@@ -1440,6 +1758,20 @@
       s.glow.material.opacity = clamp(night * 1.3 - 0.3, 0, 0.8);
       const beat = 0.6 + 0.6 * Math.max(0, Math.sin(this.t * 8.4)), beat2 = 0.6 + 0.6 * Math.max(0, Math.sin(this.t * 8.4 + 3.1));
       s.boothGlow.emissiveIntensity = beat; s.boothGlow2.emissiveIntensity = beat2;
+      // The village: windows light up in the evening, the lights on the eaves twinkle, and the chimneys smoke.
+      s.winMat.emissiveIntensity = 0.1 + clamp(night * 1.3 - 0.1, 0, 1) * 1.6;
+      s.bulbMat.opacity = 0.45 + 0.55 * clamp(night * 1.5, 0, 1) * (0.75 + 0.25 * Math.sin(this.t * 3));
+      {
+        const P = s.smoke.geometry.attributes.position.array;
+        let n = 0;
+        for (const ch of this.chunks) for (const f of ch.feats) if (f.chims) for (const c of f.chims) for (let i = 0; i < 8 && n < P.length; i++) {
+          const q = (((this.t * 0.22 + i / 8 + c.a * 0.13) % 1) + 1) % 1;
+          P[n++] = c.x + Math.sin(this.t * 0.8 + i * 1.7 + c.a) * 0.3 * (1 + q * 3) + q * 2.5;
+          P[n++] = c.top + 0.3 + q * 6;
+          P[n++] = -(c.d + q * 1.5);
+        }
+        s.smoke.geometry.setDrawRange(0, n / 3); s.smoke.geometry.attributes.position.needsUpdate = true;
+      }
       // Fans cheering (jumping higher while you are in the air), and the speakers.
       {
         const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), p = new T.Vector3(), one = new T.Vector3(1, 1, 1), col = new T.Color();
@@ -1512,7 +1844,7 @@
         let last = { x: this.x, d: this.d, h: 0 };
         for (let j = 0; j < TRACK; j++) {
           const p = this.trail[j], q = p || last, hw = p ? 0.045 : 0; last = q;
-          const cx = q.x + Math.cos(q.h) * off, cd = q.d - Math.sin(q.h) * off, y = height(cx, cd) + 0.03;
+          const cx = q.x + Math.cos(q.h) * off, cd = q.d - Math.sin(q.h) * off, y = q.r != null ? q.r + 0.1 : height(cx, cd) + 0.03; // On a roof, the tracks are up on it.
           P.set([cx - hw, y, -cd, cx + hw, y, -cd], j * 6);
         }
         m.geometry.attributes.position.needsUpdate = true;
@@ -1658,7 +1990,9 @@
           ctx.fillStyle = gap < 20 ? '#ff6b9a' : '#ffd75e'; ctx.fillRect(14, 84, w, 5);
         }
       }
-      text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, this.boost > cruise(this.d) * 0.08 && !this.crash ? '#7fe3ff' : '#ffd23f', 'center');
+      const top = !this.crash && this.v >= VMAX - 0.05;
+      text(String(Math.round(this.v * 3.6)), W / 2, H - 50, 24, top ? (Math.sin(this.t * 10) > 0 ? '#ff6b6b' : '#ffffff') : this.boost > cruise(this.d) * 0.08 && !this.crash ? '#7fe3ff' : '#ffd23f', 'center');
+      if (top) text('MAX SPEED', W / 2, H - 66, 8, '#ff6b6b', 'center');
       text('KM/H', W / 2, H - 20, 7, '#f4f6fb', 'center');
       // Boosted: speed lines down both sides of the screen, and BOOST by the speed.
       const bst = this.crash ? 0 : clamp(this.boost / (cruise(this.d) * 0.3), 0, 1);
