@@ -52,6 +52,17 @@ header.marquee { position: relative; display: grid; gap: 12px; text-align: left;
   text-wrap: balance;
 }
 .marquee p { margin: 0; color: var(--muted); max-width: 60ch; }
+/* Countdown badges under the title (GTA 6, and Christmas in December). js/countdowns.js and js/season.js fill this row. */
+.notes { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0; }
+.notes:empty { display: none; }
+.marquee p.note {
+  display: inline-flex; align-items: center; gap: 9px; max-width: 100%;
+  margin: 0; padding: 6px 14px 6px 11px; font-size: 13px; line-height: 1.5; color: var(--ice);
+  background: rgba(56, 217, 238, .07); border: 1px solid rgba(56, 217, 238, .45); border-radius: 18px;
+}
+.note b { font-weight: 400; font-size: 15px; line-height: 1; }
+.note.gta b { color: var(--cyan); text-shadow: 0 0 10px rgba(56, 217, 238, .8); }
+.note.gta strong { color: #fff; font-weight: 600; }
 
 .menu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 18px; }
 @media (max-width: 560px) { .menu { grid-template-columns: 1fr; } .marquee h1 { font-size: 21px; } }
