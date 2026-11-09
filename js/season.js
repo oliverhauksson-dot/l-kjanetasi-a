@@ -41,7 +41,7 @@
       : days === 1 ? 'Merry Christmas · it\'s tomorrow'
       : 'Merry Christmas · ' + days + ' days to go';
     const p = document.createElement('p');
-    p.className = 'xmas-note';
+    p.className = 'note xmas-note';
     const star = document.createElement('b');
     star.textContent = '★'; star.setAttribute('aria-hidden', 'true');
     p.append(star, text);
@@ -103,7 +103,9 @@
     document.body.prepend(el('div', 'xmas-lights', '<i></i><i></i>'));
     document.body.append(el('div', 'xmas-hills'));
     const title = document.querySelector('.marquee h1');
-    if (title) { title.after(countdown()); title.parentNode.append(tree()); }
+    const notes = document.getElementById('notes');
+    if (notes) notes.prepend(countdown()); else if (title) title.after(countdown());
+    if (title) title.parentNode.append(tree());
     snow();
   }
 

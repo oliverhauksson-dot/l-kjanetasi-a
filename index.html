@@ -194,12 +194,14 @@
 {% include head-end.html %}
 <link rel="stylesheet" href="css/arcade.css?v={{ site.time | date: '%s' }}">
 <script src="js/arcade.js?v={{ site.time | date: '%s' }}" defer></script>
+<script src="js/countdowns.js?v={{ site.time | date: '%s' }}" defer></script>
 </head>
 <body>
 <main class="wrap">
   <div id="home">
     <header class="marquee" id="top">
       <h1>Pocket Arcade</h1>
+      <div class="notes" id="notes"></div>
       <p>Pick a cabinet. Save your score to see your place, and make the top 100 to get your name on the leaderboard.</p>
       <div class="hbtns">
         <button class="install lbopen" id="lbopen">🏆 LEADERBOARD</button>

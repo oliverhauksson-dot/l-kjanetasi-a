@@ -4,7 +4,7 @@
    Change CACHE (v1 -> v2) only if you want every phone to throw away its saved copy. */
 const CACHE = 'arcade-v1';
 const GAMES = ['snake', 'runner', 'breakout', 'memory', 'pong', 'snapgrid', 'invaders', 'flappy', 'muncher', 'blackjack', 'cube', 'chase', 'ski', 'tower', 'fishing'];
-const CORE = ['./', 'css/arcade.css', 'css/xmas.css', 'js/arcade.js', 'js/consent.js', 'js/stats.js', 'js/season.js', 'fonts/fonts.css',
+const CORE = ['./', 'css/arcade.css', 'css/xmas.css', 'js/arcade.js', 'js/consent.js', 'js/stats.js', 'js/season.js', 'js/countdowns.js', 'fonts/fonts.css',
   'fonts/press-start-2p.woff2', 'fonts/ibm-plex-mono-400.woff2', 'fonts/ibm-plex-mono-600.woff2',
   'manifest.webmanifest', 'icons/icon-192.png',
   ...GAMES.map((g) => 'js/games/' + g + '.js')];
