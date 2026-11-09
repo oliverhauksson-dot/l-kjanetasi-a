@@ -1,14 +1,29 @@
-:root { --bg: #15111f; --panel: #211b31; --line: #3a3052; --ink: #f4ecdc; --muted: #a39abb; --amber: #ffb347; --cyan: #5ce1e6; --display: "Press Start 2P", "Courier New", monospace; --body: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; color-scheme: dark; }
+/* The "how to play", About and Privacy pages. Same midnight-blue look as css/arcade.css. */
+:root { --bg: #060b1f; --panel: #0e1c48; --line: #27407f; --ink: #eef5ff; --muted: #9fb2da; --cyan: #38d9ee; --ice: #d5e6ff; --gold: #f3cf7c; --amber: var(--gold); --on: #06102e; --edge: rgba(126, 170, 255, .26); --display: "Press Start 2P", "Courier New", monospace; --body: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; color-scheme: dark; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.65 var(--body); padding-inline: 16px; padding-block: 24px 48px; }
-main { max-width: 720px; margin: 0 auto; display: grid; gap: 18px; }
-h1 { font: 22px/1.35 var(--display); color: var(--amber); margin: 0; text-shadow: 3px 3px 0 #6b3a1f; text-wrap: balance; }
-h2 { font: 12px/1.5 var(--display); color: var(--cyan); margin: 12px 0 0; }
+html { background: var(--bg); }
+body {
+  position: relative; margin: 0; min-height: 100vh; min-height: 100dvh; color: var(--ink); font: 15px/1.7 var(--body); padding-inline: 16px; padding-block: 36px 56px;
+  background: radial-gradient(1100px 520px at 50% -160px, rgba(40, 96, 230, .42), transparent 70%) no-repeat, radial-gradient(700px 420px at 108% 260px, rgba(56, 217, 238, .10), transparent 70%) no-repeat;
+}
+main { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; display: grid; gap: 18px; }
+h1 {
+  justify-self: start; font: 22px/1.35 var(--display); margin: 0; color: var(--cyan); text-wrap: balance;
+  /* One gradient per line of text, so a title that wraps looks the same on every line. */
+  background: linear-gradient(180deg, #fff 12%, var(--ice) 40%, var(--cyan) 88%) 0 0 / 100% 1.35em repeat-y;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 3px 0 rgba(20, 62, 170, .95)) drop-shadow(0 0 20px rgba(56, 217, 238, .3));
+}
+h2 { font: 12px/1.5 var(--display); color: var(--cyan); margin: 16px 0 0; padding-top: 18px; border-top: 1px solid rgba(126, 170, 255, .2); letter-spacing: .5px; }
 p, li { max-width: 68ch; margin: 0; }
 ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
-a { color: var(--cyan); }
-.back { font: 10px/1 var(--display); color: var(--ink); text-decoration: none; background: var(--panel); border: 2px solid var(--line); border-radius: 4px; padding: 10px 12px; justify-self: start; }
+li::marker { color: var(--cyan); }
+a { color: var(--cyan); text-underline-offset: 3px; }
+a:hover { color: #fff; }
+.back { font: 10px/1 var(--display); color: var(--ink); text-decoration: none; background: rgba(14, 28, 72, .75); border: 1px solid var(--edge); border-radius: 8px; padding: 11px 13px; justify-self: start; transition: border-color .2s; }
+.back:hover { border-color: var(--cyan); }
 .muted { color: var(--muted); font-size: 13px; }
-.play { font: 14px/1 var(--display); color: var(--bg); background: var(--amber); text-decoration: none; border-radius: 4px; padding: 16px 20px; justify-self: start; box-shadow: 3px 3px 0 #6b3a1f; }
-.play:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
-h3 { font: 600 15px/1.4 var(--body); color: var(--ink); margin: 6px 0 -10px; }
+.play { font: 14px/1 var(--display); color: var(--on); background: var(--cyan); text-decoration: none; border-radius: 8px; padding: 17px 22px; justify-self: start; box-shadow: 0 10px 24px -10px rgba(56, 217, 238, .8); transition: transform .15s, filter .15s; }
+.play:hover { color: var(--on); filter: brightness(1.08); transform: translateY(-1px); }
+.play:focus-visible, .back:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+h3 { font: 600 15px/1.4 var(--body); color: var(--ice); margin: 6px 0 -10px; }
