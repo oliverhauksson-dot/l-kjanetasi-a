@@ -33,10 +33,11 @@
   }
 
   function countdown() {
+    /* Counts down to Christmas Eve (24 December), when Christmas starts in Iceland. */
     const afterDay = (month === 11 && day > 25) || (month === 0 && day <= 6);
-    const days = Math.round((new Date(now.getFullYear(), 11, 25) - new Date(now.getFullYear(), month, day)) / 864e5);
+    const days = Math.round((new Date(now.getFullYear(), 11, 24) - new Date(now.getFullYear(), month, day)) / 864e5);
     const text = afterDay ? 'Merry Christmas and a happy new year'
-      : days === 0 ? 'Merry Christmas!'
+      : days <= 0 ? 'Merry Christmas!'
       : days === 1 ? 'Merry Christmas · it\'s tomorrow'
       : 'Merry Christmas · ' + days + ' days to go';
     const p = document.createElement('p');
