@@ -79,7 +79,7 @@
   }
 
   /* ---------- Daily challenge ---------- */
-  // One game a day, the same for everyone, with its own top 100 that starts empty at midnight (UTC).
+  // One game a day, the same for everyone, with its own top 10 that starts empty at midnight (UTC).
   // While it is played, the game's random numbers come from the date, so everyone gets the same start.
   // This list must match DAILY in leaderboard/worker.js.
   const DAILY = ['snake', 'runner', 'breakout', 'memory', 'snapgrid', 'invaders', 'flappy', 'muncher', 'chase', 'ski'];
@@ -155,7 +155,7 @@
   }
 
   /* ---------- Leaderboard ---------- */
-  // Top 100 for every game and for today's Daily Challenge. The scores are kept by the Cloudflare Worker in
+  // Top 10 for every game and for today's Daily Challenge. The scores are kept by the Cloudflare Worker in
   // leaderboard/worker.js. If it can't be reached (or you run the site on your own computer), the boxes say it is offline.
   // Every name belongs to one player: the first player to use it claims it with a 4-digit PIN. The name and PIN are kept
   // on this device, so scores save by themselves; on another device the player types the same name and PIN.
@@ -207,7 +207,7 @@
     [name, pin].forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }));
     return wrap;
   }
-  // Paints a top 100 list into a .lb box.
+  // Paints a top 10 list into a .lb box.
   function paintBoard(el, title, { scores, total, me }) {
     el.textContent = ''; el.hidden = false;
     const h = document.createElement('h4'); h.textContent = title; el.appendChild(h);
@@ -241,7 +241,7 @@
     el: $('#lb'), ask: 0,
     MIN: { blackjack: 101, memory: 8 }, // Scores below this can't go on the board (everyone starts Blackjack with 100 coins).
     hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
-    title() { return this.day ? 'Today\'s top 100' : 'This week\'s top 100'; },
+    title() { return this.day ? 'Today\'s top 10' : 'This week\'s top 10'; },
     async show(gid, g, score, day) {
       const ask = ++this.ask;
       this.day = day; // A Daily Challenge game goes on that day's board instead of the game's.
@@ -328,7 +328,7 @@
     const dcard = document.querySelector('.menu [data-game="' + gid + '"]');
     boards.style.setProperty('--c', (card || dcard) ? (card || dcard).style.getPropertyValue('--c') : 'var(--amber)');
     $$('#btabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
-    const title = tab === 'daily' ? 'Today\'s top 100 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : 'This week\'s top 100 · ' + card.querySelector('h2').textContent;
+    const title = tab === 'daily' ? 'Today\'s top 10 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : 'This week\'s top 10 · ' + card.querySelector('h2').textContent;
     blist.textContent = ''; const h = document.createElement('h4'); h.textContent = title; const p = document.createElement('p'); p.textContent = 'Loading...'; blist.append(h, p);
     const { data, error } = await api(boardUrl(gid, tab === 'daily'));
     if (ask !== boardAsk) return;

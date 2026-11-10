@@ -1,9 +1,9 @@
 /* Pocket Arcade leaderboard: a Cloudflare Worker that keeps the top scores for every game in a D1 database.
    It runs on pocketarcade.net/api/* so the games can call it without any cross-site setup.
-   GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me, week }   (this week's top 100)
+   GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me, week }   (this week's top 10)
    Every game's board starts empty each Monday at midnight UTC. week is the day (YYYY-MM-DD) the current week began.
    POST /api/scores { game, name, score }  -> { ok: true, scores, total, me }
-   me is { rank, score } for that name's best score (also when it is outside the top 100), or null.
+   me is { rank, score } for that name's best score (also when it is outside the top 10), or null.
    Daily Challenge (one game a day, with a board that starts empty at midnight UTC):
    GET  /api/daily[?name=BOB]              -> { day, game, scores, total, me }   (today's board)
    POST /api/daily { day, name, pin, score } -> { ok: true, day, game, scores, total, me }
@@ -53,7 +53,7 @@ function rude(name) {
   return SHORT.includes(flat) || LONG.some((w) => flat.includes(w));
 }
 
-const TOP = 100;
+const TOP = 10;
 const PIN = /^[0-9]{4}$/;
 const TRIES = 10; // Wrong PINs one visitor can get in an hour...
 const NAME_TRIES = 50; // ...and one name can get in an hour from everyone, so nobody can guess a PIN by trying all 10,000.
