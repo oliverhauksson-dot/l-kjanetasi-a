@@ -241,7 +241,7 @@
     el: $('#lb'), ask: 0,
     MIN: { blackjack: 101, memory: 8 }, // Scores below this can't go on the board (everyone starts Blackjack with 100 coins).
     hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
-    title() { return this.day ? 'Today\'s top 100' : 'Top 100'; },
+    title() { return this.day ? 'Today\'s top 100' : 'This week\'s top 100'; },
     async show(gid, g, score, day) {
       const ask = ++this.ask;
       this.day = day; // A Daily Challenge game goes on that day's board instead of the game's.
@@ -328,7 +328,7 @@
     const dcard = document.querySelector('.menu [data-game="' + gid + '"]');
     boards.style.setProperty('--c', (card || dcard) ? (card || dcard).style.getPropertyValue('--c') : 'var(--amber)');
     $$('#btabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
-    const title = tab === 'daily' ? 'Today\'s top 100 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : 'Top 100 · ' + card.querySelector('h2').textContent;
+    const title = tab === 'daily' ? 'Today\'s top 100 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : 'This week\'s top 100 · ' + card.querySelector('h2').textContent;
     blist.textContent = ''; const h = document.createElement('h4'); h.textContent = title; const p = document.createElement('p'); p.textContent = 'Loading...'; blist.append(h, p);
     const { data, error } = await api(boardUrl(gid, tab === 'daily'));
     if (ask !== boardAsk) return;

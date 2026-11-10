@@ -2,7 +2,7 @@
 
 Fifteen retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher, Blackjack, Cube Rush, Police Chase, Endless Ski, Tower Defense and Fishing.
 
-Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 100 leaderboard that also shows your own place.
+Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 100 leaderboard that also shows your own place. The game boards start empty every Monday at midnight (UTC).
 
 Every day one game is the Daily Challenge, with its own top 100 for that day. The site can also be added to a phone's home screen, where it opens like an app and works offline.
 

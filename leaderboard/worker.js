@@ -1,6 +1,7 @@
 /* Pocket Arcade leaderboard: a Cloudflare Worker that keeps the top scores for every game in a D1 database.
    It runs on pocketarcade.net/api/* so the games can call it without any cross-site setup.
-   GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me }   (top 100)
+   GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me, week }   (this week's top 100)
+   Every game's board starts empty each Monday at midnight UTC. week is the day (YYYY-MM-DD) the current week began.
    POST /api/scores { game, name, score }  -> { ok: true, scores, total, me }
    me is { rank, score } for that name's best score (also when it is outside the top 100), or null.
    Daily Challenge (one game a day, with a board that starts empty at midnight UTC):
@@ -38,6 +39,8 @@ const dailyGame = (day) => DAILY[Math.floor(Date.parse(day) / 864e5) % DAILY.len
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 const GRACE = 30 * 60 * 1000; // A game that ends just after midnight can still go on yesterday's board.
 const KEEP_DAYS = 60; // Older Daily Challenge boards are deleted.
+// The start of the week (Monday 00:00 UTC) that a time falls in. 1 January 1970 was a Thursday, hence the + 3.
+const weekStart = (ms) => { const d = Math.floor(ms / 864e5); return (d - ((d + 3) % 7)) * 864e5; };
 
 // Names that are refused. Checked after removing spaces, dashes and look-alike digits (5H1T -> SHIT).
 // LONG words are blocked anywhere in a name; SHORT ones only as the whole name, so a name like CLASS still works.
@@ -70,31 +73,32 @@ function cleanName(raw) {
   return name.length ? name : null;
 }
 
-// A list is one board of scores: a game's own board (table scores, by game) or one day's Daily Challenge (table daily, by day).
-const gameList = (game) => ({ table: 'scores', col: 'game', key: game, game });
-const dayList = (day) => ({ table: 'daily', col: 'day', key: day, game: dailyGame(day) });
+// A list is one board of scores: a game's own board for this week (table scores, by game) or one day's Daily Challenge
+// (table daily, by day). Only scores set at or after since count, so last week's scores drop off the game boards on Monday.
+const gameList = (game, now = Date.now()) => ({ table: 'scores', col: 'game', key: game, game, since: weekStart(now) });
+const dayList = (day) => ({ table: 'daily', col: 'day', key: day, game: dailyGame(day), since: 0 });
 
 async function top(db, l) {
   const order = GAMES[l.game].lowerWins ? 'ASC' : 'DESC';
-  const { results } = await db.prepare(`SELECT name, score FROM ${l.table} WHERE ${l.col} = ? ORDER BY score ${order}, at ASC LIMIT ?`).bind(l.key, TOP).all();
+  const { results } = await db.prepare(`SELECT name, score FROM ${l.table} WHERE ${l.col} = ? AND at >= ? ORDER BY score ${order}, at ASC LIMIT ?`).bind(l.key, l.since, TOP).all();
   return results;
 }
 
 // Where a name stands on a board: 1 + everyone with a better score (or the same score, set earlier).
 async function place(db, l, name) {
   if (!name) return null;
-  const row = await db.prepare(`SELECT score, at FROM ${l.table} WHERE ${l.col} = ? AND name = ?`).bind(l.key, name).first();
+  const row = await db.prepare(`SELECT score, at FROM ${l.table} WHERE ${l.col} = ? AND name = ? AND at >= ?`).bind(l.key, name, l.since).first();
   if (!row) return null;
   const better = GAMES[l.game].lowerWins ? 'score < ?' : 'score > ?';
-  const { n } = await db.prepare(`SELECT COUNT(*) AS n FROM ${l.table} WHERE ${l.col} = ? AND (${better} OR (score = ? AND at < ?))`)
-    .bind(l.key, row.score, row.score, row.at).first();
+  const { n } = await db.prepare(`SELECT COUNT(*) AS n FROM ${l.table} WHERE ${l.col} = ? AND at >= ? AND (${better} OR (score = ? AND at < ?))`)
+    .bind(l.key, l.since, row.score, row.score, row.at).first();
   return { rank: n + 1, score: row.score };
 }
 
 async function board(db, l, name) {
   const [scores, me, { n }] = await Promise.all([
     top(db, l), place(db, l, name),
-    db.prepare(`SELECT COUNT(*) AS n FROM ${l.table} WHERE ${l.col} = ?`).bind(l.key).first(),
+    db.prepare(`SELECT COUNT(*) AS n FROM ${l.table} WHERE ${l.col} = ? AND at >= ?`).bind(l.key, l.since).first(),
   ]);
   return { scores, total: n, me };
 }
@@ -339,7 +343,8 @@ export default {
       }
       const game = url.searchParams.get('game');
       if (!GAMES[game]) return json({ error: 'Unknown game' }, 400);
-      return json(await board(env.DB, gameList(game), name));
+      const list = gameList(game);
+      return json(Object.assign({ week: dayOf(list.since) }, await board(env.DB, list, name)));
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -358,7 +363,7 @@ export default {
       if (r.error) return json({ error: r.error, taken: !!r.taken }, r.status);
       return json({ ok: true, name, created: r.created });
     }
-    let list = gameList(body.game);
+    let list = gameList(body.game, now);
     if (isDaily) {
       // Only today's challenge, or yesterday's for a few minutes after midnight.
       const day = String(body.day);
@@ -389,7 +394,8 @@ export default {
       );
     } else {
       steps.push(env.DB.prepare(`INSERT INTO scores (game, name, score, at) VALUES (?, ?, ?, ?)
-        ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better}`).bind(body.game, name, score, now));
+        ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better} OR scores.at < ?`)
+        .bind(body.game, name, score, now, list.since)); // A score from last week is always replaced.
     }
     await env.DB.batch(steps);
 
