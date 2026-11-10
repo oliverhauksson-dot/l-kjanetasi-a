@@ -1472,15 +1472,14 @@
         });
       }
       for (const side of [-1, 1]) { const fd = sq + 38 + side * 3; this.at(fd, (ch) => this.place(ch, 'fountain', fd, side * 9.5, { hw: 2.1, hd: 2.1, h: 3.8, name: 'a frozen fountain' })); }
-      // A kicker in front of the clock tower, to fly through its arch.
-      const kd = sq + 50; this.at(kd, (ch) => this.kicker(ch, kd, 0, 8, 2.4, 2.4, 'kick'));
-      // The clock tower gate: ski (or fly) through the arch in the middle.
+      // The clock tower gate: ski through the arch in the middle. There is no kicker in front of it: at top speed
+      // it threw you right into the stone over the arch.
       const gd = sq + 75;
       this.at(gd, (ch) => this.place(ch, 'clocktower', gd, 0, {}));
       this.marks.push({ d: gd, fn: () => {
         if (Math.abs(this.x - center(this.d)) > 6) return;
-        const pts = (this.air ? 800 : 300) * this.mult; this.bonus += pts;
-        this.pop(this.air ? 'FLEW THROUGH THE CLOCK TOWER' : 'THROUGH THE CLOCK TOWER', '+' + pts, '#ffd75e'); snd.trick();
+        const pts = 300 * this.mult; this.bonus += pts;
+        this.pop('THROUGH THE CLOCK TOWER', '+' + pts, '#ffd75e'); snd.trick();
       } });
       return gd + 30 - d;
     },
