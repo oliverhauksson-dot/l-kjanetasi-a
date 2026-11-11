@@ -1,7 +1,8 @@
 /* Invaders. Loaded on demand by js/arcade.js the first time the game is opened. */
 (() => {
-  const { ctx, C, cached, clamp, sfx, setScore, over, font } = Arcade;
+  const { ctx, C, cached, clamp, sfx, setScore, over, font, tween, pop, shake } = Arcade;
 
+  const COLS = ['#ff6b9a', '#ffb347', '#ffb347', '#b8e65c', '#b8e65c'];
   const invaders = {
     W: 480, H: 440, PY: 400, color: 'var(--lime)', title: 'Invaders', label: 'Score',
     intro: 'Shoot the aliens before they land. Dodge their shots. You have 3 ships.',
@@ -9,12 +10,20 @@
     reset() {
       this.score = 0; this.lives = 3; this.wave = 1; this.px = this.W / 2 - 16; this.left = this.right = false; this.target = null;
       this.newWave();
+      this.booms = []; // Looks only: aliens bursting apart when hit.
     },
     newWave() {
       this.aliens = [];
       for (let r = 0; r < 5; r++) for (let c = 0; c < 9; c++) this.aliens.push({ c, r, alive: true });
       this.fx = 40; this.fy = 50 + Math.min(this.wave - 1, 4) * 12; this.dir = 1; this.acc = 0; this.frame = 0;
       this.shot = null; this.bombs = []; this.inv = 0;
+    },
+    boom(p, row) {
+      const b = { x: p.x + p.w / 2, y: p.y + p.h / 2, color: COLS[row], k: 0, a: 1 };
+      this.booms.push(b);
+      tween(b, { k: 1 }, 320, { ease: 'out' });
+      tween(b, { a: 0 }, 320, { ease: 'in', done: () => { this.booms = this.booms.filter((q) => q !== b); } });
+      pop(b.x, b.y - 6, '+' + [30, 20, 20, 10, 10][row], COLS[row], 10);
     },
     pos(a) { return { x: this.fx + a.c * 40, y: this.fy + a.r * 32, w: 26, h: 18 }; },
     fire() { if (!this.shot) { this.shot = { x: this.px + 15, y: this.PY - 6 }; sfx.shoot(); } },
@@ -55,7 +64,8 @@
         else for (const a of alive) {
           const p = this.pos(a);
           if (this.shot.x > p.x && this.shot.x < p.x + p.w && this.shot.y > p.y && this.shot.y < p.y + p.h) {
-            a.alive = false; this.shot = null; this.score += [30, 20, 20, 10, 10][a.r]; setScore(this.score); break;
+            a.alive = false; this.shot = null; this.score += [30, 20, 20, 10, 10][a.r]; setScore(this.score);
+            this.boom(p, a.r); break;
           }
         }
       }
@@ -64,6 +74,7 @@
       if (this.inv <= 0) for (const b of this.bombs) {
         if (b.x > this.px && b.x < this.px + 32 && b.y > this.PY && b.y < this.PY + 16) {
           this.lives--; this.bombs = []; this.inv = 1.5;
+          if (this.lives > 0) shake(6);
           if (this.lives <= 0) return over(this.score, 'Your last ship was hit. Score ' + this.score + '.');
           break;
         }
@@ -75,7 +86,7 @@
         g.fillStyle = C.bg; g.fillRect(0, 0, this.W, this.H);
         for (let i = 0; i < 40; i++) { g.fillStyle = i % 3 ? '#2a2240' : '#3a3052'; g.fillRect((i * 97) % this.W, (i * 53) % (this.PY - 20), 2, 2); }
       }), 0, 0, this.W, this.H);
-      const cols = ['#ff6b9a', '#ffb347', '#ffb347', '#b8e65c', '#b8e65c'];
+      const cols = COLS;
       for (const a of this.aliens) {
         if (!a.alive) continue;
         const p = this.pos(a); ctx.fillStyle = cols[a.r];
@@ -88,6 +99,14 @@
       if (!(this.inv > 0 && Math.floor(this.inv * 10) % 2)) {
         ctx.fillStyle = C.cyan; ctx.fillRect(this.px, this.PY + 6, 32, 10); ctx.fillRect(this.px + 12, this.PY, 8, 6);
       }
+      // A hit alien flashes white, then breaks into eight pieces that fly out and fade.
+      for (const b of this.booms) {
+        ctx.globalAlpha = b.a;
+        if (b.k < 0.35) { const f = 13 + b.k * 20; ctx.fillStyle = C.ink; ctx.fillRect(b.x - f, b.y - f * 0.7, f * 2, f * 1.4); }
+        ctx.fillStyle = b.color;
+        for (let i = 0; i < 8; i++) { const ang = i * Math.PI / 4, r = 4 + b.k * 22; ctx.fillRect(b.x + Math.cos(ang) * r - 2, b.y + Math.sin(ang) * r - 2, 4, 4); }
+      }
+      ctx.globalAlpha = 1;
       ctx.fillStyle = C.ink; if (this.shot) ctx.fillRect(this.shot.x - 1, this.shot.y, 3, 10);
       ctx.fillStyle = C.pink; for (const b of this.bombs) { ctx.fillRect(b.x - 2, b.y, 4, 4); ctx.fillRect(b.x, b.y + 4, 4, 4); }
       ctx.fillStyle = C.muted; ctx.fillRect(0, this.PY + 22, this.W, 2);

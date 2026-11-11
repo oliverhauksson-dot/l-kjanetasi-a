@@ -1,6 +1,6 @@
 /* Breakout. Loaded on demand by js/arcade.js the first time the game is opened. */
 (() => {
-  const { ctx, C, rand, clamp, sfx, setScore, over, font } = Arcade;
+  const { ctx, C, rand, clamp, sfx, setScore, over, font, tween, pop, shake } = Arcade;
 
   const R = 6;
   const breakout = {
@@ -11,6 +11,7 @@
     reset() {
       this.score = 0; this.lives = 3; this.level = 1; this.pw = 84; this.px = (this.W - this.pw) / 2;
       this.left = this.right = false; this.build(); this.serve();
+      this.dying = []; this.bump = { k: 0 }; // Looks only: broken bricks shrinking away, and the paddle's bounce.
     },
     build() {
       const cols = 8, pad = 6, side = 16, top = 60, bh = 16;
@@ -45,11 +46,12 @@
         this.speed = Math.min(this.speed * 1.02, 560);
         this.vx = this.speed * Math.sin(hit * 1.05); this.vy = -this.speed * Math.cos(hit * 1.05);
         this.by = this.PY - R; sfx.hit();
+        this.bump.k = 1; tween(this.bump, { k: 0 }, 380, { ease: 'elastic' });
       }
       if (this.by > this.H + R) {
         this.lives--;
         if (this.lives <= 0) return over(this.score);
-        this.serve(); return;
+        shake(5); this.serve(); return;
       }
       for (let i = 0; i < this.bricks.length; i++) {
         const b = this.bricks[i];
@@ -58,6 +60,10 @@
         if (dx * dx + dy * dy < R * R) {
           this.bricks.splice(i, 1);
           this.score += 10 * this.level; setScore(this.score);
+          const d = { x: b.x, y: b.y, w: b.w, h: b.h, r: b.r, s: 1, a: 1 };
+          this.dying.push(d);
+          tween(d, { s: 0, a: 0, y: b.y + 10 }, 280, { ease: 'in', done: () => { this.dying = this.dying.filter((q) => q !== d); } });
+          pop(b.x + b.w / 2, b.y + b.h / 2, '+' + 10 * this.level, this.rows[b.r], 9);
           const ox = Math.min(this.bx + R - b.x, b.x + b.w - (this.bx - R));
           const oy = Math.min(this.by + R - b.y, b.y + b.h - (this.by - R));
           if (ox < oy) this.vx = this.bx < b.x + b.w / 2 ? -Math.abs(this.vx) : Math.abs(this.vx);
@@ -73,8 +79,15 @@
         ctx.fillStyle = this.rows[b.r]; ctx.fillRect(b.x, b.y, b.w, b.h);
         ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(b.x, b.y + b.h - 4, b.w, 4);
       }
-      ctx.fillStyle = C.ink; ctx.fillRect(this.px, this.PY, this.pw, 10);
-      ctx.fillStyle = C.pink; ctx.fillRect(this.px, this.PY, 6, 10); ctx.fillRect(this.px + this.pw - 6, this.PY, 6, 10);
+      for (const d of this.dying) {
+        ctx.globalAlpha = d.a; ctx.fillStyle = this.rows[d.r];
+        ctx.fillRect(d.x + d.w * (1 - d.s) / 2, d.y + d.h * (1 - d.s) / 2, d.w * d.s, d.h * d.s);
+      }
+      ctx.globalAlpha = 1;
+      // The paddle dips and widens a little when the ball lands on it.
+      const k = this.bump.k, px = this.px - 4 * k, pw = this.pw + 8 * k, py = this.PY + 3 * k;
+      ctx.fillStyle = C.ink; ctx.fillRect(px, py, pw, 10 - 2 * k);
+      ctx.fillStyle = C.pink; ctx.fillRect(px, py, 6, 10 - 2 * k); ctx.fillRect(px + pw - 6, py, 6, 10 - 2 * k);
       ctx.fillStyle = C.amber; ctx.beginPath(); ctx.arc(this.bx, this.by, R, 0, Math.PI * 2); ctx.fill();
       ctx.font = font(10); ctx.textBaseline = 'top';
       ctx.fillStyle = C.muted; ctx.textAlign = 'left'; ctx.fillText('BALLS', 16, 22);

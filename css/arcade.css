@@ -123,6 +123,7 @@ html.lock, html.lock body { overflow: hidden; }
 .stat { display: grid; gap: 4px; text-align: right; }
 .stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
 .stat b { font: 16px/1 var(--display); font-variant-numeric: tabular-nums; }
+#score { transform-origin: 100% 50%; } /* It pops bigger from its right edge when it goes up. */
 .stage {
   /* Inside the game screen the games keep their own arcade colours, whatever the page around them looks like. */
   --bg: #15111f; --panel: #211b31; --line: #3a3052; --ink: #f4ecdc; --muted: #a39abb; --amber: #ffb347; --cyan: #5ce1e6;
@@ -141,6 +142,8 @@ html.lock, html.lock body { overflow: hidden; }
 }
 .ov h3 { font: 18px/1.4 var(--display); margin: 0; color: var(--c); }
 .ov p { margin: 0; max-width: 40ch; font-size: 14px; }
+.ov > * { transform: translateY(var(--ovy, 0px)); } /* Slides the words up as the box appears. */
+.ov .newbest { display: inline-block; color: var(--amber); font-weight: 600; }
 .ov button {
   font: 12px/1 var(--display); color: #15111f; background: var(--c); border: 0;
   border-radius: 4px; padding: 14px 18px; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,.45);
