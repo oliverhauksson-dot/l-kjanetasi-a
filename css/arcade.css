@@ -191,6 +191,7 @@ html.lock, html.lock body { overflow: hidden; }
 .tabs button:hover { border-color: var(--cyan); }
 .tabs button[aria-pressed="true"] { background: var(--c); border-color: var(--c); color: var(--on); }
 .tabs button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.tabs.when { margin-top: -4px; }
 .lb.wide { max-width: 560px; }
 .lb.wide ol { max-height: none; }
 

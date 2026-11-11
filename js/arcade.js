@@ -234,7 +234,7 @@
     const p = document.createElement('p'); p.textContent = OFFLINE;
     el.append(h, p);
   }
-  const boardUrl = (gid, day) => (day ? '/api/daily?' : '/api/scores?game=' + gid + '&') + 'name=' + encodeURIComponent((player.get() || {}).name || '');
+  const boardUrl = (gid, day, all) => (day ? '/api/daily?' : '/api/scores?game=' + gid + (all ? '&all=1' : '') + '&') + 'name=' + encodeURIComponent((player.get() || {}).name || '');
 
   // The box under the game screen at game over.
   const board = {
@@ -319,8 +319,9 @@
   }
 
   /* ---------- Leaderboard page ---------- */
-  const boards = $('#boards'), blist = $('#blist'), btabs = $('#btabs');
-  let tab = 'daily', boardAsk = 0;
+  const boards = $('#boards'), blist = $('#blist'), btabs = $('#btabs'), bwhen = $('#bwhen');
+  let tab = 'daily', when = 'week', boardAsk = 0; // when: a game's board for this week, or 'all' for its best scores ever.
+  $$('#bwhen button').forEach((b) => b.addEventListener('click', () => { when = b.dataset.when; loadTab(); }));
   async function loadTab() {
     const ask = ++boardAsk;
     const card = tab === 'daily' ? null : document.querySelector('.menu [data-game="' + tab + '"]');
@@ -328,9 +329,12 @@
     const dcard = document.querySelector('.menu [data-game="' + gid + '"]');
     boards.style.setProperty('--c', (card || dcard) ? (card || dcard).style.getPropertyValue('--c') : 'var(--amber)');
     $$('#btabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
-    const title = tab === 'daily' ? 'Today\'s top 10 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : 'This week\'s top 10 · ' + card.querySelector('h2').textContent;
+    bwhen.hidden = tab === 'daily';
+    $$('#bwhen button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.when === when)));
+    const all = tab !== 'daily' && when === 'all';
+    const title = tab === 'daily' ? 'Today\'s top 10 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : (all ? 'All-time top 10 · ' : 'This week\'s top 10 · ') + card.querySelector('h2').textContent;
     blist.textContent = ''; const h = document.createElement('h4'); h.textContent = title; const p = document.createElement('p'); p.textContent = 'Loading...'; blist.append(h, p);
-    const { data, error } = await api(boardUrl(gid, tab === 'daily'));
+    const { data, error } = await api(boardUrl(gid, tab === 'daily', all));
     if (ask !== boardAsk) return;
     if (error || !Array.isArray(data.scores)) paintOffline(blist, title); else paintBoard(blist, title, data);
   }

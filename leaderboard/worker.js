@@ -2,6 +2,7 @@
    It runs on pocketarcade.net/api/* so the games can call it without any cross-site setup.
    GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me, week }   (this week's top 10)
    Every game's board starts empty each Monday at midnight UTC. week is the day (YYYY-MM-DD) the current week began.
+   GET  /api/scores?game=snake&all=1[&name=BOB] -> { scores, total, me, all: true }   (all-time top 10, never resets)
    POST /api/scores { game, name, score }  -> { ok: true, scores, total, me }
    me is { rank, score } for that name's best score (also when it is outside the top 10), or null.
    Daily Challenge (one game a day, with a board that starts empty at midnight UTC):
@@ -77,6 +78,8 @@ function cleanName(raw) {
 // (table daily, by day). Only scores set at or after since count, so last week's scores drop off the game boards on Monday.
 const gameList = (game, now = Date.now()) => ({ table: 'scores', col: 'game', key: game, game, since: weekStart(now) });
 const dayList = (day) => ({ table: 'daily', col: 'day', key: day, game: dailyGame(day), since: 0 });
+// Every name's best score ever in each game (table best), which the weekly reset never touches.
+const bestList = (game) => ({ table: 'best', col: 'game', key: game, game, since: 0 });
 
 async function top(db, l) {
   const order = GAMES[l.game].lowerWins ? 'ASC' : 'DESC';
@@ -343,6 +346,7 @@ export default {
       }
       const game = url.searchParams.get('game');
       if (!GAMES[game]) return json({ error: 'Unknown game' }, 400);
+      if (url.searchParams.get('all')) return json(Object.assign({ all: true }, await board(env.DB, bestList(game), name)));
       const list = gameList(game);
       return json(Object.assign({ week: dayOf(list.since) }, await board(env.DB, list, name)));
     }
@@ -398,6 +402,15 @@ export default {
         .bind(body.game, name, score, now, list.since)); // A score from last week is always replaced.
     }
     await env.DB.batch(steps);
+    if (!isDaily) {
+      // The all-time board. Saved on its own, so a missing best table (schema.sql not run yet) can't stop the weekly score.
+      const beats = rules.lowerWins ? 'excluded.score < best.score' : 'excluded.score > best.score';
+      try {
+        await env.DB.prepare(`INSERT INTO best (game, name, score, at) VALUES (?, ?, ?, ?)
+          ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${beats}`)
+          .bind(body.game, name, score, now).run();
+      } catch (e) { /* The best table isn't there yet. */ }
+    }
 
     const extra = isDaily ? { ok: true, day: list.key, game: list.game } : { ok: true };
     return json(Object.assign(extra, await board(env.DB, list, name)));
