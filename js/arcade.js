@@ -1,7 +1,7 @@
 /* Pocket Arcade shell: menu, game screen, overlay, input, sound and saved scores.
    Each game lives in js/games/<id>.js and is only downloaded the first time it is opened.
    A game file calls Arcade.register(id, game) with an object that has reset() and either
-   update(dt) + draw() for canvas games, or dom: true for games built from HTML (Memory, Blackjack).
+   update(dt) + draw() for canvas games, or dom: true for games built from HTML (Memory).
    Optional input hooks: key(e, down), press(down), point({x, y}), swipe(dx, dy), tap(), stop(). */
 (() => {
   const $ = (s) => document.querySelector(s);
@@ -239,7 +239,7 @@
   // The box under the game screen at game over.
   const board = {
     el: $('#lb'), ask: 0,
-    MIN: { blackjack: 101, memory: 8 }, // Scores below this can't go on the board (everyone starts Blackjack with 100 coins).
+    MIN: { memory: 8 }, // Scores below this can't go on the board.
     hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
     title() { return this.day ? 'Today\'s top 10' : 'This week\'s top 10'; },
     async show(gid, g, score, day) {
