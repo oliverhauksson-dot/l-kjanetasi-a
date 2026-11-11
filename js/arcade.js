@@ -98,13 +98,96 @@
     };
   }
 
+  /* ---------- Smooth animation ---------- */
+  // Uses tween.js (js/vendor/tween.umd.min.js). Two groups of tweens:
+  // "ui" moves parts of the page (the score, the Game Over box, the screen shake) on real time;
+  // "play" moves things inside a game on the game's own clock, so they freeze while the game is paused.
+  // Effects only change how things look, never the game itself. They use their own random numbers,
+  // because a Daily Challenge swaps Math.random for one that gives everyone the same game.
+  // If tween.js fails to load, every effect simply jumps to its end.
+  const TW = window.TWEEN || null;
+  const noise = Math.random;
+  const calmMq = matchMedia('(prefers-reduced-motion: reduce)');
+  const calm = () => calmMq.matches; // The player asked their device for less motion: no shakes or bounces.
+  const EASE = TW ? {
+    out: TW.Easing.Quadratic.Out, in: TW.Easing.Quadratic.In, inout: TW.Easing.Sinusoidal.InOut,
+    back: TW.Easing.Back.Out, elastic: TW.Easing.Elastic.Out, bounce: TW.Easing.Bounce.Out, linear: TW.Easing.Linear.None,
+  } : {};
+  const uiGroup = TW && new TW.Group(), playGroup = TW && new TW.Group();
+  let clock = 0; // Milliseconds of play. Only moves while a game is running.
+  // Moves the numbers in obj to the values in to, over ms milliseconds.
+  // opt: { ease: 'out' | 'back' | 'elastic' | ..., delay, yoyo (go there and back), update(obj), done(obj) }
+  function animate(group, time, obj, to, ms, opt = {}) {
+    if (!TW) { if (!opt.yoyo) Object.assign(obj, to); if (opt.update) opt.update(obj); if (opt.done) opt.done(obj); return null; }
+    const t = new TW.Tween(obj, group).to(to, ms).easing(EASE[opt.ease] || EASE.out).delay(opt.delay || 0)
+      .onUpdate((o) => { if (opt.update) opt.update(o); })
+      .onComplete((o) => { group.remove(t); if (opt.done) opt.done(o); });
+    if (opt.yoyo) t.yoyo(true).repeat(1);
+    return t.start(time);
+  }
+  let uiRaf = 0;
+  function uiTick(t) { uiGroup.update(t); uiRaf = uiGroup.getAll().length ? requestAnimationFrame(uiTick) : 0; }
+  function uiTween(obj, to, ms, opt) {
+    const t = animate(uiGroup, performance.now(), obj, to, ms, opt);
+    if (t && !uiRaf) uiRaf = requestAnimationFrame(uiTick);
+    return t;
+  }
+  const stopTween = (t) => { if (t) { t.stop(); uiGroup.remove(t); } };
+  // For game files: a tween on the game's clock.
+  const tween = (obj, to, ms, opt) => animate(playGroup, clock, obj, to, ms, opt);
+
+  // Floating text, like "+10" where points were scored. x and y are in the game's own units.
+  let pops = [];
+  function pop(x, y, text, color = C.ink, size = 12) {
+    const p = { x, y, text, color, size, a: 1, s: calm() ? 1 : 0.5 };
+    pops.push(p);
+    tween(p, { y: y - 34 }, 800, { ease: 'out' });
+    if (p.s < 1) tween(p, { s: 1 }, 260, { ease: 'back' });
+    tween(p, { a: 0 }, 350, { delay: 450, ease: 'in', done: () => { pops = pops.filter((q) => q !== p); } });
+  }
+  function drawPops() {
+    if (!pops.length) return;
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    for (const p of pops) {
+      ctx.globalAlpha = Math.max(0, p.a);
+      ctx.font = font(Math.round(p.size * p.s));
+      ctx.lineWidth = 4; ctx.strokeStyle = C.bg; ctx.strokeText(p.text, p.x, p.y);
+      ctx.fillStyle = p.color; ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.restore();
+  }
+  function clearPlayFx() { if (playGroup) playGroup.removeAll(); pops = []; clock = 0; }
+
+  // Shakes the game picture. power is in screen pixels.
+  let shakeTw = null;
+  function shake(power = 6, ms = 320) {
+    if (calm()) return;
+    const el = game && game.dom ? $('#mem') : cv;
+    stopTween(shakeTw);
+    shakeTw = uiTween({ p: power }, { p: 0 }, ms, {
+      update: (o) => { el.style.transform = 'translate(' + (noise() * 2 - 1) * o.p + 'px,' + (noise() * 2 - 1) * o.p + 'px)'; },
+      done: () => { el.style.transform = ''; },
+    });
+  }
+
   /* ---------- Shell ---------- */
   let id = null, game = null, running = false, phase = 'idle', raf = 0, last = 0, ovAction = null, lastScore = 0;
   const ov = $('#ov'), stage = $('#stage'), screen = $('#game'), home = $('#home'), scoreEl = $('#score'), bestEl = $('#best');
 
   const fmtBest = (gid) => { const v = store.get(gid); return v === null ? '—' : String(v); };
   function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); paintDaily(); paintWho(); }
-  function setScore(v) { if (phase === 'play' && v > lastScore && !game.quietScore) sfx.point(); lastScore = v; scoreEl.textContent = v; }
+  function setScore(v) {
+    if (phase === 'play' && v > lastScore && !game.quietScore) { sfx.point(); popScore(); }
+    lastScore = v; scoreEl.textContent = v;
+  }
+  // The score number jumps up a little and settles back each time it goes up.
+  let scoreTw = null;
+  function popScore() {
+    if (calm()) return;
+    stopTween(scoreTw);
+    scoreTw = uiTween({ s: 1.45 }, { s: 1 }, 380, { ease: 'back', update: (o) => { scoreEl.style.transform = 'scale(' + o.s + ')'; } });
+  }
   function paintSound() { $$('.sound').forEach((b) => { b.textContent = sfx.on ? 'SOUND ON' : 'SOUND OFF'; b.setAttribute('aria-pressed', String(sfx.on)); }); }
   $$('.sound').forEach((b) => b.addEventListener('click', () => { sfx.on = !sfx.on; store.set('sound', sfx.on ? 1 : 0); sfx.unlock(); paintSound(); b.blur(); }));
   paintSound();
@@ -113,7 +196,14 @@
     $('#ovt').textContent = title; $('#ovp').textContent = text; $('#ovb').textContent = btn;
     shareInfo = share || null; shareBtn.hidden = !share; shareBtn.textContent = 'Share';
     ovAction = action; ov.hidden = false; board.hide(); next.hidden = true;
+    // The box fades in and its words slide up into place.
+    stopTween(ovTw);
+    const move = calm() ? 0 : 22;
+    ovTw = uiTween({ o: 0, y: move }, { o: 1, y: 0 }, 420, { ease: move ? 'back' : 'out', update: (o) => {
+      ov.style.opacity = Math.min(1, o.o * 1.6); ov.style.setProperty('--ovy', o.y + 'px');
+    } });
   }
+  let ovTw = null;
 
   /* ---------- Share ---------- */
   // At game over, players can send their score to a friend with a link straight into the same game.
@@ -362,10 +452,13 @@
   const STEP = 1 / 120;
   function loop(t) {
     let dt = Math.min((t - last) / 1000, 1 / 30); last = t;
+    clock += dt * 1000;
     while (running && dt > 1e-6) { const s = Math.min(dt, STEP); game.update(s); dt -= s; }
-    game.draw();
+    if (playGroup) playGroup.update(clock);
+    paint();
     if (running) raf = requestAnimationFrame(loop);
   }
+  function paint() { game.draw(); drawPops(); }
   function play() {
     sfx.unlock();
     if (phase !== 'paused' && window.track) window.track('game_start', { game_name: id });
@@ -374,7 +467,7 @@
     if (game.dom) return;
     running = true; last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
   }
-  function fresh() { if (daily) seedRandom(daily); game.reset(); setScore(0); } // A daily game starts the same way every time.
+  function fresh() { clearPlayFx(); if (daily) seedRandom(daily); game.reset(); setScore(0); } // A daily game starts the same way every time.
   function startGame() { fresh(); if (!game.dom) game.draw(); play(); }
   function pause() {
     if (phase !== 'play' || game.dom) return;
@@ -390,10 +483,21 @@
     bestEl.textContent = fmtBest(id);
     const line = msg || (game.label + ': ' + score + '.');
     if (title) sfx.win(); else sfx.lose();
-    showOverlay(title || 'Game over', line + (better && prev !== null ? ' New best!' : ''), 'Play again', startGame,
+    showOverlay(title || 'Game over', line, 'Play again', startGame,
       { id, title: game.title, label: game.label, score, day: daily });
+    if (better && prev !== null) newBest();
+    else if (!title) shake(7, 380);
     board.show(id, game, score, daily);
     showNext();
+  }
+
+  // "New best!" pops in with a bounce after the Game Over box arrives.
+  function newBest() {
+    const b = document.createElement('span'); b.className = 'newbest'; b.textContent = 'New best!';
+    $('#ovp').append(' ', b);
+    if (calm()) return;
+    b.style.transform = 'scale(0)';
+    uiTween({ s: 0 }, { s: 1 }, 900, { ease: 'elastic', delay: 250, update: (o) => { b.style.transform = 'scale(' + o.s + ')'; } });
   }
 
   function showScreen(gameOpen) { home.hidden = gameOpen; screen.hidden = !gameOpen; boards.hidden = true; }
@@ -428,6 +532,7 @@
     if (game && game.stop) game.stop();
     daily = null; Math.random = realRandom;
     board.hide(); next.hidden = true;
+    stopTween(shakeTw); cv.style.transform = ''; $('#mem').style.transform = ''; clearPlayFx();
   }
   // From the "Play next" row: the game screen stays open (and in full screen) and the new game starts.
   function switchGame(gid) { stopGame(); openGame(gid); }
@@ -498,7 +603,7 @@
     if (Math.abs(d - dpr) > 0.05) {
       dpr = d; cv.width = Math.round(game.W * dpr); cv.height = Math.round(game.H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      game.draw();
+      paint();
     }
   }
   function paintFull() {
@@ -581,6 +686,7 @@
   /* ---------- What game files can use ---------- */
   window.Arcade = {
     ctx, C, $, rand, clamp, font, shuffle, cached, store, sfx, setScore, over,
+    tween, pop, shake, calm, // Smooth animation: see "Smooth animation" above.
     playing: () => phase === 'play',
     register(gid, g) { GAMES[gid] = g; },
   };

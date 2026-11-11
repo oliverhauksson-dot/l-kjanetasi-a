@@ -1,13 +1,16 @@
 /* Flappy. Loaded on demand by js/arcade.js the first time the game is opened. */
 (() => {
-  const { ctx, C, rand, clamp, sfx, setScore, over } = Arcade;
+  const { ctx, C, rand, clamp, sfx, setScore, over, tween, pop } = Arcade;
 
   const flappy = {
     W: 360, H: 480, BX: 90, GAP: 140, color: 'var(--pink)', title: 'Flappy', label: 'Pipes',
     intro: 'Tap to flap and fly through the gaps. Touching a pipe or the ground ends the flight.',
     hint: '<kbd>Space</kbd> <kbd>↑</kbd>, click or tap to flap. <kbd>P</kbd> to pause',
-    reset() { this.by = this.H / 2 - 40; this.vy = -300; this.pipes = []; this.score = 0; this.t = 0; this.dist = 0; },
-    flap() { this.vy = -400; sfx.hop(); },
+    reset() { this.by = this.H / 2 - 40; this.vy = -300; this.pipes = []; this.score = 0; this.t = 0; this.dist = 0; this.sq = { x: 1, y: 1 }; },
+    flap() {
+      this.vy = -400; sfx.hop();
+      this.sq = { x: 0.72, y: 1.3 }; tween(this.sq, { x: 1, y: 1 }, 450, { ease: 'elastic' }); // The bird stretches as it flaps, then wobbles back.
+    },
     key(e, down) { if (down && !e.repeat && ['Space', 'ArrowUp', 'KeyW'].includes(e.code)) this.flap(); },
     press(down) { if (down) this.flap(); },
     update(dt) {
@@ -17,7 +20,7 @@
       if (!last || last.x < this.W - 190) this.pipes.push({ x: this.W + 20, gy: rand(70, this.H - 90 - this.GAP), passed: false });
       for (const p of this.pipes) {
         p.x -= sp * dt;
-        if (!p.passed && p.x + 52 < this.BX) { p.passed = true; this.score++; setScore(this.score); }
+        if (!p.passed && p.x + 52 < this.BX) { p.passed = true; this.score++; setScore(this.score); pop(this.BX, this.by - 26, '+1', C.lime); }
       }
       this.pipes = this.pipes.filter((p) => p.x > -60);
       const r = 11;
@@ -39,7 +42,7 @@
       ctx.fillStyle = '#2b2340'; ctx.fillRect(0, H - 40, W, 40);
       ctx.fillStyle = C.muted; ctx.fillRect(0, H - 40, W, 3);
       ctx.fillStyle = '#3a3052'; for (let x = -(this.dist % 24); x < W; x += 24) ctx.fillRect(x, H - 28, 12, 3);
-      ctx.save(); ctx.translate(this.BX, this.by); ctx.rotate(clamp(this.vy / 900, -0.5, 0.9));
+      ctx.save(); ctx.translate(this.BX, this.by); ctx.rotate(clamp(this.vy / 900, -0.5, 0.9)); ctx.scale(this.sq.x, this.sq.y);
       ctx.fillStyle = C.amber; ctx.fillRect(-12, -10, 24, 20);
       ctx.fillStyle = '#ffd9a0'; ctx.fillRect(-10, Math.sin(this.t * 20) > 0 ? -2 : 2, 10, 6);
       ctx.fillStyle = C.ink; ctx.fillRect(4, -7, 6, 6); ctx.fillStyle = C.bg; ctx.fillRect(7, -5, 3, 3);

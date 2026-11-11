@@ -1,6 +1,6 @@
 /* Snake. Loaded on demand by js/arcade.js the first time the game is opened. */
 (() => {
-  const { ctx, C, cached, setScore, over } = Arcade;
+  const { ctx, C, cached, setScore, over, tween, pop } = Arcade;
 
   const N = 20;
   const snake = {
@@ -11,6 +11,7 @@
       this.body = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }];
       this.dir = { x: 1, y: 0 }; this.queue = []; this.score = 0; this.acc = 0; this.step = 0.13; this.t = 0;
       this.food = this.place();
+      this.wave = { p: 9 }; this.grow = { s: 1 }; // Looks only: a bulge that runs down the body after eating, and the new fruit growing in.
     },
     place() {
       let p;
@@ -44,8 +45,11 @@
         this.body.unshift(n);
         if (eat) {
           this.score++; setScore(this.score);
+          pop(n.x * this.W / N + this.W / N / 2, n.y * this.W / N, '+1', C.amber);
+          this.wave = { p: 0 }; tween(this.wave, { p: 1 }, 420, { ease: 'linear' });
           if (this.body.length >= N * N) return over(this.score, 'You filled the whole board!');
           this.food = this.place(); this.step = Math.max(0.06, this.step - 0.003);
+          this.grow = { s: 0 }; tween(this.grow, { s: 1 }, 320, { ease: 'back' });
         } else this.body.pop();
       }
     },
@@ -56,12 +60,14 @@
         g.fillStyle = '#151024';
         for (let y = 0; y < N; y++) for (let x = (y % 2); x < N; x += 2) g.fillRect(x * s, y * s, s, s);
       }), 0, 0, this.W, this.H);
-      const pulse = 2 + Math.sin(this.t * 8) * 1.5;
-      ctx.fillStyle = C.amber; ctx.fillRect(this.food.x * s + 5 - pulse / 2, this.food.y * s + 5 - pulse / 2, s - 10 + pulse, s - 10 + pulse);
-      ctx.fillStyle = '#7a3b8a'; ctx.fillRect(this.food.x * s + s / 2 - 1, this.food.y * s + 1, 3, 4);
+      const pulse = 2 + Math.sin(this.t * 8) * 1.5, fs = (s - 10 + pulse) * this.grow.s;
+      ctx.fillStyle = C.amber; ctx.fillRect(this.food.x * s + s / 2 - fs / 2, this.food.y * s + s / 2 - fs / 2, fs, fs);
+      if (this.grow.s > 0.6) { ctx.fillStyle = '#7a3b8a'; ctx.fillRect(this.food.x * s + s / 2 - 1, this.food.y * s + 1, 3, 4); }
+      const front = this.wave.p * this.body.length;
       this.body.forEach((p, i) => {
+        const bulge = 3 * Math.max(0, 1 - Math.abs(i - front) / 1.5);
         ctx.fillStyle = i === 0 ? '#e3ff9e' : (i % 2 ? C.lime : '#a3d24c');
-        ctx.fillRect(p.x * s + 1, p.y * s + 1, s - 2, s - 2);
+        ctx.fillRect(p.x * s + 1 - bulge, p.y * s + 1 - bulge, s - 2 + bulge * 2, s - 2 + bulge * 2);
       });
       const h = this.body[0], d = this.dir;
       ctx.fillStyle = C.bg;
