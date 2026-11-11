@@ -96,3 +96,15 @@ CREATE TABLE IF NOT EXISTS kicked (
   name TEXT NOT NULL,
   PRIMARY KEY (code, name)
 );
+
+-- The all-time board: one row per player name per game with that name's best score ever. The weekly boards (table scores)
+-- start empty every Monday, this one never does. The INSERT copies in the scores that were already saved.
+CREATE TABLE IF NOT EXISTS best (
+  game TEXT NOT NULL,
+  name TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (game, name)
+);
+CREATE INDEX IF NOT EXISTS best_by_game ON best (game, score);
+INSERT OR IGNORE INTO best (game, name, score, at) SELECT game, name, score, at FROM scores;
