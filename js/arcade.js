@@ -478,7 +478,6 @@
   /* ---------- Full screen ---------- */
   // Uses the browser's Fullscreen API. Where that is missing (iPhone Safari), the game screen is
   // instead stretched over the whole page, which still hides the rest of the site.
-  const fullBtn = $('#full');
   const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
   const isFull = () => screen.classList.contains('full');
   function fit() {
@@ -503,8 +502,6 @@
   }
   function paintFull() {
     const on = isFull();
-    fullBtn.textContent = on ? 'EXIT FULL' : 'FULL SCREEN';
-    fullBtn.setAttribute('aria-pressed', String(on));
     document.documentElement.classList.toggle('lock', on);
     fit();
   }
@@ -525,12 +522,12 @@
       }
     } catch (e) {}
   }
-  // Leaving real full screen with the browser's own Esc key or gesture also shrinks the game back.
-  const onFsChange = () => { if (!fsEl() && isFull()) { screen.classList.remove('full'); paintFull(); } else fit(); };
+  // Games always play in full screen. In real full screen the browser keeps the Esc key for itself, so the page
+  // never sees it. Leaving full screen that way (Esc, or the phone's own gesture) closes the game and goes back to the front page.
+  const onFsChange = () => { if (!fsEl() && isFull()) { if (!screen.hidden) closeGame(); else { screen.classList.remove('full'); paintFull(); } } else fit(); };
   document.addEventListener('fullscreenchange', onFsChange);
   document.addEventListener('webkitfullscreenchange', onFsChange);
   window.addEventListener('resize', fit);
-  fullBtn.addEventListener('click', () => { setFull(!isFull()); fullBtn.blur(); });
 
   /* ---------- Input ---------- */
   const GAME_KEYS = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
