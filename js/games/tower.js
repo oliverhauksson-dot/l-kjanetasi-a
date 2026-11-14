@@ -2,7 +2,7 @@
    Monsters walk along a winding path to the castle. Build towers on the grass to stop them.
    10 monsters getting through ends the game. The waves never stop and get harder each time. */
 (() => {
-  const { ctx, C, cached, clamp, sfx, setScore, over, font } = Arcade;
+  const { ctx, C, cached, clamp, sfx, setScore, over, font, tween, shake, calm } = Arcade;
 
   const CELL = 40, COLS = 12, ROWS = 10, MAP_H = ROWS * CELL; // The map is 480 x 400. The buttons sit under it.
   const LIVES = 10;
@@ -99,7 +99,7 @@
       this.towers = []; this.foes = []; this.shots = []; this.bolts = []; this.bits = []; this.pops = [];
       this.pick = 0; this.sel = null; this.hover = null; this.fast = false; this.hurt = 0;
       this.state = 'build'; this.timer = 20; this.queue = []; this.spawnIn = 0;
-      this.banner = 'BUILD TOWERS NEXT TO THE PATH'; this.bannerT = 4;
+      this.banner = 'BUILD TOWERS NEXT TO THE PATH'; this.bannerT = 4; this.bannerX = { x: 0 };
     },
 
     /* ---------- Input ---------- */
@@ -129,7 +129,9 @@
       const k = TOWERS[this.pick];
       if (this.coins < k.cost) { this.say('NOT ENOUGH COINS'); sfx.tone(140, 0.08, 'square', 0.03); return; }
       this.coins -= k.cost;
-      this.towers.push({ type: this.pick, c, r, x: c * CELL + CELL / 2, y: r * CELL + CELL / 2, lv: 1, spent: k.cost, cool: 0, aim: 0, kick: 0 });
+      const t = { type: this.pick, c, r, x: c * CELL + CELL / 2, y: r * CELL + CELL / 2, lv: 1, spent: k.cost, cool: 0, aim: 0, kick: 0, pop: { s: 0 } };
+      this.towers.push(t);
+      tween(t.pop, { s: 1 }, 380, { ease: 'back' }); // It pops up out of the ground.
       this.puff(c * CELL + CELL / 2, r * CELL + CELL / 2, '#d8c79a', 10);
       sfx.tone(392, 0.08, 'square', 0.04, 784);
     },
@@ -150,6 +152,7 @@
       const cost = upCost(t);
       if (this.coins < cost) { this.say('NOT ENOUGH COINS'); sfx.tone(140, 0.08, 'square', 0.03); return; }
       this.coins -= cost; t.spent += cost; t.lv++;
+      t.pop = { s: 1.4 }; tween(t.pop, { s: 1 }, 500, { ease: 'elastic' });
       this.puff(t.x, t.y, TOWERS[t.type].color, 14);
       [523, 659, 784].forEach((f, i) => setTimeout(() => sfx.tone(f, 0.07, 'square', 0.03), i * 60));
     },
@@ -181,7 +184,10 @@
       this.foes.push({ kind, hp, max: hp, speed: k.speed * (1 + Math.min(this.wave, 40) * 0.005), d: 0, r: k.r, armor: k.armor, leak: k.leak,
         reward: Math.round(k.reward * coinMul(this.wave)), slow: 0, slowF: 0, hit: 0, x: PTS[0].x, y: PTS[0].y, dx: 1, dy: 0, wob: Math.random() * 6 });
     },
-    say(text) { this.banner = text; this.bannerT = 2.2; },
+    say(text) {
+      this.banner = text; this.bannerT = 2.2;
+      if (!calm()) { this.bannerX = { x: this.W }; tween(this.bannerX, { x: 0 }, 420, { ease: 'back' }); } // Slides in from the right.
+    },
     float(x, y, text, color) { this.pops.push({ x, y, text, color, t: 0 }); },
     puff(x, y, color, n) {
       for (let i = 0; i < n; i++) {
@@ -199,6 +205,7 @@
       this.float(e.x, e.y - e.r, '+' + e.reward, C.amber);
       this.puff(e.x, e.y, e.kind === 'slime' ? '#b8e65c' : e.kind === 'bat' ? '#ff6b9a' : e.kind === 'knight' ? '#c7cbe0' : '#a78bfa', e.kind === 'boss' ? 30 : 10);
       sfx.tone(e.kind === 'boss' ? 200 : 520, e.kind === 'boss' ? 0.4 : 0.06, 'square', 0.04, e.kind === 'boss' ? 60 : 900);
+      if (e.kind === 'boss') shake(7, 450);
     },
     target(t, s) { // The monster furthest along the path that the tower can reach.
       let best = null;
@@ -253,7 +260,7 @@
         if (e.d >= LEN) {
           e.hp = 0; e.leaked = true;
           this.lives = Math.max(0, this.lives - e.leak); this.hurt = 0.4;
-          sfx.hit(); sfx.tone(200, 0.2, 'sawtooth', 0.05, 90);
+          sfx.hit(); sfx.tone(200, 0.2, 'sawtooth', 0.05, 90); if (this.lives > 0) shake(4, 260);
           if (this.lives <= 0) {
             this.foes = this.foes.filter((o) => o.hp > 0);
             return over(this.score, 'The monsters broke into your castle on wave ' + this.wave + '. Score ' + this.score + '.');
@@ -441,7 +448,14 @@
       // Things further down the screen are drawn last, so they stand in front.
       const things = this.towers.map((t) => ({ y: t.y, t })).concat(this.foes.map((e) => ({ y: e.y, e })));
       things.sort((a, b) => a.y - b.y);
-      for (const o of things) if (o.t) this.drawTower(o.t); else this.drawFoe(o.e);
+      for (const o of things) {
+        if (!o.t) { this.drawFoe(o.e); continue; }
+        const s = o.t.pop ? o.t.pop.s : 1;
+        if (s === 1) { this.drawTower(o.t); continue; }
+        // Growing out of its base while it pops up, or bouncing after an upgrade.
+        ctx.save(); ctx.translate(o.t.x, o.t.y + 14); ctx.scale(s, s); ctx.translate(-o.t.x, -o.t.y - 14);
+        this.drawTower(o.t); ctx.restore();
+      }
 
       for (const s of this.shots) {
         if (s.kind === 'ball') { ctx.fillStyle = '#2b2738'; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#5d5578'; ctx.fillRect(s.x - 2, s.y - 3, 2, 2); }
@@ -469,8 +483,9 @@
       if (this.bannerT > 0) {
         ctx.globalAlpha = Math.min(1, this.bannerT * 2);
         ctx.font = font(12); const w = ctx.measureText(this.banner).width + 28;
-        ctx.fillStyle = 'rgba(13,10,21,.8)'; ctx.fillRect(this.W / 2 - w / 2, 172, w, 34);
-        ctx.fillStyle = C.amber; ctx.fillText(this.banner, this.W / 2, 190);
+        const bx = this.W / 2 + this.bannerX.x;
+        ctx.fillStyle = 'rgba(13,10,21,.8)'; ctx.fillRect(bx - w / 2, 172, w, 34);
+        ctx.fillStyle = C.amber; ctx.fillText(this.banner, bx, 190);
         ctx.globalAlpha = 1;
       }
 
