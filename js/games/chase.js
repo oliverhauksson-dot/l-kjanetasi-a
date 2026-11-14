@@ -7,7 +7,7 @@
    The police find their way round the buildings with a distance map of the roads that is worked out from your
    position a few times a second. Police that crash into each other, a wall or a car stop for a while. */
 (() => {
-  const { ctx, C, rand, clamp, sfx, setScore, over, font } = Arcade;
+  const { ctx, C, rand, clamp, sfx, setScore, over, font, tween } = Arcade;
 
   let T = null, failed = false;
   const here = document.currentScript ? document.currentScript.src : location.href;
@@ -361,7 +361,8 @@
       this.pl = { x: sx, y: sy, a: -Math.PI / 2, vx: 0, vy: 0, speed: 0, slide: 0, safe: 0, boost: 0 };
       this.cam = { x: sx, y: sy }; this.shake = 0;
       this.cops = []; this.coins = []; this.power = null; this.powerAt = 8;
-      this.puffs = []; this.pops = [];
+      this.puffs = []; this.pops = []; this.rings = []; // rings: looks only, a gold ring where a coin was picked up.
+      this.bigS = { s: 2.6, a: 0 }; tween(this.bigS, { s: 1, a: 1 }, 600, { ease: 'bounce' }); // GET AWAY! drops in.
       this.keys = {}; this.stick = { down: false, base: null, x: 0, y: 0 };
       this.freeze = 0; this.siren = 0; this.sirenHi = false;
       this.field = new Int16Array(GN * GN); this.fieldAt = 0; this.map();
@@ -486,7 +487,7 @@
       for (const c of this.coins) c.t += dt;
       this.coins = this.coins.filter((c) => {
         if (Math.hypot(c.x - pl.x, c.y - pl.y) > 24) return true;
-        this.bonus += 50; this.pop(c.x, c.y, '+50', C.amber);
+        this.bonus += 50; this.pop(c.x, c.y, '+50', C.amber); this.ring(c.x, c.y);
         sfx.tone(1320, 0.07, 'square', 0.04, 1760);
         return false;
       });
@@ -614,6 +615,7 @@
     busted() {
       const pl = this.pl;
       this.lives--; this.freeze = 1.3; this.shake = 0.5;
+      this.bigS = { s: 2.8, a: 0 }; tween(this.bigS, { s: 1, a: 1 }, 550, { ease: 'bounce' }); // BUSTED! slams down.
       pl.vx = 0; pl.vy = 0; pl.speed = 0;
       sfx.tone(600, 0.6, 'square', 0.05, 150);
     },
@@ -641,7 +643,11 @@
     },
     puff(x, y, col, r, life) { if (this.puffs.length < 70) this.puffs.push({ x, y, z: 6, vx: rand(-20, 20), vy: rand(-20, 20), r, col, life, max: life }); },
     sparks(x, y) { for (let k = 0; k < 10; k++) this.puff(x + rand(-8, 8), y + rand(-8, 8), Math.random() < 0.5 ? '#ffb347' : '#fff3c4', 1.5, 0.35); },
-    pop(x, y, text, col) { this.pops.push({ x, y, h: 30, text, col, life: 1.1 }); },
+    pop(x, y, text, col) { const p = { x, y, h: 30, text, col, life: 1.1, s: 0.4 }; this.pops.push(p); tween(p, { s: 1 }, 380, { ease: 'back' }); },
+    ring(x, y) {
+      const r = { x, y, k: 0, a: 1 }; this.rings.push(r);
+      tween(r, { k: 1, a: 0 }, 420, { ease: 'out', done: () => { this.rings = this.rings.filter((q) => q !== r); } });
+    },
     tickBits(dt) {
       for (const p of this.puffs) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += dt * 14; p.r += dt * 6; }
       this.puffs = this.puffs.filter((p) => p.life > 0);
@@ -703,10 +709,17 @@
       G.r.render(G.scene, G.cam);
       ctx.drawImage(G.r.domElement, 0, 0, W, H);
 
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = font(10);
+      ctx.lineWidth = 3;
+      for (const r of this.rings) {
+        const s = this.screen(r.x, 8, r.y);
+        ctx.globalAlpha = r.a; ctx.strokeStyle = '#ffd75e';
+        ctx.beginPath(); ctx.arc(s.x, s.y, 6 + r.k * 28, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       for (const p of this.pops) {
         const s = this.screen(p.x, p.h, p.y);
-        ctx.globalAlpha = Math.min(1, p.life * 2);
+        ctx.globalAlpha = Math.min(1, p.life * 2); ctx.font = font(Math.max(4, Math.round(10 * p.s)));
         ctx.fillStyle = '#15111f'; ctx.fillText(p.text, s.x + 2, s.y + 2);
         ctx.fillStyle = p.col; ctx.fillText(p.text, s.x, s.y);
       }
@@ -767,7 +780,12 @@
         ctx.fillStyle = C.cyan; ctx.fillRect(8, 42, 78 * this.pl.boost / 3, 6);
       }
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const big = (text, col) => { ctx.font = font(22); ctx.fillStyle = '#15111f'; ctx.fillText(text, W / 2 + 3, H / 2 - 117); ctx.fillStyle = col; ctx.fillText(text, W / 2, H / 2 - 120); };
+      const big = (text, col) => {
+        const b = this.bigS;
+        ctx.save(); ctx.globalAlpha = Math.min(1, b.a); ctx.translate(W / 2, H / 2 - 120); ctx.scale(b.s, b.s);
+        ctx.font = font(22); ctx.fillStyle = '#15111f'; ctx.fillText(text, 3, 3); ctx.fillStyle = col; ctx.fillText(text, 0, 0);
+        ctx.restore();
+      };
       if (this.freeze > 0) big('BUSTED!', C.pink);
       else if (this.t < 1.6) big('GET AWAY!', C.amber);
     },

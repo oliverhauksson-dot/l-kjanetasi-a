@@ -3,7 +3,7 @@
    and falls, so the tower gets narrower. Drop it right on top (a "perfect") and nothing is cut; three perfects
    in a row make the block a little wider again. Miss the tower completely and the game is over. */
 (() => {
-  const { ctx, C, clamp, font, sfx, setScore, over, tween, pop, shake } = Arcade;
+  const { ctx, C, clamp, font, sfx, setScore, over, tween, pop, shake, banner } = Arcade;
 
   const W = 360, H = 560, BH = 24, D = 16; // BH: block height. D: how deep the top face looks.
   const START_W = 180, BASE_Y = H - 70, PERFECT = 5, GROW = 10;
@@ -15,7 +15,7 @@
     hint: '<kbd>Space</kbd>, click or tap to drop the block. <kbd>P</kbd> to pause',
     reset() {
       this.blocks = [{ x: (W - START_W) / 2, w: START_W, i: 0, sy: 1, flash: 0 }];
-      this.bits = []; this.score = 0; this.combo = 0; this.cam = 0; this.dead = 0; this.t = 0;
+      this.bits = []; this.score = 0; this.combo = 0; this.cam = 0; this.dead = 0; this.t = 0; this.comboS = { s: 1 };
       this.next(-1);
     },
     // A new block comes in from the left or the right side.
@@ -43,7 +43,8 @@
         if (this.combo >= 3) { const grow = Math.min(GROW, START_W - b.w); b.x -= grow / 2; b.w += grow; }
         tween(b, { flash: 0 }, 500, { ease: 'out' });
         sfx.tone(520 + Math.min(this.combo, 12) * 60, 0.12, 'triangle', 0.06);
-        pop(b.x + b.w / 2, y - 18, this.combo >= 3 ? 'PERFECT x' + this.combo : 'PERFECT', '#fff6c8', 10);
+        pop(b.x + b.w / 2, y - 18 + this.cam, this.combo >= 3 ? 'PERFECT x' + this.combo : 'PERFECT', '#fff6c8', 10); // + cam: floating text is drawn on the screen, not in the tower's world.
+        if (this.combo >= 2) { this.comboS = { s: 1.8 }; tween(this.comboS, { s: 1 }, 500, { ease: 'elastic' }); }
       } else {
         this.combo = 0;
         b = { x: left, w: right - left, i: c.i, sy: 1, flash: 0 };
@@ -55,6 +56,7 @@
       b.sy = 0.7; tween(b, { sy: 1 }, 380, { ease: 'elastic' }); // A little squash as it lands.
       this.blocks.push(b);
       this.score++; setScore(this.score);
+      if (this.score % 10 === 0) banner(this.score + ' HIGH!', { color: color(c.i, 14), size: 18, y: 120 });
       this.next(-c.dir);
     },
     rowY(i) { return BASE_Y - i * BH; },
@@ -129,8 +131,9 @@
       }
       ctx.restore();
       if (this.combo >= 2) {
-        ctx.save(); ctx.font = font(9); ctx.textAlign = 'center'; ctx.fillStyle = '#fff6c8';
-        ctx.fillText('COMBO ' + this.combo, W / 2, 28); ctx.restore();
+        ctx.save(); ctx.translate(W / 2, 25); ctx.scale(this.comboS.s, this.comboS.s); // Bounces each time the combo grows.
+        ctx.font = font(9); ctx.textAlign = 'center'; ctx.fillStyle = '#fff6c8';
+        ctx.fillText('COMBO ' + this.combo, 0, 3); ctx.restore();
       }
     },
   };

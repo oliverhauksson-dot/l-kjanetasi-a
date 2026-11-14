@@ -7,7 +7,7 @@
    Too tight for too long and the line snaps; too slack and the fish shakes the hook.
    A round lasts 60 seconds, from morning to sunset. A fish already on the line can still be landed. */
 (() => {
-  const { ctx, C, rand, clamp, font, sfx, setScore, over } = Arcade;
+  const { ctx, C, rand, clamp, font, sfx, setScore, over, tween } = Arcade;
 
   const W = 400, H = 560;
   const SURF = 182;          // Water surface.
@@ -388,6 +388,14 @@
       msg += ' Fish book: ' + found + ' of 8 found.';
       over(this.score, msg, 'Sunset!');
     },
+    // Looks only: the catch card springs open, the fish wiggles big, then the points and NEW! bounce in one after another.
+    cardIn() {
+      const c = this.card = { s: 0.4, fish: 1.7, pts: 0, stamp: 2.6, sa: 0 };
+      tween(c, { s: 1 }, 520, { ease: 'elastic' });
+      tween(c, { fish: 1 }, 700, { delay: 120, ease: 'elastic' });
+      tween(c, { pts: 1 }, 420, { delay: 300, ease: 'back' });
+      tween(c, { stamp: 1, sa: 1 }, 450, { delay: 480, ease: 'bounce' });
+    },
     say(a, b, color, life) { this.msg = { a, b, color, life, max: life }; },
 
     /* ---------- Update ---------- */
@@ -438,7 +446,7 @@
         this.waitT += dt;
         this.boot(dt);
       } else if (s === 'fight') this.fight(dt);
-      else if (s === 'lift') { this.liftT += dt; if (this.liftT > 0.5) { this.state = 'show'; this.showT = 0; } }
+      else if (s === 'lift') { this.liftT += dt; if (this.liftT > 0.5) { this.state = 'show'; this.showT = 0; this.cardIn(); } }
       else if (s === 'show') { this.showT += dt; if (this.showT > 1.9) this.next(); }
       else if (s === 'lost') { this.lostT -= dt; if (this.lostT <= 0) this.next(); }
       if (this.lure && this.lure.dip !== undefined) this.lure.dip = Math.max(0, this.lure.dip - dt * 30);
@@ -780,20 +788,20 @@
       if (this.state === 'show' && this.landed) this.drawCard();
     },
     drawCard() {
-      const c = this.landed, k = KINDS[c.kind], p = clamp(this.showT * 5, 0, 1);
+      const c = this.landed, k = KINDS[c.kind], p = clamp(this.showT * 5, 0, 1), a = this.card || { s: 1, fish: 1, pts: 1, stamp: 1, sa: 1 };
       const x = 40, y = 214, w = W - 80, h = 150;
-      ctx.save(); ctx.translate(W / 2, y + h / 2); ctx.scale(0.8 + p * 0.2, 0.8 + p * 0.2); ctx.translate(-W / 2, -(y + h / 2));
+      ctx.save(); ctx.translate(W / 2, y + h / 2); ctx.scale(a.s, a.s); ctx.translate(-W / 2, -(y + h / 2));
       ctx.globalAlpha = p;
       ctx.fillStyle = 'rgba(13,10,21,.88)'; ctx.fillRect(x, y, w, h);
       ctx.strokeStyle = c.kind === 'gold' ? C.amber : c.kind === 'shark' ? C.pink : c.kind === 'boot' ? C.muted : C.cyan; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h);
       text(c.kind === 'boot' ? 'OH NO...' : c.kind === 'shark' ? 'WHAT A MONSTER!' : c.kind === 'gold' ? 'SO RARE!' : 'NICE CATCH!', W / 2, y + 18, 10, C.ink);
-      ctx.save(); ctx.translate(W / 2, y + 62); const sc = Math.min(2.4, 130 / (k.len * 1.3)); ctx.scale(sc, sc); paintFish(c.kind, this.t); ctx.restore();
+      ctx.save(); ctx.translate(W / 2, y + 62); const sc = Math.min(2.4, 130 / (k.len * 1.3)) * a.fish; ctx.scale(sc, sc); paintFish(c.kind, this.t); ctx.restore();
       text(k.name.toUpperCase(), W / 2, y + 104, 12, c.kind === 'gold' ? C.amber : C.ink);
       text(c.cm + ' cm', x + 14, y + 130, 8, C.muted, 'left');
-      text('+' + c.pts, x + w - 14, y + 130, 14, c.pts ? C.lime : C.muted, 'right');
+      if (a.pts > 0.01) { ctx.save(); ctx.translate(x + w - 14, y + 130); ctx.scale(a.pts, a.pts); text('+' + c.pts, 0, 0, 14, c.pts ? C.lime : C.muted, 'right'); ctx.restore(); }
       if (c.perfect) text('PERFECT x1.25', W / 2, y + 130, 8, C.lime);
       if (c.fresh) {
-        ctx.save(); ctx.translate(x + w - 30, y + 6); ctx.rotate(0.25);
+        ctx.save(); ctx.translate(x + w - 30, y + 6); ctx.rotate(0.25); ctx.scale(a.stamp, a.stamp); ctx.globalAlpha *= Math.min(1, a.sa);
         ctx.fillStyle = C.pink; ctx.fillRect(-34, -10, 68, 20); text('NEW!', 0, 1, 10, C.ink, 'center', false); ctx.restore();
       }
       ctx.restore();

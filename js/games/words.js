@@ -42,12 +42,14 @@
     newWord() {
       this.answer = this.deck[this.solved % this.deck.length];
       this.rows = Array.from({ length: ROWS }, () => ({ text: '', marks: null, flip: [], hop: [], dx: 0 }));
-      this.row = 0; this.busy = false; this.keyState = {}; this.msg = ''; this.msgA = { a: 0 };
+      this.row = 0; this.busy = false; this.keyState = {}; this.msg = ''; this.msgA = { a: 0, s: 1 };
+      this.keyPop = {}; this.burst = []; // Looks only: keys that bounce when they change colour, and confetti when a word is solved.
       this.pulse = Array.from({ length: LEN }, () => ({ s: 1 }));
       this.show = { a: 0 }; tween(this.show, { a: 1 }, 350, { ease: 'out' });
     },
     say(text, ms = 1400) {
-      this.msg = text; this.msgA = { a: 1 };
+      this.msg = text; this.msgA = { a: 1, s: 0.4 };
+      tween(this.msgA, { s: 1 }, 420, { ease: 'back' }); // Pops in, then fades away.
       tween(this.msgA, { a: 0 }, 400, { delay: ms, ease: 'in' });
     },
     type(ch) {
@@ -72,9 +74,26 @@
         if (i === LEN - 1) this.judge(r);
       } }));
     },
+    // 24 little squares fly up out of the solved row and fall away. Spread evenly (not random), so the
+    // Daily Challenge's random numbers stay the same for everyone.
+    confetti(y) {
+      const cols = [GREEN, GOLD, C.ink, C.cyan];
+      for (let i = 0; i < 24; i++) {
+        const ang = -Math.PI / 2 + ((i % 12) / 11 - 0.5) * 2.4, sp = 70 + (i * 37 % 60);
+        const b = { x: W / 2 + ((i * 53) % 220) - 110, y, dx: Math.cos(ang) * sp, dy: Math.sin(ang) * sp, k: 0, c: cols[i % 4], r: i };
+        this.burst.push(b);
+        tween(b, { k: 1 }, 900, { ease: 'linear', done: () => { this.burst = this.burst.filter((q) => q !== b); } });
+      }
+    },
     wobble(r) { sfx.hit(); r.dx = 1; tween(r, { dx: 0 }, 420, { ease: 'out' }); },
     judge(r) {
-      r.text.split('').forEach((ch, i) => { const k = r.marks[i]; if (!this.keyState[ch] || RANK[k] > RANK[this.keyState[ch]]) this.keyState[ch] = k; });
+      r.text.split('').forEach((ch, i) => {
+        const k = r.marks[i];
+        if (!this.keyState[ch] || RANK[k] > RANK[this.keyState[ch]]) {
+          this.keyState[ch] = k;
+          const kp = this.keyPop[ch] = { s: 1.35 }; tween(kp, { s: 1 }, 380, { delay: i * 40, ease: 'back' });
+        }
+      });
       if (r.text === this.answer) {
         const guesses = this.row + 1, pts = (ROWS + 1 - guesses) * 10;
         this.score += pts; this.solved++; setScore(this.score);
@@ -82,6 +101,7 @@
         pop(W / 2, GY + this.row * (TILE + GAP) - 6, '+' + pts, C.lime, 14);
         r.hop = Array.from({ length: LEN }, () => ({ y: 0 }));
         r.hop.forEach((h, i) => tween(h, { y: -16 }, 180, { delay: i * 90, ease: 'out', yoyo: true }));
+        this.confetti(GY + this.row * (TILE + GAP) + TILE / 2);
         sfx.win();
         this.later = { t: 1.5, fn: () => this.newWord() };
         return;
@@ -152,16 +172,26 @@
         }
       });
       ctx.globalAlpha = 1;
+      for (const b of this.burst) {
+        const t = b.k * 0.9, x = b.x + b.dx * t, y = b.y + b.dy * t + 260 * t * t;
+        ctx.globalAlpha = 1 - b.k; ctx.fillStyle = b.c;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(b.r + b.k * 8); ctx.fillRect(-4, -3, 8, 6); ctx.restore();
+      }
+      ctx.globalAlpha = 1;
       if (this.msgA.a > 0.01) {
         ctx.globalAlpha = Math.min(1, this.msgA.a * 1.5);
+        ctx.save(); ctx.translate(W / 2, 418); ctx.scale(this.msgA.s, this.msgA.s);
         ctx.font = font(11); const tw = ctx.measureText(this.msg).width + 28;
-        ctx.fillStyle = C.ink; ctx.fillRect(W / 2 - tw / 2, 404, tw, 28);
-        ctx.fillStyle = C.bg; ctx.fillText(this.msg, W / 2, 419);
+        ctx.fillStyle = C.ink; ctx.fillRect(-tw / 2, -14, tw, 28);
+        ctx.fillStyle = C.bg; ctx.fillText(this.msg, 0, 1);
+        ctx.restore();
         ctx.globalAlpha = 1;
       }
       for (const r of this.keyRects()) {
         const st = this.keyState[r.k.toLowerCase()];
         const hit = this.pressed && this.pressed.k === r.k ? this.pressed.a : 0;
+        const kp = this.keyPop[r.k.toLowerCase()], ks = kp ? kp.s : 1;
+        if (ks !== 1) { ctx.save(); ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.scale(ks, ks); ctx.translate(-r.x - r.w / 2, -r.y - r.h / 2); }
         ctx.fillStyle = st ? FILL[st] : '#4a4166';
         if (st === 'absent') ctx.fillStyle = '#1c1729';
         ctx.fillRect(r.x, r.y + hit * 2, r.w, r.h);
@@ -169,6 +199,7 @@
         ctx.fillStyle = st === 'absent' ? '#6d6390' : C.ink;
         ctx.font = font(r.k === '>' || r.k === '<' ? 8 : 12);
         ctx.fillText(r.k === '>' ? 'ENTER' : r.k === '<' ? 'DEL' : r.k, r.x + r.w / 2, r.y + r.h / 2 + 1 + hit * 2);
+        if (ks !== 1) ctx.restore();
       }
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     },
