@@ -182,6 +182,7 @@
 <script src="js/vendor/tween.umd.min.js" defer></script>
 <script src="js/arcade.js?v={{ site.time | date: '%s' }}" defer></script>
 <script src="js/countdowns.js?v={{ site.time | date: '%s' }}" defer></script>
+<script src="js/search.js?v={{ site.time | date: '%s' }}" defer></script>
 </head>
 <body>
 <main class="wrap">
@@ -196,6 +197,12 @@
       </div>
       <p class="itip" id="itip" hidden>On iPhone or iPad: tap the Share button at the bottom of Safari, then <b>Add to Home Screen</b>. Pocket Arcade then opens like an app.</p>
     </header>
+
+    <div class="gsearch" role="search">
+      <label for="gsearch" class="sr">Search games</label>
+      <input type="search" id="gsearch" placeholder="Search games…" autocomplete="off" spellcheck="false" enterkeyhint="go">
+    </div>
+    <p class="gnone" id="gnone" hidden>No games match "<b></b>".</p>
 
     <section class="daily" id="daily" hidden>
       <div class="dart" id="dart"></div>

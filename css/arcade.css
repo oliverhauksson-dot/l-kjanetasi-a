@@ -95,6 +95,28 @@ header.marquee { position: relative; display: grid; gap: 12px; text-align: left;
 .card .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .card { transition: none; } .card:hover { transform: none; } }
 
+/* Search box above the game cards (js/search.js). */
+.gsearch { position: relative; }
+.searching .daily { display: none; } /* While you search, the results move up to right under the box. */
+.gsearch::before {
+  content: ""; position: absolute; left: 16px; top: 50%; width: 11px; height: 11px; margin-top: -8px;
+  border: 2px solid var(--muted); border-radius: 50%; pointer-events: none;
+}
+.gsearch::after {
+  content: ""; position: absolute; left: 28px; top: 50%; width: 2px; height: 7px; margin-top: 2px;
+  background: var(--muted); transform: rotate(-45deg); pointer-events: none;
+}
+#gsearch {
+  width: 100%; font: 15px/1.2 var(--body); color: var(--ink); background: var(--glass);
+  border: 1px solid var(--edge); border-radius: 12px; padding: 14px 16px 14px 44px;
+  transition: border-color .2s, box-shadow .2s;
+}
+#gsearch::placeholder { color: var(--muted); }
+#gsearch:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(56, 217, 238, .25); }
+.gnone { margin: 0; color: var(--muted); text-align: center; }
+.gnone b { color: var(--ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 .game { display: grid; gap: 14px; }
 .sound, .back {
   font: 10px/1 var(--display); color: var(--ink); background: rgba(14, 28, 72, .75);
