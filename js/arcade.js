@@ -158,7 +158,44 @@
     }
     ctx.restore();
   }
-  function clearPlayFx() { if (playGroup) playGroup.removeAll(); pops = []; clock = 0; }
+  // A big message across the game, like "WAVE 5" or "LEVEL CLEAR!". One at a time: a new one replaces the old.
+  // opt: { color, y (in the game's units, default a third of the way down), size, sub (smaller second line),
+  //        style: 'slide' (in from the right, out to the left) or 'slam' (drops in big and bounces), hold (ms on screen) }
+  let banner = null;
+  function showBanner(text, opt = {}) {
+    if (!game) return;
+    const b = { text, color: opt.color || C.amber, sub: opt.sub || '', size: opt.size || 18,
+      y: opt.y ?? game.H * 0.32, x: game.W / 2, s: 1, a: 1 };
+    const hold = opt.hold ?? 900;
+    banner = b;
+    const gone = () => { if (banner === b) banner = null; };
+    if (calm()) { b.a = 0; tween(b, { a: 1 }, 200, { done: () => tween(b, { a: 0 }, 300, { delay: hold, done: gone }) }); return; }
+    if (opt.style === 'slam') {
+      b.s = 2.6; b.a = 0;
+      tween(b, { a: 1 }, 120);
+      tween(b, { s: 1 }, 520, { ease: 'bounce', done: () => tween(b, { a: 0 }, 300, { delay: hold, done: gone }) });
+    } else {
+      b.x = game.W * 1.6;
+      tween(b, { x: game.W / 2 }, 450, { ease: 'back', done: () => tween(b, { x: -game.W * 0.6 }, 320, { delay: hold, ease: 'in', done: gone }) });
+    }
+  }
+  function drawBanner() {
+    const b = banner;
+    if (!b || b.a <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, b.a);
+    ctx.translate(b.x, b.y); ctx.scale(b.s, b.s);
+    const band = b.size * (b.sub ? 3.6 : 2.6);
+    ctx.fillStyle = 'rgba(13, 10, 21, 0.72)'; ctx.fillRect(-game.W, -band / 2, game.W * 2, band);
+    ctx.fillStyle = b.color; ctx.fillRect(-game.W, -band / 2, game.W * 2, 2); ctx.fillRect(-game.W, band / 2 - 2, game.W * 2, 2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    const ty = b.sub ? -b.size * 0.45 : 0;
+    ctx.font = font(b.size); ctx.lineWidth = 5; ctx.strokeStyle = C.bg; ctx.strokeText(b.text, 0, ty);
+    ctx.fillStyle = b.color; ctx.fillText(b.text, 0, ty);
+    if (b.sub) { ctx.font = font(Math.round(b.size * 0.45)); ctx.fillStyle = C.ink; ctx.fillText(b.sub, 0, b.size * 0.75); }
+    ctx.restore();
+  }
+  function clearPlayFx() { if (playGroup) playGroup.removeAll(); pops = []; banner = null; clock = 0; }
 
   // Shakes the game picture. power is in screen pixels.
   let shakeTw = null;
@@ -459,7 +496,7 @@
     paint();
     if (running) raf = requestAnimationFrame(loop);
   }
-  function paint() { game.draw(); drawPops(); }
+  function paint() { game.draw(); drawPops(); drawBanner(); }
   function play() {
     sfx.unlock();
     if (phase !== 'paused' && window.track) window.track('game_start', { game_name: id });
@@ -687,7 +724,7 @@
   /* ---------- What game files can use ---------- */
   window.Arcade = {
     ctx, C, $, rand, clamp, font, shuffle, cached, store, sfx, setScore, over,
-    tween, pop, shake, calm, // Smooth animation: see "Smooth animation" above.
+    tween, pop, shake, calm, banner: showBanner, // Smooth animation: see "Smooth animation" above.
     playing: () => phase === 'play',
     register(gid, g) { GAMES[gid] = g; },
   };

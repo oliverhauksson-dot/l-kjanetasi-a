@@ -5,7 +5,7 @@
    After 400 m, snowballs start dropping out of the sky.
    Positions on a slope are kept as u (how far along it) and h (height above the snow). */
 (() => {
-  const { ctx, C, rand, clamp, cached, sfx, setScore, over } = Arcade;
+  const { ctx, C, rand, clamp, cached, sfx, setScore, over, tween, shake, banner } = Arcade;
 
   const LEFT = 46, RIGHT = 354;     // Slopes end between these two x values.
   // Each new slope starts a little way out past the edge above it (so you land on it) and a little
@@ -96,6 +96,7 @@
       this.t = 0; this.dist = 0; this.score = 0; this.speed = 160;
       this.held = false; this.h = 0; this.vy = 0; this.ground = true;
       this.turn = null; this.turns = 0; this.spray = []; this.carve = 0; this.falls = []; this.nextFall = 2;
+      this.squash = { k: 0 }; // Looks only: how squashed the skier is after landing.
       this.slopes = [];
       this.addSlope({ x: LEFT, y: 120, d: 1, L: RIGHT - LEFT, slope: 0.3, obs: [] });
       this.seg = 0; this.u = 30;
@@ -184,7 +185,7 @@
         if (!this.ground) {
           this.vy -= (this.held && this.vy > 0 ? 1150 : 2100) * dt;
           this.h += this.vy * dt;
-          if (this.h <= 0) { this.h = 0; this.vy = 0; this.ground = true; this.kick(6, 0.4); snd.land(); }
+          if (this.h <= 0) { this.h = 0; this.vy = 0; this.ground = true; this.kick(6, 0.4); snd.land(); this.land(0.6); }
         }
         if (this.carve > 0) { this.carve = Math.max(0, this.carve - dt); this.kick(1, 0.9); }
         else if (this.ground && Math.random() < dt * 40) this.kick(1, 0.5);
@@ -209,13 +210,15 @@
       this.camY += (target - this.camY) * Math.min(1, dt * 5);
       const sc = Math.floor(this.dist / 10);
       if (sc !== this.score) {
-        if (Math.floor(sc / 100) > Math.floor(this.score / 100)) snd.chime();
+        if (Math.floor(sc / 100) > Math.floor(this.score / 100)) { snd.chime(); banner(Math.floor(sc / 100) * 100 + ' m!', { color: C.cyan, size: 14, hold: 600, y: 54 }); }
         this.score = sc; setScore(sc);
       }
       snd.music(this.level());
       // Skis on snow: short overlapping bursts while you are on the ground.
       if (!this.turn && this.ground && this.t >= snd.swishAt) { snd.swish(this.speed, this.carve > 0); snd.swishAt = this.t + 0.1; }
     },
+    // Squashes the skier down on landing, then springs back. k: how hard (0 to 1).
+    land(k) { this.squash.k = k; tween(this.squash, { k: 0 }, 450, { ease: 'elastic' }); },
     /* ---------- Snowballs from the sky ---------- */
     // Returns true if one lands on the skier.
     updateFalls(dt) {
@@ -238,7 +241,7 @@
         }
         if (f.y + 9 >= ground) {
           // It lands and keeps rolling toward you.
-          f.done = true; snd.plop();
+          f.done = true; snd.plop(); shake(2.5, 200);
           f.s.obs.push({ kind: 'ball', w: 18, h: 18, roll: rand(25, 50), u: f.u });
           const p = this.at(f.s, f.u);
           for (let i = 0; i < 10; i++) this.spray.push({ x: p.x, y: p.y - 2, vx: rand(-70, 70), vy: -rand(40, 120), life: rand(0.25, 0.5) });
@@ -301,7 +304,7 @@
       tr.y = q * q * tr.fy + 2 * q * p * tr.cy + p * p * tr.ty;
       if (p >= 1) {
         this.turn = null; this.seg++; this.u = LAND; this.turns++; this.carve = CARVE;
-        snd.land(); this.kick(14, 0.7);
+        snd.land(); this.kick(14, 0.7); this.land(1);
         // Forget slopes far above the screen and build more below.
         if (this.seg > 2) { this.slopes.shift(); this.seg--; }
         this.fill();
@@ -485,6 +488,7 @@
       ctx.save();
       ctx.translate(Math.round(p.x), Math.round(p.y));
       ctx.scale(face, 1); ctx.rotate(ski);
+      const sq = this.squash.k; if (sq) ctx.scale(1 + 0.22 * sq, 1 - 0.3 * sq); // Squashed from the skis up after a landing.
       ctx.fillStyle = C.amber; ctx.fillRect(-15, -3, 30, 3); ctx.fillRect(14, -5, 3, 3);   // skis, tips up
       // The body stays fairly upright over the skis, leaning forward into the slope.
       ctx.rotate(-ski * 0.65 + 0.12);

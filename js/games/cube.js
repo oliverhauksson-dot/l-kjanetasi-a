@@ -2,7 +2,7 @@
    A one-button jumping game: the cube slides right on its own and you jump over spikes and onto blocks.
    It opens on its own level picker (Level 1-3 and Endless). Levels are built from the small pieces in PARTS. */
 (() => {
-  const { ctx, C, font, clamp, rand, store, sfx, setScore, over } = Arcade;
+  const { ctx, C, font, clamp, rand, store, sfx, setScore, over, tween, banner } = Arcade;
 
   const T = 30; // One tile. The cube is one tile big.
   const GY = 300, PX = 150; // Where the ground and the cube are on screen.
@@ -153,6 +153,7 @@
       this.p = { x: 0, h: 0, vy: 0, ground: true, buf: 0, used: [], speed: i === ENDLESS ? 300 : LEVELS[i].speed };
       this.mode = 'play'; this.ang = 0; this.cam = 0; this.trail = []; this.trailT = 0; this.bits = [];
       this.dieT = 0; this.score = 0; this.th = THEMES[i === ENDLESS ? 3 : LEVELS[i].theme]; this.flash = 0; this.zone = 0;
+      this.sq = { k: 0 }; this.doneA = { s: 1, t: 1 }; this.deadS = { s: 1 }; // Looks only: landing squash, the Level Complete box and the % popping in.
       setScore(0);
     },
     fill(x) {
@@ -229,13 +230,13 @@
         p.speed = Math.min(300 + p.x / T * 0.12, 470);
         this.fill(p.x);
         const z = Math.floor(p.x / T / 200);
-        if (z !== this.zone) { this.zone = z; this.th = THEMES[(3 + z) % THEMES.length]; this.flash = 0.4; sfx.win(); }
+        if (z !== this.zone) { this.zone = z; this.th = THEMES[(3 + z) % THEMES.length]; this.flash = 0.4; sfx.win(); banner('ZONE ' + (z + 1), { color: this.th.main, sub: z * 200 + ' m', size: 16 }); }
       }
       p.jumped = p.landed = p.padded = p.ringed = false;
       step(p, this.w, dt, this.hold);
       if (p.jumped) sfx.hop();
       if (p.padded || p.ringed) sfx.tone(p.padded ? 520 : 700, 0.15, 'square', 0.04, 1200);
-      if (p.landed) this.dust(p.x + T / 2, p.h, 5);
+      if (p.landed) { this.dust(p.x + T / 2, p.h, 5); this.sq.k = 1; tween(this.sq, { k: 0 }, 380, { ease: 'elastic' }); }
       // Spin in the air, then settle flat on landing.
       if (p.ground) { const q = Math.PI / 2, to = Math.round(this.ang / q) * q; this.ang += (to - this.ang) * Math.min(1, dt * 30); }
       else this.ang += SPIN * dt;
@@ -251,6 +252,7 @@
     crash() {
       const p = this.p;
       this.mode = 'dead'; this.trail = []; this.dieT = this.lvl === ENDLESS ? 0.7 : 0.9; this.hold = false;
+      this.deadS = { s: 2.2 }; tween(this.deadS, { s: 1 }, 450, { ease: 'bounce' });
       sfx.lose();
       for (let i = 0; i < 18; i++) {
         const a = rand(0, Math.PI * 2), s = rand(120, 380);
@@ -263,6 +265,7 @@
     },
     win() {
       this.mode = 'done'; this.score = 100; setScore(100); this.hold = false;
+      this.doneA = { s: 0.3, t: 2 }; tween(this.doneA, { s: 1 }, 420, { ease: 'back' }); tween(this.doneA, { t: 1 }, 800, { delay: 200, ease: 'elastic' });
       store.set('cube-' + (this.lvl + 1), 100);
       sfx.win();
       for (let i = 0; i < 40; i++) this.bits.push({ x: this.p.x + rand(-40, 200), y: rand(40, 260), vx: rand(-80, 80), vy: rand(100, 400), life: rand(0.8, 1.6), a: 0, va: rand(-8, 8), size: rand(4, 8), c: [C.amber, C.cyan, C.pink, C.lime][i % 4] });
@@ -319,7 +322,7 @@
         const a = (i + 1) / this.trail.length * 0.35, s = 10 + i * 1.5;
         ctx.fillStyle = th.glow + a + ')'; ctx.fillRect(q.x - camX + 15 - s / 2 - (this.trail.length - i) * 2, sy(q.h) - 15 - s / 2, s, s);
       });
-      if (this.mode !== 'dead' && this.mode !== 'over') this.drawCube(PX + (p.x - camX - PX) + T / 2, sy(p.h) - T / 2, this.ang, th);
+      if (this.mode !== 'dead' && this.mode !== 'over') this.drawCube(PX + (p.x - camX - PX) + T / 2, sy(p.h) - T / 2, this.ang, th, this.sq.k);
       for (const b of this.bits) {
         ctx.globalAlpha = clamp(b.life * 2, 0, 1); ctx.fillStyle = b.c;
         ctx.save(); ctx.translate(b.x - camX, sy(b.y)); ctx.rotate(b.a); ctx.fillRect(-b.size / 2, -b.size / 2, b.size, b.size); ctx.restore();
@@ -341,7 +344,9 @@
         ctx.font = font(10); ctx.fillStyle = C.ink; ctx.textAlign = 'left'; ctx.fillText(this.score + '%', bx + bw + 10, 26);
       }
       if (this.mode === 'dead' && this.lvl !== ENDLESS) {
-        ctx.textAlign = 'center'; ctx.font = font(18); ctx.fillStyle = C.ink; ctx.fillText(this.score + '%', W / 2, 130);
+        ctx.save(); ctx.translate(W / 2, 124); ctx.scale(this.deadS.s, this.deadS.s);
+        ctx.textAlign = 'center'; ctx.font = font(18); ctx.fillStyle = C.ink; ctx.fillText(this.score + '%', 0, 6);
+        ctx.restore();
       }
       if (this.mode === 'done') this.drawDone();
     },
@@ -375,8 +380,10 @@
         ctx.fillStyle = '#fff6c8'; ctx.beginPath(); ctx.arc(cx - 3, cy - 3, 3, 0, Math.PI * 2); ctx.fill();
       }
     },
-    drawCube(x, y, a, th) {
-      ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    drawCube(x, y, a, th, sq = 0) {
+      ctx.save(); ctx.translate(x, y);
+      if (sq) { ctx.translate(0, 15); ctx.scale(1 + 0.25 * sq, 1 - 0.3 * sq); ctx.translate(0, -15); } // Squashed onto the ground after a landing.
+      ctx.rotate(a);
       ctx.fillStyle = th.glow + '0.3)'; ctx.fillRect(-19, -19, 38, 38);
       ctx.fillStyle = '#ffd23f'; ctx.fillRect(-15, -15, 30, 30);
       ctx.fillStyle = '#0a0812'; ctx.fillRect(-11, -11, 22, 22);
@@ -417,11 +424,16 @@
       }
     },
     drawDone() {
-      const { W } = this;
+      const { W } = this, a = this.doneA;
+      // The box pops up from small, then the title springs in.
+      ctx.save(); ctx.translate(W / 2, 185); ctx.scale(a.s, a.s); ctx.translate(-W / 2, -185);
       ctx.fillStyle = 'rgba(10,8,18,.7)'; ctx.fillRect(90, 90, W - 180, 190);
       ctx.strokeStyle = this.th.main; ctx.lineWidth = 2; ctx.strokeRect(91, 91, W - 182, 188);
+      ctx.save(); ctx.translate(W / 2, 134); ctx.scale(a.t, a.t);
       ctx.textAlign = 'center'; ctx.font = font(16); ctx.fillStyle = '#ffd23f';
-      ctx.fillText('LEVEL COMPLETE!', W / 2, 140);
+      ctx.fillText('LEVEL COMPLETE!', 0, 6);
+      ctx.restore();
+      ctx.textAlign = 'center';
       ctx.font = font(9); ctx.fillStyle = C.ink;
       ctx.fillText(this.attempts === 1 ? 'First try!' : 'Attempts: ' + this.attempts, W / 2, 175);
       ['NEXT', 'LEVELS'].forEach((label, i) => {
@@ -431,6 +443,7 @@
         ctx.fillStyle = C.ink; ctx.font = font(10);
         ctx.fillText(i ? label : this.lvl < 2 ? 'NEXT LEVEL' : 'ENDLESS', b.x + b.w / 2, b.y + 25);
       });
+      ctx.restore();
     },
   };
 

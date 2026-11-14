@@ -8,7 +8,7 @@
    (chunks) that are made just ahead of you and thrown away behind you.
    Units are metres. d is how far down the mountain, x is left/right. In three.js, z = -d. */
 (() => {
-  const { ctx, rand, clamp, font, sfx, setScore, over } = Arcade;
+  const { ctx, rand, clamp, font, sfx, setScore, over, tween, banner } = Arcade;
   const THREE_URL = new URL('../vendor/three.module.min.js', document.currentScript.src).href;
   let T = null, failed = false;
 
@@ -1184,7 +1184,7 @@
       this.chunks = []; this.nextChunk = -CL; this.nextRamp = 150; this.grind = null; this.grindT = 0; this.wasPark = false; this.bump = 0;
       this.lastG = this.y;
       this.parts = []; this.sparks = []; this.pops = []; this.trail = []; this.trailD = -1;
-      this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0;
+      this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0; this.km = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
       this.cam = null; this.lean = 0; this.crouch = 0.3; this.mult = 1; this.multT = 0; this.grab = '';
       this.wallR = null; this.line = 0; this.lineT = 0; this.bestLine = 0; this.parkStart = 0;
@@ -1609,7 +1609,11 @@
     },
 
     /* ----- Moving ----- */
-    pop(text, sub, col) { this.pops.push({ text, sub, col, life: 1.8 }); },
+    pop(text, sub, col) {
+      const p = { text, sub, col, life: 1.8, s: 0.3 };
+      this.pops.push(p);
+      tween(p, { s: 1 }, 600, { ease: 'elastic' }); // Trick names spring in instead of just appearing.
+    },
     puff(n, x, y, d, speed, up, list = this.parts) {
       for (let i = 0; i < n; i++) {
         const a = rand(0, 6.3), sp = rand(0.3, 1) * speed;
@@ -1809,6 +1813,9 @@
       this.boost = Math.min(this.boost, Math.max(0, VMAX - cruise(this.d)));
       const sc = Math.floor(this.d) + this.coins * 10 + this.bonus;
       if (sc !== this.score) { this.score = sc; setScore(sc); }
+      // A banner at every 1,000 m down the mountain.
+      const km = Math.floor(this.d / 1000);
+      if (km > this.km) { this.km = km; banner((km * 1000).toLocaleString('en-US') + ' M!', { color: '#ffd75e', sub: 'KEEP GOING', size: 18, y: this.H * 0.36 }); }
       this.moveBits(dt);
       this.gen();
     },
@@ -2420,8 +2427,10 @@
       this.pops.slice(-2).forEach((p, i) => {
         ctx.globalAlpha = clamp(p.life * 2, 0, 1);
         const y = H * 0.12 + i * 40 - (1.8 - p.life) * 10;
-        text(p.text, W / 2, y, 14, '#ffffff', 'center');
-        text(p.sub, W / 2, y + 20, 9, p.col, 'center');
+        ctx.save(); ctx.translate(W / 2, y + 8); ctx.scale(p.s, p.s);
+        text(p.text, 0, -8, 14, '#ffffff', 'center');
+        text(p.sub, 0, 12, 9, p.col, 'center');
+        ctx.restore();
         ctx.globalAlpha = 1;
       });
       if (this.sj && !this.sj.done && !this.crash && this.d < JUMP_LIP) {
