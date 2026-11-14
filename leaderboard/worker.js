@@ -24,7 +24,7 @@ const GAMES = {
   pong: { max: 200 },
   snapgrid: { max: 1000000 },
   invaders: { max: 50000 }, // 810 points per wave, so about 60 waves.
-  flappy: { max: 1000 },
+  flappy: { max: 1000 }, // Sleigh Ride (it was called Flappy, so it keeps the old id and scores).
   muncher: { max: 200000 },
   blackjack: { min: 101, max: 100000 }, // Everyone starts with 100 coins.
   cube: { max: 30000 }, // Cube Rush Endless, in tiles. About 70 minutes at top speed.
@@ -32,6 +32,9 @@ const GAMES = {
   ski: { max: 10000000 }, // Ten million: long runs with big trick combos add up.
   tower: { max: 500000 }, // Monster coins plus 10 x wave for each wave survived. Wave 60 is about 100000.
   fishing: { max: 20000 }, // One 60-second round. A Lake Shark is about 1500 at most.
+  stack: { max: 5000 }, // Stack Tower, in blocks.
+  minigolf: { min: 9, max: 63, lowerWins: true }, // Shots for 9 holes: 9 is all holes in one, 7 a hole is the most.
+  words: { max: 100000 }, // Word Guesser: 10 to 60 points a word.
 };
 
 // The Daily Challenge game for a day (YYYY-MM-DD). This list must match DAILY in js/arcade.js.

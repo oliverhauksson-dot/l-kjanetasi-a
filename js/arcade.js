@@ -2,7 +2,8 @@
    Each game lives in js/games/<id>.js and is only downloaded the first time it is opened.
    A game file calls Arcade.register(id, game) with an object that has reset() and either
    update(dt) + draw() for canvas games, or dom: true for games built from HTML (Memory).
-   Optional input hooks: key(e, down), press(down), point({x, y}), swipe(dx, dy), tap(), stop(). */
+   Optional input hooks: key(e, down), press(down), point({x, y}), swipe(dx, dy), tap(), stop().
+   Optional flags: lowerWins (fewer is better), quietScore (no sound when the score goes up), typing (P doesn't pause). */
 (() => {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
@@ -329,7 +330,7 @@
   // The box under the game screen at game over.
   const board = {
     el: $('#lb'), ask: 0,
-    MIN: { memory: 8 }, // Scores below this can't go on the board.
+    MIN: { memory: 8, minigolf: 9 }, // Scores below this can't go on the board.
     hide() { this.ask++; this.el.hidden = true; this.el.textContent = ''; },
     title() { return this.day ? 'Today\'s top 10' : 'This week\'s top 10'; },
     async show(gid, g, score, day) {
@@ -645,7 +646,7 @@
     if (document.activeElement && document.activeElement.tagName === 'INPUT') return; // Typing a leaderboard name.
     if (e.code === 'Escape') { closeGame(); return; }
     if (phase === 'play') {
-      if (e.code === 'KeyP') { pause(); return; }
+      if (e.code === 'KeyP' && !game.typing) { pause(); return; } // In a typing game (Word Guesser) P is a letter.
       if (GAME_KEYS.includes(e.code) && !game.dom) e.preventDefault();
       if (game.key) game.key(e, true);
     } else if (!ov.hidden && !onButton && (e.code === 'Space' || e.code === 'Enter')) {

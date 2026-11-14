@@ -1,6 +1,6 @@
 # Pocket Arcade
 
-Fourteen retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Flappy, Maze Muncher, Cube Rush, Police Chase, Endless Ski, Tower Defense and Fishing.
+Seventeen retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Sleigh Ride, Maze Muncher, Cube Rush, Police Chase, Endless Ski, Tower Defense, Fishing, Stack Tower, Minigolf and Word Guesser.
 
 Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 10 leaderboard that also shows your own place. The game boards start empty every Monday at midnight (UTC), and each game also has an all-time top 10 that never resets.
 
