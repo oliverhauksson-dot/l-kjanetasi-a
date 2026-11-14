@@ -939,7 +939,8 @@
     // The fly-over: k = 1 is above the cup, k = 0 above the tee. The camera flies high along the hole, looking ahead.
     flyPose(k) {
       const Hl = this.Hl, P = Hl.path || (Hl.path = pathOf(Hl.route)), d = k * P.len, p = pathAt(P, d - 14), l = pathAt(P, d + 4);
-      return { p: [p[0], p[1] + 16, p[2]], l: [l[0], l[1] + 0.5, l[2]] };
+      const up = Hl.flyH || (Hl.flyH = Math.max(16, ...Hl.mills.map((m) => m.y + m.len + 8))); // Well clear of the windmill's sails.
+      return { p: [p[0], p[1] + up, p[2]], l: [l[0], l[1] + 0.5, l[2]] };
     },
     camera(dt) {
       const me = this.me(), b = me.ball;
