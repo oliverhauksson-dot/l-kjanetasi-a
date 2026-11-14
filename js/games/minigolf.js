@@ -186,6 +186,14 @@
       for (const w of o.walls) w.bb = [Math.min(w.ax, w.bx) - R - 0.3, Math.min(w.az, w.bz) - R - 0.3, Math.max(w.ax, w.bx) + R + 0.3, Math.max(w.az, w.bz) + R + 0.3];
       let len = 0; o.routeLeft = [];
       for (let i = o.route.length - 1; i >= 0; i--) { o.routeLeft[i] = len; if (i) len += dist3(o.route[i], o.route[i - 1]); }
+      // Things the camera must not sit inside or look through: buildings, snowmen, the volcano, the loop, tall rock walls.
+      // `look` says which materials fade out when one of them is between the camera and your ball anyway.
+      o.blockers = o.boxes.map((b) => ({ look: b.look, box: [b.x0 - 0.3, b.y0, b.z0 - 0.3, b.x1 + 0.3, b.y1 + (b.look === 'castle' ? 1.2 : 0.3), b.z1 + 0.3] }));
+      for (const m of o.mills) o.blockers.push({ look: 'mill', box: [m.x - 4.9, 2.5, 23.7, m.x + 4.9, 10.5, 30.3] });
+      for (const q of o.posts) o.blockers.push({ look: 'snow', cyl: [q.x, q.z, q.r + 0.3, q.y0, q.y0 + q.r * 3.9] });
+      for (const w of o.walls) if (w.look === 'cone') o.blockers.push({ look: 'cone', box: [Math.min(w.ax, w.bx) - 0.8, -2, Math.min(w.az, w.bz) - 0.8, Math.max(w.ax, w.bx) + 0.8, w.t0 + 0.3, Math.max(w.az, w.bz) + 0.8] });
+      if (o.volcano) { const V = o.volcano; o.blockers.push({ look: 'crater', cyl: [V.cx, V.cz, V.r0 + 0.6, -2, V.rim + 0.4] }); }
+      for (const L of o.loops) o.blockers.push({ look: 'loop', loop: L });
     }
     return holes;
   }
@@ -433,9 +441,35 @@
       const a = Math.atan2(tg[0] - b.x, tg[2] - b.z);
       for (const o of [-0.1, 0, 0.1]) for (const p of [0.16, 0.24, 0.34, 0.46, 0.6, 0.78, 1]) out.push([a + o, p]);
     }
+    // Close to the cup it also tries gentle putts, so it doesn't knock a tap-in over the hole.
+    const c = Hl.cup, near = Math.hypot(c[0] - b.x, c[2] - b.z);
+    if (near < 10 && Math.abs(b.y - R - c[1]) < 1) {
+      const a = Math.atan2(c[0] - b.x, c[2] - b.z);
+      for (const o of [-0.05, 0, 0.05]) for (const p of [0.04, 0.06, 0.08, 0.11, 0.13]) out.push([a + o, p]);
+    }
     return out;
   }
   const closer = (a, p) => [-0.05, -0.025, 0, 0.025, 0.05].flatMap((o) => [0.88, 1, 1.12].map((k) => [a + o, clamp(p * k, 0.05, 1)])).filter((c, i) => i !== 7);
+
+  /* ---------- Camera ---------- */
+  // Is this point inside something the camera shouldn't be in?
+  function within(k, x, y, z) {
+    if (k.box) { const q = k.box; return x > q[0] && x < q[3] && y > q[1] && y < q[4] && z > q[2] && z < q[5]; }
+    if (k.cyl) { const q = k.cyl; return y > q[3] && y < q[4] && Math.hypot(x - q[0], z - q[1]) < q[2]; }
+    const L = k.loop; return x > L.x - 2.4 && x < L.x + L.off + 2.4 && Math.hypot(z - L.z, y - L.y - L.R) < L.R + 1;
+  }
+  // Does this thing stand between the camera at c and the point t? Checks points along the line, leaving out the bit right next to the ball.
+  function blocks(k, t, c) {
+    const d = dist3(t, c), n = Math.ceil(d / 0.6);
+    for (let i = 0; i <= n; i++) {
+      const f = i / n;
+      if (f * d >= 1.2 && within(k, t[0] + (c[0] - t[0]) * f, t[1] + (c[1] - t[1]) * f, t[2] + (c[2] - t[2]) * f)) return true;
+    }
+    return false;
+  }
+  const clear = (Hl, t, c) => !Hl.blockers.some((k) => blocks(k, t, c));
+  // Camera spots behind the ball, from best to last resort: further back and lower is nicer, higher and closer sees over things.
+  const BEHIND = [[12, 6.6], [12, 9.5], [10, 12.5], [9.5, 10], [7, 10.5], [5, 9.5]];
 
   /* ---------- The game ---------- */
   const golf = {
@@ -513,6 +547,7 @@
       d.aiming = true;
       this.aim.a = d.a0 - dx * 0.006; // Seen from behind the ball, +x is on the left.
       this.aim.p = clamp(dy / 170, 0, 1);
+      d.up = dy < -20;
     },
     tap() {},
     // Sounds, sparks and the like for the balls you can see.
@@ -681,15 +716,22 @@
         const s = Math.max((x1 - x0) * 1.5, z1 - z0);
         return { p: [(x0 + x1) / 2, top + s * 0.95 + 6, z0 - s * 0.32], l: [(x0 + x1) / 2, top * 0.5, (z0 + z1) / 2 + s * 0.06] };
       }
-      const a = this.camA, sx = Math.sin(a), sz = Math.cos(a);
-      return { p: [b.x - sx * 12, b.y + 6.6, b.z - sz * 12], l: [b.x + sx * 7, b.y + 0.2, b.z + sz * 7] };
+      const a = this.camA, sx = Math.sin(a), sz = Math.cos(a), t = [b.x, b.y + 0.6, b.z];
+      const at = ([d, h]) => [b.x - sx * d, b.y + h, b.z - sz * d];
+      // When no spot is clear (say, the ball is inside the windmill), stay at the usual spot: whatever is in the way fades out.
+      const spot = BEHIND.find((c) => clear(Hl, t, at(c))) || BEHIND[0];
+      return { p: at(spot), l: [b.x + sx * 7, b.y + 0.2, b.z + sz * 7] };
     },
     camera(dt) {
       const me = this.me(), b = me.ball;
-      if (!b.rest && !b.loop && !me.done) {
-        const v = Math.hypot(b.vx, b.vz);
-        if (v > 5) { const want = Math.atan2(b.vx, b.vz); this.camA += wrapA(want - this.camA) * clamp(dt * 1.6, 0, 1); }
-      } else if (me.ball.rest && !me.done) this.camA += wrapA(this.aim.a - this.camA) * clamp(dt * 8, 0, 1);
+      // A ball that is falling off the course, or waiting to be put back, isn't followed: the camera holds still.
+      const gone = me.wait > 0 || (b.air && (b.y - R < this.Hl.floor + 1.6 || !ground(this.Hl, b.x, b.z, 1e9, this.t)));
+      if (!b.rest && !b.loop && !me.done && !gone) {
+        // Turn slowly with a ball rolling away from the camera. A ball bouncing back toward it doesn't spin the camera round.
+        const v = Math.hypot(b.vx, b.vz), d = wrapA(Math.atan2(b.vx, b.vz) - this.camA);
+        if (v > 5 && Math.abs(d) < 1.4) this.camA += d * clamp(dt * 1.2, 0, 1);
+      } else if (b.rest && !me.done) this.camA += wrapA(this.aim.a - this.camA) * clamp(dt * 6, 0, 1);
+      if (gone && this.cam && this.phase === 'play' && !this.overview) return;
       let want;
       if (this.phase === 'intro') {
         const k = ease(clamp(this.introT / 2.2, 0, 1)), o = this.pose('over'), bh = this.pose('behind');
@@ -716,12 +758,17 @@
       if (G.built !== this.Hl) buildHole(this.Hl);
       if (!this.cam) this.camera(0);
       animateHole(this.Hl, this.t);
+      const now = performance.now(), fdt = Math.min(0.1, (now - (G.last || now)) / 1000); G.last = now;
+      const cp = this.cam.p;
       this.players.forEach((p, i) => {
         const m = G.balls[i], b = p.ball;
         m.visible = !b.hidden && !(p.done && p.sinkT === 0);
         if (p.done && b.sunk) { const c = this.Hl.cup; m.position.set(c[0], c[1] + R - (1 - p.sinkT) * 1.2, c[2]); }
         else m.position.set(b.x, b.y, b.z);
-        if (!b.rest) { const v = Math.hypot(b.vx, b.vz); if (v > 0.1) m.rotateOnWorldAxis(G.axis.set(b.vz / v, 0, -b.vx / v), v / 60 / R); }
+        // The ball rolls as far as it moved this frame.
+        if (!b.rest) { const v = Math.hypot(b.vx, b.vz); if (v > 0.1) m.rotateOnWorldAxis(G.axis.set(b.vz / v, 0, -b.vx / v), v * fdt / R); }
+        // A bot's ball right in front of the camera fades almost away, so it doesn't hide yours.
+        if (i) m.material.opacity = 0.62 * clamp((Math.hypot(b.x - cp[0], b.y - cp[1], b.z - cp[2]) - 3) / 5, 0.12, 1);
       });
       const cam = G.cam;
       cam.position.set(...this.cam.p); cam.lookAt(...this.cam.l);
@@ -729,6 +776,14 @@
       G.sun.position.set(l[0] + 30, l[1] + 60, l[2] - 20); G.sun.target.position.set(l[0], l[1], l[2]); G.sun.target.updateMatrixWorld();
       const cw = Math.min(ctx.canvas.width, 900), ch = Math.round(cw * H / W);
       if (G.cw !== cw) { G.cw = cw; G.r.setSize(cw, ch, false); }
+      // Anything between the camera and your ball fades out.
+      const want = new Map(), me = this.me().ball, tgt = [me.x, me.y + 0.6, me.z];
+      for (const k of this.Hl.blockers) for (const m of k.mats || []) want.set(m, Math.min(want.has(m) ? want.get(m) : 1, !this.overview && !this.me().done && blocks(k, tgt, this.cam.p) ? 0.25 : 1));
+      for (const [m, o] of want) {
+        m.opacity += (o - m.opacity) * 0.25;
+        const tr = m.opacity < 0.98;
+        if (tr !== m.transparent) { m.transparent = tr; m.depthWrite = !tr; m.needsUpdate = true; if (!tr) m.opacity = 1; }
+      }
       G.r.render(G.scene, cam);
       ctx.drawImage(G.r.domElement, 0, 0, W, H);
       this.hud();
@@ -760,16 +815,28 @@
           ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(s.x, s.y, 24, 0, TAU); ctx.stroke();
           ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(s.x, s.y, 24, -Math.PI / 2, -Math.PI / 2 + TAU * p); ctx.stroke();
         }
+        // Dragging up toward the hole does nothing, so say which way to pull.
+        if (s && this.drag && this.drag.up) {
+          ctx.textAlign = 'center'; ctx.font = font(9); ctx.lineWidth = 4; ctx.strokeStyle = '#0d0a15'; ctx.fillStyle = '#ffd56b';
+          ctx.strokeText('PULL BACK', s.x, s.y + 46); ctx.fillText('PULL BACK', s.x, s.y + 46);
+          ctx.beginPath(); ctx.moveTo(s.x - 9, s.y + 58); ctx.lineTo(s.x + 9, s.y + 58); ctx.lineTo(s.x, s.y + 70); ctx.closePath(); ctx.fill();
+        }
       }
-      // Name tags over the balls.
+      // Name tags over the balls. Tags that would cover each other move up, and a bot's tag hides when its ball is at the camera.
       ctx.textAlign = 'center'; ctx.font = font(7);
+      const tags = [], cp = this.cam.p;
       this.players.forEach((p) => {
-        if (p.ball.hidden || (p.done && p.sinkT === 0)) return;
-        const s = this.screen(p.ball.x, p.ball.y + 1.1, p.ball.z);
+        const b2 = p.ball;
+        if (b2.hidden || (p.done && p.sinkT === 0)) return;
+        if (!p.you && Math.hypot(b2.x - cp[0], b2.y - cp[1], b2.z - cp[2]) < 6) return;
+        const s = this.screen(b2.x, b2.y + 1.1, b2.z);
         if (!s) return;
         const w = ctx.measureText(p.name).width + 8;
-        ctx.fillStyle = 'rgba(8,10,20,.6)'; ctx.fillRect(s.x - w / 2, s.y - 7, w, 13);
-        ctx.fillStyle = p.color; ctx.fillText(p.name, s.x, s.y);
+        let y = s.y;
+        for (let k = 0; k < 4; k++) { const hit = tags.find((t) => Math.abs(t.x - s.x) < (t.w + w) / 2 && Math.abs(t.y - y) < 14); if (!hit) break; y = hit.y - 14; }
+        tags.push({ x: s.x, y, w });
+        ctx.fillStyle = 'rgba(8,10,20,.6)'; ctx.fillRect(s.x - w / 2, y - 7, w, 13);
+        ctx.fillStyle = p.color; ctx.fillText(p.name, s.x, y);
       });
       for (const pp of this.pops || []) {
         const s = this.screen(pp.x, pp.y, pp.z); if (!s) continue;
@@ -903,7 +970,7 @@
       trunk: lam({ color: '#6b4a2b' }), leaf: lam({ color: LOOK.leaf }), snow: lam({ color: '#ffffff' }), coal: lam({ color: '#1b1b24' }), carrot: lam({ color: '#ff8a2a' }),
       bumper: new T.MeshStandardMaterial({ color: '#ff6b9a', emissive: '#ff2a6a', emissiveIntensity: 0.25, roughness: 0.4 }),
       cap: new T.MeshStandardMaterial({ color: '#fff3a0', emissive: '#ffd56b', emissiveIntensity: 0.4 }),
-      bar: lam({ color: '#f4ecdc' }), puck: lam({ color: '#1b1b24' }), track: new T.MeshLambertMaterial({ color: XMAS ? '#e2384d' : '#5ce1e6', side: T.DoubleSide }),
+      bar: lam({ color: '#f4ecdc' }), puck: lam({ color: '#1b1b24' }), loopRail: LOOK.rail === 'candy' ? lam({ map: candy }) : lam({ color: LOOK.rail }), track: new T.MeshLambertMaterial({ color: XMAS ? '#e2384d' : '#5ce1e6', side: T.DoubleSide }),
       lava: new T.MeshBasicMaterial({ color: XMAS ? '#ffd56b' : '#ff6a2a' }), cone: lam({ map: basalt }),
       crater: new T.MeshStandardMaterial({ map: crack(false), emissive: '#ffffff', emissiveMap: crack(true), emissiveIntensity: 0.9, roughness: 0.9 }),
       cup: new T.MeshBasicMaterial({ color: '#05070a' }), cupRim: lam({ color: '#ffffff' }), pole: lam({ color: '#f4ecdc' }),
@@ -1042,7 +1109,7 @@
     for (const L of Hl.loops) {
       const rr = L.R + 0.05;
       add(new T.Mesh(grid(80, 2, (u, v) => { const p = u * TAU; return [loopX(L, p) + (v - 0.5) * 3, L.y + L.R - rr * Math.cos(p), L.z + rr * Math.sin(p)]; }), M.track), false, true);
-      for (const e of [-1.5, 1.5]) add(new T.Mesh(grid(80, 1, (u, v) => { const p = u * TAU, r2 = rr - v * 0.6; return [loopX(L, p) + e, L.y + L.R - r2 * Math.cos(p), L.z + r2 * Math.sin(p)]; }), M.rail), false, false);
+      for (const e of [-1.5, 1.5]) add(new T.Mesh(grid(80, 1, (u, v) => { const p = u * TAU, r2 = rr - v * 0.6; return [loopX(L, p) + e, L.y + L.R - r2 * Math.cos(p), L.z + r2 * Math.sin(p)]; }), M.loopRail), false, false);
     }
     if (Hl.volcano) {
       const V = Hl.volcano;
@@ -1078,6 +1145,8 @@
         if (rnd() < 0.3) { const gm = add(new T.Mesh(G.treeGeo.gift, M.gift[i % 4])); const gs = 0.6 + rnd() * 0.5; gm.scale.setScalar(gs); gm.position.set(x + 2, base + gs / 2, z + 1); }
       }
     }
+    const fade = { mill: [M.mill, M.roof, M.sail], castle: [M.castle], hedge: [M.hedge], snow: [M.snow], cone: [M.cone], crater: [M.crater], loop: [M.track, M.loopRail] };
+    for (const k of Hl.blockers) k.mats = fade[k.look] || [];
     G.scene.add(grp);
   }
   function animateHole(Hl, t) {
