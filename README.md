@@ -36,7 +36,7 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `js/games/*.js`: one file per game. A game file is only downloaded when someone opens that game.
 - `js/vendor/three.module.min.js`: three.js, the 3D engine Police Chase and Endless Ski use (MIT license, see `three-LICENSE.txt`). Only downloaded when one of those games is opened.
 - `js/countdowns.js`: the countdown badges under the title on the front page (GTA 6 right now). Each one goes away by itself a few days after its date. If a date moves, change it at the top of that file.
-- `js/season.js`, `css/xmas.css`: the Christmas decorations (snow, fairy lights, tree, countdown to Christmas Eve, snowy hills). They turn on by themselves from 1 December to 6 January. Add `?xmas` to the address to see them on any other day.
+- `js/season.js`, `css/xmas.css`: the Christmas decorations (northern lights, snow, fairy lights, Santa's sleigh, tree, a live countdown to Christmas Eve, snowy hills). They turn on by themselves from 14 November to 6 January. Add `?xmas` to the address to see them on any other day.
 - `fonts/`: the two fonts, served from this site.
 - `sw.js`, `manifest.webmanifest`, `icons/`: what makes "Add to home screen" and offline play work.
 - `leaderboard/`: the small Cloudflare server that keeps the leaderboard scores. See `leaderboard/README.md` for how to set it up.
