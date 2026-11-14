@@ -1,12 +1,13 @@
-/* Christmas on Pocket Arcade: falling snow, fairy lights, a little tree with a gold star, a countdown and snowy hills.
-   It shows by itself from 1 December to 6 January. The rest of the year this file does nothing.
+/* Christmas on Pocket Arcade: northern lights, falling snow, fairy lights, Santa's sleigh, a little tree with a gold star,
+   snow on the game cards, a live countdown to Christmas Eve and snowy hills.
+   It shows by itself from 14 November to 6 January. The rest of the year this file does nothing.
    To look at it on any other day, add ?xmas to the address (pocketarcade.net/?xmas). ?xmas=off hides it.
    The styles are in css/xmas.css, which is only downloaded while the decorations are on. */
 (() => {
   const script = document.currentScript;
   const now = new Date(), month = now.getMonth(), day = now.getDate();
   const ask = new URLSearchParams(location.search).get('xmas');
-  const inSeason = month === 11 || (month === 0 && day <= 6);
+  const inSeason = (month === 10 && day >= 14) || month === 11 || (month === 0 && day <= 6);
   if (ask === 'off' || (ask === null && !inSeason)) return;
 
   const el = (tag, cls, html) => {
@@ -32,20 +33,51 @@
     return el('div', 'xmas-tree', '<i class="xmas-star"></i>' + s);
   }
 
+  /* The big countdown under the title. It ticks every second to 18:00 on 24 December, when Christmas starts in Iceland.
+     After that it says Merry Christmas, then counts down to New Year, then wishes a happy new year until 6 January. */
   function countdown() {
-    /* Counts down to Christmas Eve (24 December), when Christmas starts in Iceland. */
-    const afterDay = (month === 11 && day > 25) || (month === 0 && day <= 6);
-    const days = Math.round((new Date(now.getFullYear(), 11, 24) - new Date(now.getFullYear(), month, day)) / 864e5);
-    const text = afterDay ? 'Merry Christmas and a happy new year'
-      : days <= 0 ? 'Merry Christmas!'
-      : days === 1 ? 'Merry Christmas · it\'s tomorrow'
-      : 'Merry Christmas · ' + days + ' days to go';
-    const p = document.createElement('p');
-    p.className = 'note xmas-note';
-    const star = document.createElement('b');
-    star.textContent = '★'; star.setAttribute('aria-hidden', 'true');
-    p.append(star, text);
-    return p;
+    const box = document.createElement('section');
+    box.className = 'xmas-count';
+    box.setAttribute('aria-label', 'Countdown to Christmas Eve');
+    box.innerHTML = '<i class="xmas-bauble" aria-hidden="true"></i><p class="xc-tag"></p><div class="xc-time" role="timer" aria-live="off"></div><p class="xc-sub"></p>';
+    const tag = box.querySelector('.xc-tag'), time = box.querySelector('.xc-time'), sub = box.querySelector('.xc-sub');
+    const UNITS = ['days', 'hours', 'min', 'sec'];
+    time.innerHTML = UNITS.map((u) => '<span><b>00</b><small>' + u + '</small></span>').join('');
+    const cells = time.querySelectorAll('b');
+    const pad = (n) => String(n).padStart(2, '0');
+    let shown = '';
+    function tick() {
+      const t = new Date(), y = t.getMonth() === 0 ? t.getFullYear() - 1 : t.getFullYear();
+      const eve = new Date(y, 11, 24, 18), newYear = new Date(y + 1, 0, 1);
+      let target = null, label, note;
+      if (t < eve) { target = eve; label = 'CHRISTMAS EVE'; note = 'Christmas starts at 6 pm on 24 December'; }
+      else if (t < new Date(y, 11, 27)) { label = 'MERRY CHRISTMAS'; note = 'Gleðileg jól from Pocket Arcade ★'; }
+      else if (t < newYear) { target = newYear; label = 'NEW YEAR'; note = 'Counting down to midnight on 31 December'; }
+      else { label = 'HAPPY NEW YEAR'; note = 'Gleðilegt nýtt ár from Pocket Arcade ★'; }
+      if (label + note !== shown) { tag.textContent = label; sub.textContent = note; time.hidden = !target; box.classList.toggle('xc-done', !target); shown = label + note; }
+      if (!target) return;
+      const left = Math.max(0, Math.floor((target - t) / 1000));
+      const parts = [Math.floor(left / 86400), Math.floor(left / 3600) % 24, Math.floor(left / 60) % 60, left % 60];
+      parts.forEach((v, i) => { const txt = i === 0 ? String(v) : pad(v); if (cells[i].textContent !== txt) cells[i].textContent = txt; });
+      time.setAttribute('aria-label', parts[0] + ' days, ' + parts[1] + ' hours and ' + parts[2] + ' minutes to go');
+    }
+    tick();
+    setInterval(() => { if (!document.hidden) tick(); }, 1000);
+    return box;
+  }
+
+  /* Northern lights: soft green and cyan ribbons that drift slowly across the top of the sky. */
+  const aurora = () => el('div', 'xmas-aurora', '<i></i><i></i><i></i>');
+
+  /* Santa's sleigh with two reindeer, in pixels. It flies across the sky now and then. */
+  function sleigh() {
+    const R = (x) => '<g fill="#c99a6a"><rect x="' + x + '" y="4" width="6" height="3"/><rect x="' + (x + 5) + '" y="2" width="2" height="2"/><rect x="' + (x + 6) + '" y="1" width="2" height="1" fill="#8a5a33"/><rect x="' + (x + 4) + '" y="0" width="1" height="2" fill="#8a5a33"/><rect x="' + x + '" y="7" width="1" height="2"/><rect x="' + (x + 4) + '" y="7" width="1" height="2"/></g><rect x="' + (x + 7) + '" y="2" width="1" height="1" fill="' + (x > 20 ? '#ff4a4a' : '#2b1a10') + '"/>';
+    const svg = '<svg viewBox="0 0 44 14" shape-rendering="crispEdges">' +
+      '<path d="M8 8.5H17M17 8.5H26" stroke="#f3cf7c" stroke-width=".5"/>' +
+      '<rect x="1" y="6" width="9" height="4" fill="#c8323c"/><rect x="0" y="10" width="11" height="1" fill="#f3cf7c"/><rect x="0" y="9" width="1" height="1" fill="#f3cf7c"/>' +
+      '<rect x="3" y="3" width="4" height="3" fill="#c8323c"/><rect x="4" y="2" width="2" height="1" fill="#ffd9c0"/><rect x="3" y="1" width="4" height="1" fill="#c8323c"/><rect x="7" y="1" width="1" height="1" fill="#fff"/><rect x="3" y="5" width="4" height="1" fill="#fff"/>' +
+      '<rect x="1" y="4" width="2" height="2" fill="#5a3a8a"/>' + R(17) + R(29) + '</svg>';
+    return el('div', 'xmas-sleigh', '<div>' + svg + '</div>');
   }
 
   /* Snow: small flakes fall slowly and faintly, bigger ones a little faster, so it looks like it has depth. */
@@ -102,10 +134,10 @@
     document.documentElement.classList.add('xmas');
     document.body.prepend(el('div', 'xmas-lights', '<i></i><i></i>'));
     document.body.append(el('div', 'xmas-hills'));
+    document.body.prepend(aurora());
+    document.body.append(sleigh());
     const title = document.querySelector('.marquee h1');
-    const notes = document.getElementById('notes');
-    if (notes) notes.prepend(countdown()); else if (title) title.after(countdown());
-    if (title) title.parentNode.append(tree());
+    if (title) { title.parentNode.append(tree()); title.closest('.marquee').after(countdown()); }
     snow();
   }
 
