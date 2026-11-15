@@ -19,4 +19,4 @@ User-agent: DuckDuckBot
 User-agent: CCBot
 Allow: /
 
-Sitemap: https://pocketarcade.net/sitemap.xml
+Sitemap: https://jurtu.com/sitemap.xml

@@ -58,7 +58,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 server = http.server.ThreadingHTTPServer(("localhost", PORT), Handler)
-print(f"Pocket Arcade is running at http://localhost:{PORT}  (press Ctrl+C to stop)")
+print(f"jurtu.com is running at http://localhost:{PORT}  (press Ctrl+C to stop)")
 webbrowser.open(f"http://localhost:{PORT}")
 try:
     server.serve_forever()

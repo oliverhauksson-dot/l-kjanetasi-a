@@ -1,7 +1,7 @@
-/* Christmas on Pocket Arcade: northern lights, falling snow, fairy lights, Santa's sleigh, a little tree with a gold star,
+/* Christmas on jurtu.com: northern lights, falling snow, fairy lights, Santa's sleigh, a little tree with a gold star,
    snow on the game cards, a live countdown to Christmas Eve and snowy hills.
    It shows by itself from 14 November to 6 January. The rest of the year this file does nothing.
-   To look at it on any other day, add ?xmas to the address (pocketarcade.net/?xmas). ?xmas=off hides it.
+   To look at it on any other day, add ?xmas to the address (jurtu.com/?xmas). ?xmas=off hides it.
    The styles are in css/xmas.css, which is only downloaded while the decorations are on. */
 (() => {
   const script = document.currentScript;
@@ -51,9 +51,9 @@
       const eve = new Date(y, 11, 24, 18), newYear = new Date(y + 1, 0, 1);
       let target = null, label, note;
       if (t < eve) { target = eve; label = 'CHRISTMAS EVE'; note = 'Christmas starts at 6 pm on 24 December'; }
-      else if (t < new Date(y, 11, 27)) { label = 'MERRY CHRISTMAS'; note = 'Gleðileg jól from Pocket Arcade ★'; }
+      else if (t < new Date(y, 11, 27)) { label = 'MERRY CHRISTMAS'; note = 'Gleðileg jól from jurtu.com ★'; }
       else if (t < newYear) { target = newYear; label = 'NEW YEAR'; note = 'Counting down to midnight on 31 December'; }
-      else { label = 'HAPPY NEW YEAR'; note = 'Gleðilegt nýtt ár from Pocket Arcade ★'; }
+      else { label = 'HAPPY NEW YEAR'; note = 'Gleðilegt nýtt ár from jurtu.com ★'; }
       if (label + note !== shown) { tag.textContent = label; sub.textContent = note; time.hidden = !target; box.classList.toggle('xc-done', !target); shown = label + note; }
       if (!target) return;
       const left = Math.max(0, Math.floor((target - t) / 1000));

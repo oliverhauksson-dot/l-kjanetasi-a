@@ -44,7 +44,7 @@
     pop.setAttribute("aria-label", "Cookies");
     pop.innerHTML =
       '<div class="box"><h2>COOKIES?</h2>' +
-      "<p>Pocket Arcade is free because it shows ads from Google. Ads use cookies. " +
+      "<p>jurtu.com is free because it shows ads from Google. Ads use cookies. " +
       'Accept to allow personalised ads, or choose only necessary cookies. <a href="' + root + 'privacy.html">Privacy policy</a></p>' +
       '<div class="row"><button class="yes" type="button">ACCEPT</button><button class="no" type="button">ONLY NECESSARY</button></div></div>';
     document.body.appendChild(pop);

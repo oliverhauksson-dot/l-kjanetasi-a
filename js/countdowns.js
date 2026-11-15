@@ -1,4 +1,4 @@
-/* Countdown badges under the "Pocket Arcade" title on the front page.
+/* Countdown badges under the "jurtu.com" title on the front page.
    Each one counts the days to a date, says so on the day itself, and goes away by itself a few days later.
    To add one, add a line to COUNTDOWNS. If a date moves (a game gets delayed), only the date needs changing.
    The Christmas countdown is in js/season.js, because it comes with the rest of the decorations. */
