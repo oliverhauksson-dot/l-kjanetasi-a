@@ -524,12 +524,41 @@
     bestEl.textContent = fmtBest(id);
     const line = msg || (game.label + ': ' + score + '.');
     if (title) sfx.win(); else sfx.lose();
-    showOverlay(title || 'Game over', line, 'Play again', startGame,
+    showOverlay(title || 'Game over', line, 'Play again', againWithAd,
       { id, title: game.title, label: game.label, score, day: daily });
     if (better && prev !== null) newBest();
     else if (!title) shake(7, 380);
     board.show(id, game, score, daily);
     showNext();
+  }
+
+  // Google's game ads (AdSense H5 Games Ads): "Play again" may show one full-screen ad before the next game starts,
+  // never during play. At most one every 3 games and 2 minutes here, and Google can show fewer.
+  // Until Google approves jurtu.com for game ads (or with an ad blocker) no ad shows and the next game starts straight away.
+  const AD_EVERY = 3, AD_GAP = 2 * 60 * 1000;
+  let gamesSinceAd = 0, lastAd = Date.now();
+  window.adsbygoogle = window.adsbygoogle || [];
+  try { window.adsbygoogle.push({ preloadAdBreaks: 'on', sound: 'on' }); } catch (e) {} // adConfig: have the next ad ready, so it shows without a wait.
+  function againWithAd() {
+    gamesSinceAd++;
+    if (gamesSinceAd < AD_EVERY || Date.now() - lastAd < AD_GAP) { startGame(); return; }
+    let done = false, showing = false;
+    const go = () => { if (done) return; done = true; $('#ovb').disabled = false; startGame(); };
+    $('#ovb').disabled = true;
+    try {
+      window.adsbygoogle.push({
+        type: 'next', name: 'play_again',
+        beforeAd: () => {
+          showing = true; gamesSinceAd = 0; lastAd = Date.now();
+          if (phase === 'play') pause(); // The ad came late and the game already started: pause it, so nothing is lost.
+          try { if (sfx.ac) sfx.ac.suspend(); } catch (e) {}
+        },
+        afterAd: () => { sfx.unlock(); },
+        adBreakDone: go,
+      });
+    } catch (e) { go(); return; }
+    // If Google's script isn't there (blocked, offline, not approved yet), nothing answers: start the game anyway.
+    setTimeout(() => { if (!showing) go(); }, 1200);
   }
 
   // "New best!" pops in with a bounce after the Game Over box arrives.
