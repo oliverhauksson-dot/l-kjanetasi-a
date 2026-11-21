@@ -1,4 +1,4 @@
-/* jurtu.com progress: daily streaks, badges, the My profile page, challenge links from friends and the Game of the week box.
+/* jurtu.com progress: daily streaks, badges, the My profile page, and challenge links from friends.
    Everything here is saved in this browser only (localStorage "arcade:progress"), like the best scores. Nothing is sent anywhere,
    so the leaderboard server (leaderboard/worker.js) needs no change. It listens to js/arcade.js through Arcade.on(). */
 (() => {
@@ -13,7 +13,7 @@
 
   /* ---------- Saved progress ---------- */
   const KEY = 'arcade:progress';
-  const fresh = () => ({ streak: { n: 0, best: 0, last: '' }, played: {}, total: 0, bests: 0, words: 0, dailyDays: [], weeks: [], saved: 0, sent: 0, beat: 0, flags: {}, badges: {} });
+  const fresh = () => ({ streak: { n: 0, best: 0, last: '' }, played: {}, total: 0, bests: 0, words: 0, dailyDays: [], saved: 0, sent: 0, beat: 0, flags: {}, badges: {} });
   let P = fresh();
   try { P = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} };
@@ -38,8 +38,6 @@
     ['streak30', '☄️', 'Unstoppable', 'Play 30 days in a row.', () => P.streak.best >= 30],
     ['daily', '☀️', 'Daily player', 'Play a Daily Challenge.', () => P.dailyDays.length >= 1],
     ['daily10', '🗓️', 'Daily devotee', 'Play the Daily Challenge on 10 different days.', () => P.dailyDays.length >= 10],
-    ['featured', '⭐', 'Featured', 'Play the Game of the week.', () => P.weeks.length >= 1],
-    ['weekly4', '🌟', 'Every week', 'Play the Game of the week in 4 different weeks.', () => P.weeks.length >= 4],
     ['pb', '📈', 'Personal best', 'Beat your own best score 10 times.', () => P.bests >= 10],
     ['board', '📋', 'On the board', 'Save a score on a leaderboard.', () => P.saved >= 1],
     ['top10', '🏆', 'Top 10', 'Make the top 10 of any leaderboard.', () => !!P.flags.top10],
@@ -105,8 +103,6 @@
   /* ---------- What happens in the games ---------- */
   A.on('open', (d) => {
     paintChal(d);
-    if (d.id === A.weekGame() && !P.weeks.includes(A.weekOf())) { P.weeks.push(A.weekOf()); P.weeks = P.weeks.slice(-60); }
-    save();
   });
 
   A.on('over', (d) => {
@@ -172,39 +168,7 @@
     streakBtn.title = !n ? 'Finish a game today to start a streak.'
       : P.streak.last === localDay() ? 'You played today. Come back tomorrow!' : 'Play a game today to keep your streak!';
     profBtn.textContent = '🏅 MY BADGES ' + Object.keys(P.badges).filter((b) => badge(b)).length + '/' + BADGES.length;
-    paintWeek();
   }
-
-  /* ---------- Game of the week box ---------- */
-  const week = $('#gotw');
-  let weekShown = '';
-  function paintWeek() {
-    const gid = A.weekGame(), c = card(gid);
-    if (!c) return;
-    cards().forEach((x) => x.classList.toggle('featured', x === c));
-    week.style.setProperty('--c', c.style.getPropertyValue('--c'));
-    $('#wname').textContent = nameOf(gid);
-    $('#wdesc').textContent = c.querySelector('p').textContent;
-    const art = $('#wart'); art.textContent = ''; art.appendChild(c.querySelector('svg').cloneNode(true));
-    // Days left until Monday 00:00 UTC, when the next game takes over.
-    const left = Math.ceil((Date.parse(A.weekOf()) + 7 * 864e5 - Date.now()) / 864e5);
-    $('#wleft').textContent = left <= 1 ? 'LAST DAY' : left + ' DAYS LEFT';
-    week.hidden = false;
-    if (weekShown === gid + A.weekOf()) return;
-    weekShown = gid + A.weekOf();
-    const top = $('#wtop'); top.textContent = '';
-    A.api('/api/scores?game=' + gid + '&name=' + encodeURIComponent((A.player.get() || {}).name || '')).then(({ data, error }) => {
-      if (error || !Array.isArray(data.scores)) { top.append(el('li', 'none', 'The leaderboard is offline right now.')); return; }
-      if (!data.scores.length) { top.append(el('li', 'none', 'No scores yet this week. Be the first!')); return; }
-      data.scores.slice(0, 3).forEach((s, i) => {
-        const li = el('li'); li.append(el('span', '', ['🥇', '🥈', '🥉'][i]), el('span', '', s.name), el('b', '', String(s.score)));
-        top.appendChild(li);
-      });
-      if (data.me && data.me.rank > 3) top.append(el('li', 'mine', 'You: #' + data.me.rank + ' with ' + data.me.score));
-    });
-  }
-  $('#wplay').addEventListener('click', () => A.start(A.weekGame()));
-  $('#wboard').addEventListener('click', () => A.openBoards('week'));
 
   /* ---------- My profile page ---------- */
   const prof = $('#profile'), home = $('#home');

@@ -4,7 +4,7 @@ Seventeen retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong
 
 Play it at https://jurtu.com. Best scores are saved in your browser, and every game has a public top 10 leaderboard that also shows your own place. The game boards start empty every Monday at midnight (UTC), and each game also has an all-time top 10 that never resets.
 
-Every day one game is the Daily Challenge, with its own top 10 for that day. Every Monday one game becomes the Game of the week, featured on the front page. Players build a daily streak, earn badges (shown on their profile) and can challenge a friend with a link that carries their score. The site can also be added to a phone's home screen, where it opens like an app and works offline.
+Every day one game is the Daily Challenge, with its own top 10 for that day. Players build a daily streak, earn badges (shown on their profile) and can challenge a friend with a link that carries their score. The site can also be added to a phone's home screen, where it opens like an app and works offline.
 
 ## Run it on your computer (localhost)
 
@@ -33,7 +33,7 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `index.html`: the home page with the game cards and the game screen.
 - `css/arcade.css`: styles for the home page and game screen. The colours (midnight blue, sapphire, ocean cyan, a little gold) are set at the top of this file.
 - `js/arcade.js`: the shared part (menu, game screen, controls, sound, saved scores).
-- `js/progress.js`: daily streaks, badges, the My profile page, "Challenge a friend" links and the Game of the week box. All saved in the player's own browser. To add a badge, add a line to `BADGES` in that file. The Game of the week order is `WEEKLY` at the top of `js/arcade.js`.
+- `js/progress.js`: daily streaks, badges, the My profile page, and "Challenge a friend" links. All saved in the player's own browser. To add a badge, add a line to `BADGES` in that file.
 - `js/games/*.js`: one file per game. A game file is only downloaded when someone opens that game.
 - `js/vendor/three.module.min.js`: three.js, the 3D engine Police Chase and Endless Ski use (MIT license, see `three-LICENSE.txt`). Only downloaded when one of those games is opened.
 - `js/countdowns.js`: the countdown badges under the title on the front page (none right now; there is an example in the file). Each one goes away by itself a few days after its date. If a date moves, change it at the top of that file.

@@ -86,13 +86,6 @@
   const DAILY = ['snake', 'runner', 'breakout', 'memory', 'snapgrid', 'invaders', 'flappy', 'muncher', 'chase', 'ski'];
   const today = () => new Date().toISOString().slice(0, 10);
   const dailyGame = (day) => DAILY[Math.floor(Date.parse(day) / 864e5) % DAILY.length];
-  // Game of the week: one game for the whole week, from Monday 00:00 UTC, the moment every game's weekly board starts empty.
-  // Its "This week" board is the Game of the week board. The order is mixed so similar games don't follow each other.
-  const WEEKLY = ['stack', 'snake', 'minigolf', 'invaders', 'words', 'runner', 'tower', 'breakout', 'fishing', 'snapgrid', 'chase', 'memory', 'flappy', 'cube', 'pong', 'muncher', 'ski'];
-  const weekDay = (ms = Date.now()) => { const d = Math.floor(ms / 864e5); return d - ((d + 3) % 7); }; // Days from 1970 to this week's Monday (1 January 1970 was a Thursday).
-  const FIRST_WEEK = 20773; // Monday 16 November 2026 (days from 1970), the first week, with the first game on the list.
-  const weekGame = (ms) => { const n = WEEKLY.length; return WEEKLY[((Math.round((weekDay(ms) - FIRST_WEEK) / 7) % n) + n) % n]; };
-  const weekOf = (ms) => new Date(weekDay(ms) * 864e5).toISOString().slice(0, 10); // This week's Monday, like 2026-11-16.
   const realRandom = Math.random;
   let daily = null; // The day of the challenge being played, or null in a normal game.
   function seedRandom(day) {
@@ -472,16 +465,15 @@
   $$('#bwhen button').forEach((b) => b.addEventListener('click', () => { when = b.dataset.when; loadTab(); }));
   async function loadTab() {
     const ask = ++boardAsk;
-    // 'daily' is today's Daily Challenge; 'week' is the Game of the week (that game's board for this week).
-    const gid = tab === 'daily' ? dailyGame(today()) : tab === 'week' ? weekGame() : tab;
+    const gid = tab === 'daily' ? dailyGame(today()) : tab;
     const card = document.querySelector('.menu [data-game="' + gid + '"]');
     const name = card ? card.querySelector('h2').textContent : '';
-    boards.style.setProperty('--c', tab === 'week' ? 'var(--gold)' : card ? card.style.getPropertyValue('--c') : 'var(--amber)');
+    boards.style.setProperty('--c', card ? card.style.getPropertyValue('--c') : 'var(--amber)');
     $$('#btabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
-    bwhen.hidden = tab === 'daily' || tab === 'week';
+    bwhen.hidden = tab === 'daily';
     $$('#bwhen button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.when === when)));
-    const all = tab !== 'daily' && tab !== 'week' && when === 'all';
-    const title = tab === 'daily' ? 'Today\'s top 10 · ' + name : tab === 'week' ? 'Game of the week · ' + name : (all ? 'All-time top 10 · ' : 'This week\'s top 10 · ') + name;
+    const all = tab !== 'daily' && when === 'all';
+    const title = tab === 'daily' ? 'Today\'s top 10 · ' + name : (all ? 'All-time top 10 · ' : 'This week\'s top 10 · ') + name;
     blist.textContent = ''; const h = document.createElement('h4'); h.textContent = title; const p = document.createElement('p'); p.textContent = 'Loading...'; blist.append(h, p);
     const { data, error } = await api(boardUrl(gid, tab === 'daily', all));
     if (ask !== boardAsk) return;
@@ -489,14 +481,14 @@
   }
   function openBoards(start) {
     if (!btabs.childElementCount) {
-      const tabs = [['daily', 'TODAY'], ['week', '★ GAME OF THE WEEK']].concat([...$$('.menu [data-game]')].map((c) => [c.dataset.game, c.querySelector('h2').textContent.toUpperCase()]));
+      const tabs = [['daily', 'TODAY']].concat([...$$('.menu [data-game]')].map((c) => [c.dataset.game, c.querySelector('h2').textContent.toUpperCase()]));
       tabs.forEach(([t, label]) => {
         const b = document.createElement('button'); b.dataset.tab = t; b.textContent = label;
         b.addEventListener('click', () => { tab = t; loadTab(); });
         btabs.appendChild(b);
       });
     }
-    if (start && (start === 'daily' || start === 'week' || document.querySelector('.menu [data-game="' + CSS.escape(start) + '"]'))) tab = start;
+    if (start && (start === 'daily' || document.querySelector('.menu [data-game="' + CSS.escape(start) + '"]'))) tab = start;
     home.hidden = true; screen.hidden = true; $('#profile').hidden = true; boards.hidden = false;
     window.scrollTo(0, 0);
     loadTab();
@@ -818,11 +810,9 @@
     register(gid, g) { GAMES[gid] = g; },
     // For badges: a game reports something that happened, like Arcade.stat('ace') for a hole in one.
     stat: (kind, n = 1) => emit('stat', { id, kind, n }),
-    // For js/progress.js (streaks, badges, challenges, Game of the week).
-    on, today, dailyGame, weekGame, weekOf, api, player,
+    // For js/progress.js (streaks, badges, challenges).
+    on, today, dailyGame, player,
     current: () => (id && !screen.hidden ? { id, daily } : null),
-    start(gid, day) { setFull(true); openGame(gid, day); },
-    openBoards,
   };
 
   /* ---------- Add to home screen ---------- */

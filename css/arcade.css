@@ -304,42 +304,6 @@ html.lock, html.lock body { overflow: hidden; }
 .install.prof { color: var(--ice); border-color: rgba(213, 230, 255, .55); }
 .install.prof:hover { background: rgba(213, 230, 255, .08); border-color: var(--ice); }
 
-/* Game of the week box, under the Daily Challenge. It uses the .daily box styles; --c is the game's colour. */
-.gotw { border-color: color-mix(in srgb, var(--gold) 80%, transparent); }
-.gotw .dtag { color: var(--gold); }
-.gotw .wsub { color: var(--muted); font-size: 13px; margin-top: 6px; }
-.wbtns { display: grid; gap: 8px; }
-#wplay {
-  font: 12px/1 var(--display); color: var(--on); background: var(--gold); border: 0; border-radius: 8px;
-  padding: 15px 20px; cursor: pointer; box-shadow: 0 8px 20px -8px rgba(243, 207, 124, .8); transition: transform .15s, filter .15s;
-}
-#wplay:hover { filter: brightness(1.08); transform: translateY(-1px); }
-#wplay:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
-#wboard { justify-self: stretch; text-align: center; color: var(--gold); border-color: rgba(243, 207, 124, .6); }
-.wtop {
-  grid-column: 1 / -1; list-style: none; margin: 0; padding: 14px 0 0; border-top: 1px solid rgba(126, 170, 255, .2);
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
-}
-.wtop:empty { display: none; }
-.wtop li {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center;
-  padding: 8px 10px; background: rgba(6, 11, 31, .4); border-radius: 8px; font-size: 13px;
-}
-.wtop li span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wtop li b { color: var(--gold); font-variant-numeric: tabular-nums; }
-.wtop li.none, .wtop li.mine { grid-column: 1 / -1; display: block; color: var(--muted); background: none; padding: 0; }
-.wtop li.mine { color: var(--gold); }
-@media (max-width: 560px) {
-  .wbtns { grid-column: 1 / -1; grid-template-columns: 1fr auto; }
-  .wtop { grid-template-columns: 1fr; }
-}
-/* The Game of the week's own card in the list gets a gold tag. */
-.card.featured { border-color: color-mix(in srgb, var(--gold) 70%, transparent); }
-.card.featured::after {
-  content: "★ GAME OF THE WEEK"; position: absolute; top: -9px; right: 14px; padding: 4px 8px;
-  font: 8px/1 var(--display); color: var(--on); background: var(--gold); border-radius: 6px; letter-spacing: .5px;
-}
-
 /* "Badge unlocked" and streak pop-ups at the top of the screen. */
 .toasts { position: fixed; z-index: 50; top: 14px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; width: min(360px, calc(100vw - 24px)); pointer-events: none; }
 .toast {
