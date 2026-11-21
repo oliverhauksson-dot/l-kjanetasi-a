@@ -86,6 +86,13 @@
   const DAILY = ['snake', 'runner', 'breakout', 'memory', 'snapgrid', 'invaders', 'flappy', 'muncher', 'chase', 'ski'];
   const today = () => new Date().toISOString().slice(0, 10);
   const dailyGame = (day) => DAILY[Math.floor(Date.parse(day) / 864e5) % DAILY.length];
+  // Game of the week: one game for the whole week, from Monday 00:00 UTC, the moment every game's weekly board starts empty.
+  // Its "This week" board is the Game of the week board. The order is mixed so similar games don't follow each other.
+  const WEEKLY = ['stack', 'snake', 'minigolf', 'invaders', 'words', 'runner', 'tower', 'breakout', 'fishing', 'snapgrid', 'chase', 'memory', 'flappy', 'cube', 'pong', 'muncher', 'ski'];
+  const weekDay = (ms = Date.now()) => { const d = Math.floor(ms / 864e5); return d - ((d + 3) % 7); }; // Days from 1970 to this week's Monday (1 January 1970 was a Thursday).
+  const FIRST_WEEK = 20773; // Monday 16 November 2026 (days from 1970), the first week, with the first game on the list.
+  const weekGame = (ms) => { const n = WEEKLY.length; return WEEKLY[((Math.round((weekDay(ms) - FIRST_WEEK) / 7) % n) + n) % n]; };
+  const weekOf = (ms) => new Date(weekDay(ms) * 864e5).toISOString().slice(0, 10); // This week's Monday, like 2026-11-16.
   const realRandom = Math.random;
   let daily = null; // The day of the challenge being played, or null in a normal game.
   function seedRandom(day) {
@@ -209,12 +216,18 @@
     });
   }
 
+  /* ---------- Hooks ---------- */
+  // js/progress.js (streaks, badges, challenges) listens here: 'open', 'over', 'saved', 'shared', 'stat', 'home'.
+  const hooks = {};
+  const on = (type, fn) => { (hooks[type] = hooks[type] || []).push(fn); };
+  const emit = (type, detail) => { (hooks[type] || []).forEach((fn) => { try { fn(detail); } catch (e) { console.error(e); } }); };
+
   /* ---------- Shell ---------- */
   let id = null, game = null, running = false, phase = 'idle', raf = 0, last = 0, ovAction = null, lastScore = 0;
   const ov = $('#ov'), stage = $('#stage'), screen = $('#game'), home = $('#home'), scoreEl = $('#score'), bestEl = $('#best');
 
   const fmtBest = (gid) => { const v = store.get(gid); return v === null ? '—' : String(v); };
-  function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); paintDaily(); paintWho(); }
+  function refreshMenu() { $$('[data-best]').forEach((el) => { el.textContent = fmtBest(el.dataset.best); }); paintDaily(); paintWho(); emit('home'); }
   function setScore(v) {
     if (phase === 'play' && v > lastScore && !game.quietScore) { sfx.point(); popScore(); }
     lastScore = v; scoreEl.textContent = v;
@@ -232,7 +245,7 @@
 
   function showOverlay(title, text, btn, action, share) {
     $('#ovt').textContent = title; $('#ovp').textContent = text; $('#ovb').textContent = btn;
-    shareInfo = share || null; shareBtn.hidden = !share; shareBtn.textContent = 'Share';
+    shareInfo = share || null; shareBtn.hidden = !share; shareBtn.textContent = SHARE;
     ovAction = action; ov.hidden = false; board.hide(); next.hidden = true;
     // The box fades in and its words slide up into place.
     stopTween(ovTw);
@@ -243,9 +256,10 @@
   }
   let ovTw = null;
 
-  /* ---------- Share ---------- */
+  /* ---------- Challenge a friend ---------- */
   // At game over, players can send their score to a friend with a link straight into the same game.
-  const shareBtn = $('#ovs');
+  // The link carries the score and the player's leaderboard name (beat=, from=), so the friend sees what to beat.
+  const shareBtn = $('#ovs'), SHARE = 'Challenge a friend';
   let shareInfo = null;
   shareBtn.addEventListener('click', async () => {
     const s = shareInfo; if (!s) return;
@@ -253,14 +267,16 @@
     const text = s.day
       ? 'My ' + what + ' in today\'s jurtu.com Daily Challenge (' + s.title + '): ' + s.score + '. Can you beat it?'
       : 'My ' + what + ' in ' + s.title + ' on jurtu.com: ' + s.score + '. Can you beat it?';
-    const url = location.origin + location.pathname + (s.day ? '?daily' : '?play=' + s.id);
+    const me = player.get() || {};
+    const url = location.origin + location.pathname + (s.day ? '?daily&on=' + s.day : '?play=' + s.id) + '&beat=' + s.score + (me.name ? '&from=' + encodeURIComponent(me.name) : '');
     if (window.track) window.track('share', { game_name: s.id });
+    emit('shared', { id: s.id });
     if (navigator.share) {
       try { await navigator.share({ title: 'jurtu.com', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
     }
     // No share sheet (most computers): copy the message so it can be pasted anywhere.
     try { await navigator.clipboard.writeText(text + ' ' + url); shareBtn.textContent = 'Copied!'; } catch (e) { shareBtn.textContent = 'Could not copy'; }
-    setTimeout(() => { if (shareInfo === s) shareBtn.textContent = 'Share'; }, 2000);
+    setTimeout(() => { if (shareInfo === s) shareBtn.textContent = SHARE; }, 2000);
   });
 
   /* ---------- Play next ---------- */
@@ -396,7 +412,7 @@
       this.el.insertBefore(msg, this.el.querySelector('ol'));
       const { data, error, taken } = await this.save(gid, score, me.name, me.pin);
       if (ask !== this.ask) return;
-      if (!error) { paintBoard(this.el, this.title(), data); return; }
+      if (!error) { paintBoard(this.el, this.title(), data); emit('saved', { id: gid, me: data.me }); return; }
       msg.remove();
       if (taken) { player.forget(); paintWho(); this.askName(gid, score, ask, 'The PIN saved on this device is wrong. Type it again.'); return; }
       const p = document.createElement('p'); p.className = 'lbmsg'; p.textContent = error;
@@ -411,6 +427,7 @@
         if (error) return error;
         player.set(name, pin); paintWho();
         paintBoard(this.el, this.title(), data);
+        emit('saved', { id: gid, me: data.me });
         return null;
       });
       const ol = this.el.querySelector('ol');
@@ -455,15 +472,16 @@
   $$('#bwhen button').forEach((b) => b.addEventListener('click', () => { when = b.dataset.when; loadTab(); }));
   async function loadTab() {
     const ask = ++boardAsk;
-    const card = tab === 'daily' ? null : document.querySelector('.menu [data-game="' + tab + '"]');
-    const gid = tab === 'daily' ? dailyGame(today()) : tab;
-    const dcard = document.querySelector('.menu [data-game="' + gid + '"]');
-    boards.style.setProperty('--c', (card || dcard) ? (card || dcard).style.getPropertyValue('--c') : 'var(--amber)');
+    // 'daily' is today's Daily Challenge; 'week' is the Game of the week (that game's board for this week).
+    const gid = tab === 'daily' ? dailyGame(today()) : tab === 'week' ? weekGame() : tab;
+    const card = document.querySelector('.menu [data-game="' + gid + '"]');
+    const name = card ? card.querySelector('h2').textContent : '';
+    boards.style.setProperty('--c', tab === 'week' ? 'var(--gold)' : card ? card.style.getPropertyValue('--c') : 'var(--amber)');
     $$('#btabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
-    bwhen.hidden = tab === 'daily';
+    bwhen.hidden = tab === 'daily' || tab === 'week';
     $$('#bwhen button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.when === when)));
-    const all = tab !== 'daily' && when === 'all';
-    const title = tab === 'daily' ? 'Today\'s top 10 · ' + (dcard ? dcard.querySelector('h2').textContent : '') : (all ? 'All-time top 10 · ' : 'This week\'s top 10 · ') + card.querySelector('h2').textContent;
+    const all = tab !== 'daily' && tab !== 'week' && when === 'all';
+    const title = tab === 'daily' ? 'Today\'s top 10 · ' + name : tab === 'week' ? 'Game of the week · ' + name : (all ? 'All-time top 10 · ' : 'This week\'s top 10 · ') + name;
     blist.textContent = ''; const h = document.createElement('h4'); h.textContent = title; const p = document.createElement('p'); p.textContent = 'Loading...'; blist.append(h, p);
     const { data, error } = await api(boardUrl(gid, tab === 'daily', all));
     if (ask !== boardAsk) return;
@@ -471,15 +489,15 @@
   }
   function openBoards(start) {
     if (!btabs.childElementCount) {
-      const tabs = [['daily', 'TODAY']].concat([...$$('.menu [data-game]')].map((c) => [c.dataset.game, c.querySelector('h2').textContent.toUpperCase()]));
+      const tabs = [['daily', 'TODAY'], ['week', '★ GAME OF THE WEEK']].concat([...$$('.menu [data-game]')].map((c) => [c.dataset.game, c.querySelector('h2').textContent.toUpperCase()]));
       tabs.forEach(([t, label]) => {
         const b = document.createElement('button'); b.dataset.tab = t; b.textContent = label;
         b.addEventListener('click', () => { tab = t; loadTab(); });
         btabs.appendChild(b);
       });
     }
-    if (start && (start === 'daily' || document.querySelector('.menu [data-game="' + CSS.escape(start) + '"]'))) tab = start;
-    home.hidden = true; screen.hidden = true; boards.hidden = false;
+    if (start && (start === 'daily' || start === 'week' || document.querySelector('.menu [data-game="' + CSS.escape(start) + '"]'))) tab = start;
+    home.hidden = true; screen.hidden = true; $('#profile').hidden = true; boards.hidden = false;
     window.scrollTo(0, 0);
     loadTab();
   }
@@ -532,6 +550,7 @@
     else if (!title) shake(7, 380);
     board.show(id, game, score, daily);
     showNext();
+    emit('over', { id, score, prev, better: better && (score > 0 || !!game.lowerWins), lowerWins: !!game.lowerWins, daily, title: game.title });
   }
 
   // Google's game ads (AdSense H5 Games Ads): "Play again" may show one full-screen ad before the next game starts,
@@ -574,7 +593,7 @@
     uiTween({ s: 0 }, { s: 1 }, 900, { ease: 'elastic', delay: 250, update: (o) => { b.style.transform = 'scale(' + o.s + ')'; } });
   }
 
-  function showScreen(gameOpen) { home.hidden = gameOpen; screen.hidden = !gameOpen; boards.hidden = true; }
+  function showScreen(gameOpen) { home.hidden = gameOpen; screen.hidden = !gameOpen; boards.hidden = true; $('#profile').hidden = true; }
 
   async function openGame(gid, day) {
     id = gid;
@@ -599,6 +618,7 @@
     fit();
     if (!game.dom) game.draw();
     window.scrollTo(0, 0);
+    emit('open', { id: gid, daily, title: game.title, label: game.label, lowerWins: !!game.lowerWins });
     play(); // Picking a game starts it right away, with no extra Start button.
   }
   function stopGame() {
@@ -796,6 +816,13 @@
     seeded, withRandom,
     playing: () => phase === 'play',
     register(gid, g) { GAMES[gid] = g; },
+    // For badges: a game reports something that happened, like Arcade.stat('ace') for a hole in one.
+    stat: (kind, n = 1) => emit('stat', { id, kind, n }),
+    // For js/progress.js (streaks, badges, challenges, Game of the week).
+    on, today, dailyGame, weekGame, weekOf, api, player,
+    current: () => (id && !screen.hidden ? { id, daily } : null),
+    start(gid, day) { setFull(true); openGame(gid, day); },
+    openBoards,
   };
 
   /* ---------- Add to home screen ---------- */

@@ -137,7 +137,7 @@
         this.streak++;
         const bonus = this.streak >= 2 ? Math.min(this.streak - 1, 5) * 5 : 0; // 5 more points for each word in a row, up to 25.
         const pts = ((ROWS + 1 - guesses) * 10 + bonus) * (this.golden ? 2 : 1);
-        this.score += pts; this.solved++; setScore(this.score);
+        this.score += pts; this.solved++; setScore(this.score); Arcade.stat('word'); // For the word badges.
         this.say(['GENIUS!', 'AMAZING!', 'GREAT!', 'NICE!', 'GOOD!', 'PHEW!'][guesses - 1], 900);
         pop(W / 2, GY + this.row * (TILE + GAP) - 6, '+' + pts, C.lime, 14);
         if (this.streak >= 2) {
