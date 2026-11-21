@@ -492,7 +492,7 @@
   // Physics runs in small steps so a fast ball can't skip through a paddle or brick when a phone drops frames.
   const STEP = 1 / 120;
   function loop(t) {
-    let dt = Math.min((t - last) / 1000, 1 / 30); last = t;
+    let dt = Math.max(0, Math.min((t - last) / 1000, 1 / 30)); last = t; // The first frame's time can be a hair before last.
     clock += dt * 1000;
     while (running && dt > 1e-6) { const s = Math.min(dt, STEP); game.update(s); dt -= s; }
     if (playGroup) playGroup.update(clock);
@@ -504,6 +504,7 @@
     sfx.unlock();
     if (phase !== 'paused' && window.track) window.track('game_start', { game_name: id });
     ov.hidden = true; phase = 'play'; board.hide(); next.hidden = true;
+    screen.scrollTop = 0; // Back up to the game, if the game over screen was scrolled down to the top 10.
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     if (game.dom) return;
     running = true; last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
@@ -512,6 +513,7 @@
   function startGame() { fresh(); if (!game.dom) game.draw(); play(); }
   function pause() {
     if (phase !== 'play' || game.dom) return;
+    letGo();
     running = false; cancelAnimationFrame(raf); phase = 'paused';
     showOverlay('Paused', 'Take a breather.', 'Resume', play);
   }
@@ -543,7 +545,9 @@
     gamesSinceAd++;
     if (gamesSinceAd < AD_EVERY || Date.now() - lastAd < AD_GAP) { startGame(); return; }
     let done = false, showing = false;
-    const go = () => { if (done) return; done = true; $('#ovb').disabled = false; startGame(); };
+    const which = game;
+    // Only start the next game if the player is still on this game's Game Over screen (not back on the front page).
+    const go = () => { if (done) return; done = true; $('#ovb').disabled = false; if (phase === 'over' && game === which && !screen.hidden) startGame(); };
     $('#ovb').disabled = true;
     try {
       window.adsbygoogle.push({
@@ -717,12 +721,24 @@
     if (phase === 'play') {
       if (e.code === 'KeyP' && !game.typing) { pause(); return; } // In a typing game (Word Guesser) P is a letter.
       if (GAME_KEYS.includes(e.code) && !game.dom) e.preventDefault();
-      if (game.key) game.key(e, true);
+      if (game.key) { held.set(e.code, e.key); game.key(e, true); }
     } else if (!ov.hidden && !onButton && (e.code === 'Space' || e.code === 'Enter')) {
       e.preventDefault(); if (!e.repeat && ovAction) ovAction();
     } else if (e.code === 'KeyP' && phase === 'paused') play();
   });
-  document.addEventListener('keyup', (e) => { if (phase === 'play' && game && game.key) game.key(e, false); });
+  document.addEventListener('keyup', (e) => { held.delete(e.code); if (phase === 'play' && game && game.key) game.key(e, false); });
+  // Keys and fingers that are down when the game pauses (or the window loses focus) never send their "up" to the game,
+  // so the game would keep steering, holding or dragging after it resumes. Let go of them all here.
+  const held = new Map();
+  let fingerDown = false;
+  function letGo() {
+    if (!game) return;
+    if (game.key) held.forEach((key, code) => game.key({ code, key, repeat: false, preventDefault() {} }, false));
+    held.clear();
+    if (fingerDown && game.press) game.press(false);
+    fingerDown = false; swipeStart = null;
+  }
+  window.addEventListener('blur', () => { if (phase === 'play') letGo(); });
 
   const toGame = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * game.W, y: (e.clientY - r.top) / r.height * game.H }; };
   let swipeStart = null;
@@ -731,6 +747,7 @@
     e.preventDefault();
     // Keep getting this finger's events even if it slides off the game screen, so a held jump or drag always ends.
     try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    fingerDown = true;
     if (game.press) game.press(true);
     if (game.point) game.point(toGame(e));
     if (game.swipe || game.tap) swipeStart = { x: e.clientX, y: e.clientY, moved: false };
@@ -743,7 +760,12 @@
       if (Math.max(Math.abs(dx), Math.abs(dy)) > 24) { if (game.swipe) game.swipe(dx, dy); swipeStart = { x: e.clientX, y: e.clientY, moved: true }; }
     }
   });
-  const release = () => { if (phase === 'play' && game && game.tap && swipeStart && !swipeStart.moved) game.tap(); swipeStart = null; if (phase === 'play' && game && game.press) game.press(false); };
+  const release = () => {
+    const was = fingerDown; fingerDown = false;
+    if (phase === 'play' && game && game.tap && swipeStart && !swipeStart.moved) game.tap();
+    swipeStart = null;
+    if (was && phase === 'play' && game && game.press) game.press(false);
+  };
   cv.addEventListener('pointerup', release);
   cv.addEventListener('pointercancel', release);
   // A game opened from a link starts without a click, so sound is switched on at the first touch or key.
@@ -753,10 +775,25 @@
   ['pointerup', 'keydown'].forEach((t) => document.addEventListener(t, (e) => { if (e.key !== 'Escape' && isFull() && !(e.target.closest && e.target.closest('button'))) askFull(); }, { capture: true }));
   document.addEventListener('visibilitychange', () => { if (document.hidden && game) pause(); });
 
+  // A random number maker of its own, started from seed (a whole number). Same seed, same numbers.
+  function seeded(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(s ^ (s >>> 15), s | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // Runs make() with Math.random swapped for the world's own random numbers (from seeded()), so how many snow puffs
+  // and sounds came first can't change the course. In a Daily Challenge everyone then gets the same course.
+  function withRandom(r, make) { const was = Math.random; Math.random = r; try { return make(); } finally { Math.random = was; } }
+
   /* ---------- What game files can use ---------- */
   window.Arcade = {
     ctx, C, $, rand, clamp, font, shuffle, cached, store, sfx, setScore, over,
     tween, pop, shake, calm, banner: showBanner, // Smooth animation: see "Smooth animation" above.
+    seeded, withRandom,
     playing: () => phase === 'play',
     register(gid, g) { GAMES[gid] = g; },
   };

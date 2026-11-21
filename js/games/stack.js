@@ -69,7 +69,7 @@
         if (c.x < lo) { c.x = lo; c.dir = 1; } else if (c.x > hi) { c.x = hi; c.dir = -1; }
       }
       for (const b of this.bits) { b.vy += 900 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.r += b.vr * dt; }
-      this.bits = this.bits.filter((b) => b.y - this.cam < H + 120);
+      this.bits = this.bits.filter((b) => b.y + this.cam < H + 120); // On screen a piece is at y + cam (see draw).
       // The camera follows the top of the tower.
       const want = Math.max(0, (this.blocks.length - 9) * BH);
       this.cam += (want - this.cam) * clamp(dt * 5, 0, 1);
