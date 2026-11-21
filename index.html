@@ -176,6 +176,22 @@
         },
         {
           "@type": "Question",
+          "name": "What are streaks and badges?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Finish a game every day to build a daily streak (the flame at the top). You also earn badges for things like a hole in one in Minigolf or 100 words in Word Guesser. Tap My badges to see them all. They are saved on your own device."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I challenge a friend?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. At game over, tap Challenge a friend and send the link. Your friend sees your score and plays the same game to beat it."
+          }
+        },
+        {
+          "@type": "Question",
           "name": "Can I add jurtu.com to my home screen?",
           "acceptedAnswer": {
             "@type": "Answer",
@@ -199,6 +215,7 @@
 <link rel="stylesheet" href="css/arcade.css?v={{ site.time | date: '%s' }}">
 <script src="js/vendor/tween.umd.min.js" defer></script>
 <script src="js/arcade.js?v={{ site.time | date: '%s' }}" defer></script>
+<script src="js/progress.js?v={{ site.time | date: '%s' }}" defer></script>
 <script src="js/countdowns.js?v={{ site.time | date: '%s' }}" defer></script>
 <script src="js/search.js?v={{ site.time | date: '%s' }}" defer></script>
 </head>
@@ -211,6 +228,8 @@
       <p>Pick a cabinet. Save your score to see your place, and make the top 10 to get your name on the leaderboard.</p>
       <div class="hbtns">
         <button class="install lbopen" id="lbopen">🏆 LEADERBOARD</button>
+        <button class="install streak" id="streak">🔥 START A STREAK</button>
+        <button class="install prof" id="profopen">🏅 MY BADGES</button>
         <button class="install" id="install" hidden>ADD TO HOME SCREEN</button>
       </div>
       <p class="itip" id="itip" hidden>On iPhone or iPad: tap the Share button at the bottom of Safari, then <b>Add to Home Screen</b>. jurtu.com then opens like an app.</p>
@@ -322,6 +341,10 @@
       <p>Your best score for each game is saved in your own browser on your device. Clearing your browser data resets it.</p>
       <h3>What is the Daily Challenge?</h3>
       <p>Every day one game is the Daily Challenge. It starts the same way for everyone, and it has its own top 10 that starts empty again at midnight (UTC).</p>
+      <h3>What are streaks and badges?</h3>
+      <p>Finish a game every day to build a daily streak (the flame at the top). You also earn badges for things like a hole in one in Minigolf or 100 words in Word Guesser. Tap My badges to see them all. They are saved on your own device.</p>
+      <h3>Can I challenge a friend?</h3>
+      <p>Yes. At game over, tap Challenge a friend and send the link. Your friend sees your score and plays the same game to beat it.</p>
       <h3>Can I add jurtu.com to my home screen?</h3>
       <p>Yes. Tap Add to home screen on the front page (on iPhone: the Share button, then Add to Home Screen). It then opens like an app, and the games you have played work offline too.</p>
       <h3>Which games can I play?</h3>
@@ -346,6 +369,21 @@
       <button data-when="all">ALL TIME</button>
     </div>
     <div class="lb wide" id="blist" aria-live="polite"></div>
+  </section>
+
+  <section class="profile" id="profile" hidden>
+    <div class="hud">
+      <button class="back" id="pback">◀ FRONTPAGE</button>
+      <h2>My profile</h2>
+    </div>
+    <p class="pname" id="pname"></p>
+    <div class="pstats" id="pstats"></div>
+    <p class="pnudge" id="pnudge"></p>
+    <h3>Badges</h3>
+    <div class="pbadges" id="pbadges"></div>
+    <h3>Best scores</h3>
+    <ol class="pbest" id="pbest"></ol>
+    <p class="pnote">Your streak, badges and best scores are saved on this device only. Clearing your browser data resets them.</p>
   </section>
 
   <section class="game" id="game" hidden>

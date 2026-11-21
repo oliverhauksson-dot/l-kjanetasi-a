@@ -692,6 +692,7 @@
       }
       if (b.sunk) {
         p.done = true; p.sinkT = 1; b.rest = true;
+        if (p.you && p.shots === 1) Arcade.stat('ace'); // For the "Hole in one" badge.
         const diff = p.shots - Hl.par, word = p.shots === 1 ? 'HOLE IN ONE!' : ({ '-3': 'ALBATROSS!', '-2': 'EAGLE!', '-1': 'BIRDIE!', 0: 'PAR' })[diff] || (diff === 1 ? 'BOGEY' : '+' + diff);
         // "Plink", and a wave round the cup.
         const c = Hl.cup;
@@ -912,6 +913,7 @@
       const msg = 'You came ' + nth + ' of 4 with ' + mine + ' shots (' + (diff === 0 ? 'even par' : diff > 0 ? diff + ' over par' : -diff + ' under par') + ').' +
         (place === 1 ? '' : ' Best bot: ' + best.name + ' with ' + tot(best) + '.');
       this.phase = 'end'; this.cheered = false; this.fwk = 0;
+      if (place === 1) Arcade.stat('golfwin'); // For the "Golf champ" badge.
       over(mine, msg, place === 1 ? 'You won!' : 'Round done!');
     },
 
