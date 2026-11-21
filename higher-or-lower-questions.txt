@@ -1,0 +1,165 @@
+# HIGHER OR LOWER: THE QUESTIONS
+#
+# This file is every card in the Higher or Lower game on jurtu.com.
+# Change it as often as you like (every week is great). When the change is on GitHub (main), the game uses it.
+#
+# How it works:
+#   TITLE: is shown at the top of the game, for example the name of this week's quiz. You can leave it out.
+#   TOPIC: starts a new group of cards. Both cards in a guess always come from the same TOPIC.
+#          Put one emoji first (it is the picture on the cards), then the topic name.
+#   UNIT:  the word shown after every number in that topic, like "people" or "km/h". You can leave it out.
+#   Name = number   is one card. Write the number with digits only. Spaces are fine: 390 000.
+#                   For a half number use a dot: 4.5
+#                   A card can start with its own emoji (🐆 Cheetah = 110). If it has none, it gets the topic's emoji.
+#   Lines that start with # are notes for you. The game skips them. Empty lines are skipped too.
+#
+# Every topic needs at least 2 cards. 10 or more cards in a topic is best.
+# If a line is written wrong, the game just skips that line.
+# To check your changes before they go live, run  python3 serve.py  and open the game:
+# on your own computer the game lists any line it had to skip, under the game.
+
+TITLE: Week 1: The world, animals and inventions
+
+TOPIC: 🌍 Population
+UNIT: people
+Iceland = 390 000
+Faroe Islands = 55 000
+Greenland = 57 000
+Norway = 5 600 000
+Denmark = 6 000 000
+Sweden = 10 600 000
+Finland = 5 600 000
+Ireland = 5 400 000
+United Kingdom = 69 000 000
+Germany = 84 000 000
+France = 68 000 000
+Spain = 49 000 000
+Italy = 59 000 000
+Poland = 37 000 000
+United States = 340 000 000
+Canada = 41 000 000
+Mexico = 130 000 000
+Brazil = 212 000 000
+Japan = 124 000 000
+India = 1 450 000 000
+China = 1 410 000 000
+Nigeria = 230 000 000
+Australia = 27 000 000
+
+TOPIC: 💨 Top speed
+UNIT: km/h
+🐆 Cheetah = 110
+🦅 Peregrine falcon (diving) = 390
+🐎 Horse = 88
+🐕 Greyhound = 72
+🦁 Lion = 80
+🦒 Giraffe = 60
+🦓 Zebra = 65
+🦘 Kangaroo = 70
+🐻 Grizzly bear = 56
+🐈 House cat = 48
+🏃 Usain Bolt = 45
+🐘 African elephant = 40
+🐧 Gentoo penguin (swimming) = 36
+🐖 Pig = 17
+🐔 Chicken = 14
+🐌 Garden snail = 0.05
+
+TOPIC: ⛰️ Mountain height
+UNIT: m
+Mount Everest = 8849
+K2 = 8611
+Aconcagua = 6961
+Denali = 6190
+Kilimanjaro = 5895
+Mount Elbrus = 5642
+Mont Blanc = 4805
+Matterhorn = 4478
+Mauna Kea = 4207
+Mount Fuji = 3776
+Galdhøpiggen = 2469
+Mount Kosciuszko = 2228
+Hvannadalshnúkur = 2110
+Hekla = 1491
+Snæfellsjökull = 1446
+Ben Nevis = 1345
+Vesuvius = 1281
+Esja = 914
+
+TOPIC: 💡 Year it came out
+Telephone = 1876
+Light bulb (Edison) = 1879
+Petrol car (Benz) = 1886
+First airplane flight = 1903
+Television = 1926
+Microwave oven = 1945
+LEGO brick = 1958
+Pong (video game) = 1972
+Game Boy = 1989
+First website = 1991
+PlayStation = 1994
+Google = 1998
+Facebook = 2004
+YouTube = 2005
+iPhone = 2007
+Instagram = 2010
+Minecraft (full game) = 2011
+TikTok = 2017
+
+TOPIC: ⚖️ Weight
+UNIT: kg
+🐋 Blue whale = 150 000
+🐘 African elephant = 6000
+🦛 Hippo = 1500
+🦒 Giraffe = 1200
+🐄 Cow = 700
+🐎 Horse = 500
+🐻‍❄️ Polar bear = 450
+🦁 Lion = 190
+🦍 Gorilla = 160
+🦤 Ostrich = 100
+🐑 Sheep = 70
+🐕 Golden retriever = 30
+🐈 House cat = 4.5
+🐔 Chicken = 2.5
+🐁 Mouse = 0.02
+
+TOPIC: ✈️ Distance from Reykjavík
+UNIT: km
+Akureyri = 250
+Egilsstaðir = 380
+Tórshavn = 800
+Edinburgh = 1370
+Nuuk = 1430
+Dublin = 1490
+Oslo = 1750
+London = 1890
+Copenhagen = 2110
+Paris = 2230
+Berlin = 2390
+Madrid = 2890
+Rome = 3300
+New York = 4200
+Dubai = 6890
+Beijing = 7880
+Tokyo = 8800
+Rio de Janeiro = 9850
+Cape Town = 11 460
+Sydney = 16 620
+
+TOPIC: 🏙️ How tall
+UNIT: m
+Burj Khalifa = 828
+Tokyo Skytree = 634
+Shanghai Tower = 632
+CN Tower = 553
+One World Trade Center = 541
+Taipei 101 = 508
+Empire State Building = 443
+Eiffel Tower = 330
+Space Needle = 184
+Great Pyramid of Giza = 139
+Big Ben (Elizabeth Tower) = 96
+Statue of Liberty = 93
+Hallgrímskirkja = 75
+Leaning Tower of Pisa = 56

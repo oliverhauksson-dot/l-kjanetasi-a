@@ -50,6 +50,7 @@
     ['golfwin', '🏌️', 'Golf champ', 'Beat all 3 bots in a round of Minigolf.', () => !!P.flags.golfwin],
     ['words10', '🔤', 'Word nerd', 'Solve 10 words in Word Guesser.', () => P.words >= 10],
     ['words100', '📚', 'Dictionary', 'Solve 100 words in Word Guesser.', () => P.words >= 100],
+    ['quiz10', '🧠', 'Know-it-all', 'Get 10 right in a row in Higher or Lower.', () => !!P.flags.quiz10],
     ['night', '🦉', 'Night owl', 'Finish a game between midnight and 5 am.', () => !!P.flags.night],
   ];
   // Checks every badge and returns the ones that were just earned.
