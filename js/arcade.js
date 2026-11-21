@@ -1,4 +1,4 @@
-/* Pocket Arcade shell: menu, game screen, overlay, input, sound and saved scores.
+/* jurtu.com shell: menu, game screen, overlay, input, sound and saved scores.
    Each game lives in js/games/<id>.js and is only downloaded the first time it is opened.
    A game file calls Arcade.register(id, game) with an object that has reset() and either
    update(dt) + draw() for canvas games, or dom: true for games built from HTML (Memory).
@@ -251,12 +251,12 @@
     const s = shareInfo; if (!s) return;
     const what = s.label.toLowerCase();
     const text = s.day
-      ? 'My ' + what + ' in today\'s Pocket Arcade Daily Challenge (' + s.title + '): ' + s.score + '. Can you beat it?'
-      : 'My ' + what + ' in ' + s.title + ' on Pocket Arcade: ' + s.score + '. Can you beat it?';
+      ? 'My ' + what + ' in today\'s jurtu.com Daily Challenge (' + s.title + '): ' + s.score + '. Can you beat it?'
+      : 'My ' + what + ' in ' + s.title + ' on jurtu.com: ' + s.score + '. Can you beat it?';
     const url = location.origin + location.pathname + (s.day ? '?daily' : '?play=' + s.id);
     if (window.track) window.track('share', { game_name: s.id });
     if (navigator.share) {
-      try { await navigator.share({ title: 'Pocket Arcade', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+      try { await navigator.share({ title: 'jurtu.com', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
     }
     // No share sheet (most computers): copy the message so it can be pasted anywhere.
     try { await navigator.clipboard.writeText(text + ' ' + url); shareBtn.textContent = 'Copied!'; } catch (e) { shareBtn.textContent = 'Could not copy'; }
@@ -300,10 +300,13 @@
     set(name, pin) { try { localStorage.setItem('arcade:name', name); localStorage.setItem('arcade:pin', pin); } catch (e) {} },
     forget() { try { localStorage.removeItem('arcade:pin'); } catch (e) {} }, // The name stays filled in for next time.
   };
+  // The leaderboard server lives on pocketarcade.net (its DNS is on Cloudflare, jurtu.com's is on Wix),
+  // so jurtu.com asks it there. Anywhere else (pocketarcade.net itself, or a local test copy) uses /api/ directly.
+  const API = /(^|\.)jurtu\.com$/.test(location.hostname) ? 'https://pocketarcade.net' : '';
   // Sends something to the leaderboard. Resolves to { data } or { error, taken }.
   async function api(path, body) {
     try {
-      const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+      const r = await fetch(API + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
       const data = await r.json().catch(() => null);
       if (!data) return { error: OFFLINE };
       if (!r.ok) return { error: data.error || 'Could not save. Try again.', taken: !!data.taken };
@@ -521,12 +524,41 @@
     bestEl.textContent = fmtBest(id);
     const line = msg || (game.label + ': ' + score + '.');
     if (title) sfx.win(); else sfx.lose();
-    showOverlay(title || 'Game over', line, 'Play again', startGame,
+    showOverlay(title || 'Game over', line, 'Play again', againWithAd,
       { id, title: game.title, label: game.label, score, day: daily });
     if (better && prev !== null) newBest();
     else if (!title) shake(7, 380);
     board.show(id, game, score, daily);
     showNext();
+  }
+
+  // Google's game ads (AdSense H5 Games Ads): "Play again" may show one full-screen ad before the next game starts,
+  // never during play. At most one every 3 games and 2 minutes here, and Google can show fewer.
+  // Until Google approves jurtu.com for game ads (or with an ad blocker) no ad shows and the next game starts straight away.
+  const AD_EVERY = 3, AD_GAP = 2 * 60 * 1000;
+  let gamesSinceAd = 0, lastAd = Date.now();
+  window.adsbygoogle = window.adsbygoogle || [];
+  try { window.adsbygoogle.push({ preloadAdBreaks: 'on', sound: 'on' }); } catch (e) {} // adConfig: have the next ad ready, so it shows without a wait.
+  function againWithAd() {
+    gamesSinceAd++;
+    if (gamesSinceAd < AD_EVERY || Date.now() - lastAd < AD_GAP) { startGame(); return; }
+    let done = false, showing = false;
+    const go = () => { if (done) return; done = true; $('#ovb').disabled = false; startGame(); };
+    $('#ovb').disabled = true;
+    try {
+      window.adsbygoogle.push({
+        type: 'next', name: 'play_again',
+        beforeAd: () => {
+          showing = true; gamesSinceAd = 0; lastAd = Date.now();
+          if (phase === 'play') pause(); // The ad came late and the game already started: pause it, so nothing is lost.
+          try { if (sfx.ac) sfx.ac.suspend(); } catch (e) {}
+        },
+        afterAd: () => { sfx.unlock(); },
+        adBreakDone: go,
+      });
+    } catch (e) { go(); return; }
+    // If Google's script isn't there (blocked, offline, not approved yet), nothing answers: start the game anyway.
+    setTimeout(() => { if (!showing) go(); }, 1200);
   }
 
   // "New best!" pops in with a bounce after the Game Over box arrives.
@@ -609,7 +641,7 @@
     const lead = $('#dlead');
     if (dailyShown !== day) lead.textContent = '';
     dailyShown = day;
-    fetch('/api/daily').then((r) => (r.ok ? r.json() : null)).then((d) => {
+    fetch(API + '/api/daily').then((r) => (r.ok ? r.json() : null)).then((d) => {
       if (!d || !Array.isArray(d.scores)) throw new Error('offline');
       if (d.day !== day) return;
       lead.textContent = d.scores.length ? 'Leader: ' + d.scores[0].name + ' with ' + d.scores[0].score : 'No scores yet today. Be the first!';

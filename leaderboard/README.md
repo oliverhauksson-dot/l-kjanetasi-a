@@ -6,6 +6,13 @@ It is two pieces, both free:
 - **D1**: a small database that holds the scores.
 - **A Worker**: a few lines of code that answer `pocketarcade.net/api/scores`. The code is `worker.js` in this folder.
 
+The site itself now lives on **jurtu.com** (its DNS is at Wix), while the Worker stays on `pocketarcade.net/api/*` (that DNS is on Cloudflare).
+On jurtu.com the games call `https://pocketarcade.net/api/...` directly; the Worker's CORS headers allow that. So:
+
+- Keep `pocketarcade.net` on Cloudflare and keep its records orange-clouded.
+- The redirect from pocketarcade.net to jurtu.com must **skip** `/api/`, or the leaderboard goes offline. The rule's expression is:
+  `(http.host in {"pocketarcade.net" "www.pocketarcade.net"} and not starts_with(http.request.uri.path, "/api/"))`
+
 Until this is set up, the games work exactly as before and the leaderboard boxes say "The leaderboard is offline right now".
 
 ## Set it up (one time, all in the Cloudflare dashboard)

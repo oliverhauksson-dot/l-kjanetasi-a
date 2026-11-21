@@ -1,40 +1,40 @@
-# Pocket Arcade
+# jurtu.com
 
-> Pocket Arcade (https://pocketarcade.net) is a free website with 17 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
+> jurtu.com (https://jurtu.com) is a free website with 17 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
 
 ## Games
 
-- [Snake](https://pocketarcade.net/games/snake.html): Snake is the classic arcade game where you steer a growing snake around the board. Every fruit you eat makes the snake longer, so the board gets more crowded the better you do.
-- [Ski Runner](https://pocketarcade.net/games/runner.html): Ski Runner is an endless skiing game. Your skier heads down a zig-zag mountain, jumping icebergs and trees, and flies off a ramp at the end of every slope to land on the one below. After 400 m, snowballs fall from the sky.
-- [Breakout](https://pocketarcade.net/games/breakout.html): Breakout is a brick breaker game. Bounce the ball off your paddle to smash a wall of bricks. Clear the wall and a new, faster one appears. You get 3 balls.
-- [Memory](https://pocketarcade.net/games/memory.html): Memory is a card matching game. Flip two cards at a time and try to find all 8 matching pairs in as few moves as possible.
-- [Pong](https://pocketarcade.net/games/pong.html): Pong is the classic paddle game. You are the left paddle and play against the computer. Score as many points as you can before the computer reaches 5.
-- [Snap Grid](https://pocketarcade.net/games/snapgrid.html): Snap Grid is a block puzzle. Drag pieces onto an 8x8 grid. A full row or column clears and gives points, with bonus points for clearing several at once. The game ends when none of your pieces fit.
-- [Invaders](https://pocketarcade.net/games/invaders.html): Invaders is a retro space shooter. Move your cannon left and right and shoot down waves of aliens before they land, while dodging their shots. You have 3 ships.
-- [Sleigh Ride](https://pocketarcade.net/games/flappy.html): Sleigh Ride is a one-button Christmas game (it used to be called Flappy). Tap to fly Santa's sleigh up and steer through the gaps between brick chimneys and hanging icicles over a snowy town at night. Every chimney passed is a point; a bump or the snow ends the ride.
-- [Maze Muncher](https://pocketarcade.net/games/muncher.html): Maze Muncher is a maze chase game. Eat every dot in the maze while four ghosts chase you. Big dots turn the ghosts blue for a few seconds so you can chase them back. You have 3 lives.
-- [Cube Rush](https://pocketarcade.net/games/cube.html): Cube Rush is a one-button jumping game. The cube slides on its own; jump over spikes and onto blocks. Play Level 1, 2 or 3 (each about 50 seconds), or Endless, which keeps getting faster.
-- [Police Chase](https://pocketarcade.net/games/chase.html): Police Chase is a top-down driving game in a 3D city of skyscrapers and apartment buildings. Drive a getaway car round the city, grab coins and speed boosts, and don't let the police catch you. More police join the longer you last, and police cars that crash into each other stop for a while. They catch you 3 times and it's over.
-- [Endless Ski](https://pocketarcade.net/games/ski.html): Endless Ski is a 3D downhill skiing game. Race down a never-ending mountain valley, dodge trees and rocks, grab coins, catch air off kickers and rollers, and jump to throw 180s, 360s, front flips and backflips, or ride rails backwards. The sky goes from day to sunset to a night with northern lights.
-- [Tower Defense](https://pocketarcade.net/games/tower.html): Tower Defense is a strategy game. Monsters walk along a winding path toward your castle. Build arrow, cannon, ice and zap towers on the grass next to the path, upgrade them with the coins you earn, and survive as many waves as you can. Every 10th wave has a boss. If 10 monsters get through, the game is over.
-- [Fishing](https://pocketarcade.net/games/fishing.html): Fishing is a one-button fishing game on a lake. Cast your line, choose how deep the hook sinks, and press when the float goes under to hook the fish. Then reel it in while keeping the line tension in the green: too tight and the line snaps, too slack and the fish gets away. There are 8 kinds of fish, from minnows to a rare golden fish and a huge lake shark, and an old boot. A round lasts 60 seconds, from morning to sunset.
-- [Stack Tower](https://pocketarcade.net/games/stack.html): Stack Tower is a one-button stacking game. A block slides back and forth above the tower; tap to drop it. The part that hangs over the edge is cut off, so the tower gets narrower. A perfect drop keeps the full width, and three perfects in a row make it wider again. Missing the tower ends the game.
-- [Minigolf](https://pocketarcade.net/games/minigolf.html): Minigolf is a 3D mini golf game with 9 holes (par 26), played against 3 computer bots with a camera behind the ball. Pull back and let go to putt. The holes have ramps, a pond jump, a windmill, pinball bumpers, a drawbridge, a loop-the-loop, an ice rink and a volcano, and most have a risky shortcut. Water or falling off the course costs a shot. The score is the total number of shots, so lower is better. A hole stops at 7 shots. In December the course has a Christmas look.
-- [Word Guesser](https://pocketarcade.net/games/words.html): Word Guesser is a word puzzle. Guess the secret 5-letter word in 6 tries; green tiles are the right letter in the right place, gold tiles are in the word but elsewhere. Solve it to get the next word. A word is worth 60 points in 1 guess down to 10 in 6, and missing a word ends the game.
+- [Snake](https://jurtu.com/games/snake.html): Snake is the classic arcade game where you steer a growing snake around the board. Every fruit you eat makes the snake longer, so the board gets more crowded the better you do.
+- [Ski Runner](https://jurtu.com/games/runner.html): Ski Runner is an endless skiing game. Your skier heads down a zig-zag mountain, jumping icebergs and trees, and flies off a ramp at the end of every slope to land on the one below. After 400 m, snowballs fall from the sky.
+- [Breakout](https://jurtu.com/games/breakout.html): Breakout is a brick breaker game. Bounce the ball off your paddle to smash a wall of bricks. Clear the wall and a new, faster one appears. You get 3 balls.
+- [Memory](https://jurtu.com/games/memory.html): Memory is a card matching game. Flip two cards at a time and try to find all 8 matching pairs in as few moves as possible.
+- [Pong](https://jurtu.com/games/pong.html): Pong is the classic paddle game. You are the left paddle and play against the computer. Score as many points as you can before the computer reaches 5.
+- [Snap Grid](https://jurtu.com/games/snapgrid.html): Snap Grid is a block puzzle. Drag pieces onto an 8x8 grid. A full row or column clears and gives points, with bonus points for clearing several at once. The game ends when none of your pieces fit.
+- [Invaders](https://jurtu.com/games/invaders.html): Invaders is a retro space shooter. Move your cannon left and right and shoot down waves of aliens before they land, while dodging their shots. You have 3 ships.
+- [Sleigh Ride](https://jurtu.com/games/flappy.html): Sleigh Ride is a one-button Christmas game (it used to be called Flappy). Tap to fly Santa's sleigh up and steer through the gaps between brick chimneys and hanging icicles over a snowy town at night. Every chimney passed is a point; a bump or the snow ends the ride.
+- [Maze Muncher](https://jurtu.com/games/muncher.html): Maze Muncher is a maze chase game. Eat every dot in the maze while four ghosts chase you. Big dots turn the ghosts blue for a few seconds so you can chase them back. You have 3 lives.
+- [Cube Rush](https://jurtu.com/games/cube.html): Cube Rush is a one-button jumping game. The cube slides on its own; jump over spikes and onto blocks. Play Level 1, 2 or 3 (each about 50 seconds), or Endless, which keeps getting faster.
+- [Police Chase](https://jurtu.com/games/chase.html): Police Chase is a top-down driving game in a 3D city of skyscrapers and apartment buildings. Drive a getaway car round the city, grab coins and speed boosts, and don't let the police catch you. More police join the longer you last, and police cars that crash into each other stop for a while. They catch you 3 times and it's over.
+- [Endless Ski](https://jurtu.com/games/ski.html): Endless Ski is a 3D downhill skiing game. Race down a never-ending mountain valley, dodge trees and rocks, grab coins, catch air off kickers and rollers, and jump to throw 180s, 360s, front flips and backflips, or ride rails backwards. The sky goes from day to sunset to a night with northern lights.
+- [Tower Defense](https://jurtu.com/games/tower.html): Tower Defense is a strategy game. Monsters walk along a winding path toward your castle. Build arrow, cannon, ice and zap towers on the grass next to the path, upgrade them with the coins you earn, and survive as many waves as you can. Every 10th wave has a boss. If 10 monsters get through, the game is over.
+- [Fishing](https://jurtu.com/games/fishing.html): Fishing is a one-button fishing game on a lake. Cast your line, choose how deep the hook sinks, and press when the float goes under to hook the fish. Then reel it in while keeping the line tension in the green: too tight and the line snaps, too slack and the fish gets away. There are 8 kinds of fish, from minnows to a rare golden fish and a huge lake shark, and an old boot. A round lasts 60 seconds, from morning to sunset.
+- [Stack Tower](https://jurtu.com/games/stack.html): Stack Tower is a one-button stacking game. A block slides back and forth above the tower; tap to drop it. The part that hangs over the edge is cut off, so the tower gets narrower. A perfect drop keeps the full width, and three perfects in a row make it wider again. Missing the tower ends the game.
+- [Minigolf](https://jurtu.com/games/minigolf.html): Minigolf is a 3D mini golf game with 9 holes (par 26), played against 3 computer bots with a camera behind the ball. Pull back and let go to putt. The holes have ramps, a pond jump, a windmill, pinball bumpers, a drawbridge, a loop-the-loop, an ice rink and a volcano, and most have a risky shortcut. Water or falling off the course costs a shot. The score is the total number of shots, so lower is better. A hole stops at 7 shots. In December the course has a Christmas look.
+- [Word Guesser](https://jurtu.com/games/words.html): Word Guesser is a word puzzle. Guess the secret 5-letter word in 6 tries; green tiles are the right letter in the right place, gold tiles are in the word but elsewhere. Solve it to get the next word. A word is worth 60 points in 1 guess down to 10 in 6, and missing a word ends the game.
 
 ## Play a game directly
 
-Open `https://pocketarcade.net/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, cube, chase, ski, tower, fishing, stack, minigolf, words. (Sleigh Ride uses the id flappy.)
+Open `https://jurtu.com/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, cube, chase, ski, tower, fishing, stack, minigolf, words. (Sleigh Ride uses the id flappy.)
 
 ## Daily Challenge
 
-Every day one game is the Daily Challenge, the same start for everyone, with its own top 100 that starts empty at midnight (UTC). Open `https://pocketarcade.net/?daily` to play today's challenge.
+Every day one game is the Daily Challenge, the same start for everyone, with its own top 100 that starts empty at midnight (UTC). Open `https://jurtu.com/?daily` to play today's challenge.
 
 ## App
 
-Pocket Arcade can be added to a phone's home screen and then opens like an app. The games work offline after the first visit.
+jurtu.com can be added to a phone's home screen and then opens like an app. The games work offline after the first visit.
 
 ## More
 
-- [About Pocket Arcade](https://pocketarcade.net/about.html)
-- [Privacy policy](https://pocketarcade.net/privacy.html)
+- [About jurtu.com](https://jurtu.com/about.html)
+- [Privacy policy](https://jurtu.com/privacy.html)

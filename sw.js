@@ -1,4 +1,4 @@
-/* Pocket Arcade offline copy: lets the site open from the home screen and play without internet.
+/* jurtu.com offline copy: lets the site open from the home screen and play without internet.
    It always asks the network first, so updates show up right away. The saved copy is only used when offline.
    three.js (for the 3D games) is big, so it is only saved once one of those games has been played.
    Change CACHE (v1 -> v2) only if you want every phone to throw away its saved copy. */

@@ -1,8 +1,8 @@
-# Pocket Arcade
+# jurtu.com
 
 Seventeen retro games in one web page: Snake, Ski Runner, Breakout, Memory, Pong, Snap Grid, Invaders, Sleigh Ride, Maze Muncher, Cube Rush, Police Chase, Endless Ski, Tower Defense, Fishing, Stack Tower, Minigolf and Word Guesser.
 
-Play it at https://pocketarcade.net. Best scores are saved in your browser, and every game has a public top 10 leaderboard that also shows your own place. The game boards start empty every Monday at midnight (UTC), and each game also has an all-time top 10 that never resets.
+Play it at https://jurtu.com. Best scores are saved in your browser, and every game has a public top 10 leaderboard that also shows your own place. The game boards start empty every Monday at midnight (UTC), and each game also has an all-time top 10 that never resets.
 
 Every day one game is the Daily Challenge, with its own top 10 for that day. The site can also be added to a phone's home screen, where it opens like an app and works offline.
 

@@ -1,5 +1,6 @@
-/* Pocket Arcade leaderboard: a Cloudflare Worker that keeps the top scores for every game in a D1 database.
-   It runs on pocketarcade.net/api/* so the games can call it without any cross-site setup.
+/* jurtu.com leaderboard: a Cloudflare Worker that keeps the top scores for every game in a D1 database.
+   It runs on pocketarcade.net/api/* (that domain's DNS is on Cloudflare). The site itself lives on jurtu.com,
+   so the games call https://pocketarcade.net/api/... from there, and the CORS headers below allow that.
    GET  /api/scores?game=snake[&name=BOB] -> { scores: [{ name, score }, ...], total, me, week }   (this week's top 10)
    Every game's board starts empty each Monday at midnight UTC. week is the day (YYYY-MM-DD) the current week began.
    GET  /api/scores?game=snake&all=1[&name=BOB] -> { scores, total, me, all: true }   (all-time top 10, never resets)
@@ -62,7 +63,8 @@ const PIN = /^[0-9]{4}$/;
 const TRIES = 10; // Wrong PINs one visitor can get in an hour...
 const NAME_TRIES = 50; // ...and one name can get in an hour from everyone, so nobody can guess a PIN by trying all 10,000.
 const TRY_WINDOW = 60 * 60 * 1000;
-const SITE = 'https://pocketarcade.net';
+// Scores are only accepted from these sites.
+const SITES = ['https://jurtu.com', 'https://www.jurtu.com', 'https://pocketarcade.net'];
 const LIMIT = 20; // Score submissions one visitor can make...
 const WINDOW = 10 * 60 * 1000; // ...in this many milliseconds.
 
@@ -334,88 +336,100 @@ async function chat(db, body, who) {
 }
 
 export default {
+  // Lets jurtu.com read the answers, even though the Worker lives on pocketarcade.net.
   async fetch(request, env) {
-    const url = new URL(request.url);
-    const isDaily = url.pathname === '/api/daily';
-    const isName = url.pathname === '/api/name';
-    const isChat = url.pathname === '/api/chat';
-    if (url.pathname !== '/api/scores' && !isDaily && !isName && !isChat) return json({ error: 'Not found' }, 404);
-
-    if (request.method === 'GET' && !isName && !isChat) {
-      const name = cleanName(url.searchParams.get('name'));
-      if (isDaily) {
-        const day = dayOf(Date.now());
-        return json(Object.assign({ day, game: dailyGame(day) }, await board(env.DB, dayList(day), name)));
-      }
-      const game = url.searchParams.get('game');
-      if (!GAMES[game]) return json({ error: 'Unknown game' }, 400);
-      if (url.searchParams.get('all')) return json(Object.assign({ all: true }, await board(env.DB, bestList(game), name)));
-      const list = gameList(game);
-      return json(Object.assign({ week: dayOf(list.since) }, await board(env.DB, list, name)));
-    }
-
-    if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-    // Scores only come from the site itself. (A determined cheater can fake this; it stops casual abuse.)
-    if (request.headers.get('origin') !== SITE) return json({ error: 'Forbidden' }, 403);
-
-    let body;
-    try { body = await request.json(); } catch (e) { return json({ error: 'Bad request' }, 400); }
-    const now = Date.now();
-    const who = await visitor(request);
-    if (isChat) return chat(env.DB, body, who);
-    if (isName) {
-      const name = cleanName(body.name);
-      if (!name) return json({ error: 'Type a name first (A-Z, 0-9).' }, 400);
-      const r = await login(env.DB, name, body.pin, who);
-      if (r.error) return json({ error: r.error, taken: !!r.taken }, r.status);
-      return json({ ok: true, name, created: r.created });
-    }
-    let list = gameList(body.game, now);
-    if (isDaily) {
-      // Only today's challenge, or yesterday's for a few minutes after midnight.
-      const day = String(body.day);
-      if (day !== dayOf(now) && day !== dayOf(now - GRACE)) return json({ error: 'That Daily Challenge is over.' }, 400);
-      list = dayList(day);
-      if (body.game !== list.game) return json({ error: 'Invalid score' }, 400);
-    }
-    const rules = GAMES[body.game];
-    const name = cleanName(body.name);
-    const score = Number(body.score);
-    if (!rules || !name || !Number.isInteger(score) || score < (rules.min ?? 1) || score > rules.max) return json({ error: 'Invalid score' }, 400);
-    const me = await login(env.DB, name, body.pin, who);
-    if (me.error) return json({ error: me.error, taken: !!me.taken }, me.status);
-
-    const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM hits WHERE who = ? AND at > ?').bind(who, now - WINDOW).first();
-    if (n >= LIMIT) return json({ error: 'Slow down! Try again in a few minutes.' }, 429);
-
-    const better = rules.lowerWins ? `excluded.score < ${list.table}.score` : `excluded.score > ${list.table}.score`;
-    const steps = [
-      env.DB.prepare('INSERT INTO hits (who, at) VALUES (?, ?)').bind(who, now),
-      env.DB.prepare('DELETE FROM hits WHERE at < ?').bind(now - WINDOW),
-    ];
-    if (isDaily) {
-      steps.push(
-        env.DB.prepare(`INSERT INTO daily (day, game, name, score, at) VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT (day, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better}`).bind(list.key, list.game, name, score, now),
-        env.DB.prepare('DELETE FROM daily WHERE day < ?').bind(dayOf(now - KEEP_DAYS * 864e5)),
-      );
-    } else {
-      steps.push(env.DB.prepare(`INSERT INTO scores (game, name, score, at) VALUES (?, ?, ?, ?)
-        ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better} OR scores.at < ?`)
-        .bind(body.game, name, score, now, list.since)); // A score from last week is always replaced.
-    }
-    await env.DB.batch(steps);
-    if (!isDaily) {
-      // The all-time board. Saved on its own, so a missing best table (schema.sql not run yet) can't stop the weekly score.
-      const beats = rules.lowerWins ? 'excluded.score < best.score' : 'excluded.score > best.score';
-      try {
-        await env.DB.prepare(`INSERT INTO best (game, name, score, at) VALUES (?, ?, ?, ?)
-          ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${beats}`)
-          .bind(body.game, name, score, now).run();
-      } catch (e) { /* The best table isn't there yet. */ }
-    }
-
-    const extra = isDaily ? { ok: true, day: list.key, game: list.game } : { ok: true };
-    return json(Object.assign(extra, await board(env.DB, list, name)));
+    const origin = request.headers.get('origin');
+    const cors = SITES.includes(origin)
+      ? { 'access-control-allow-origin': origin, 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '86400', vary: 'Origin' }
+      : { vary: 'Origin' };
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    const res = await handle(request, env);
+    for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+    return res;
   },
 };
+
+async function handle(request, env) {
+  const url = new URL(request.url);
+  const isDaily = url.pathname === '/api/daily';
+  const isName = url.pathname === '/api/name';
+  const isChat = url.pathname === '/api/chat';
+  if (url.pathname !== '/api/scores' && !isDaily && !isName && !isChat) return json({ error: 'Not found' }, 404);
+
+  if (request.method === 'GET' && !isName && !isChat) {
+    const name = cleanName(url.searchParams.get('name'));
+    if (isDaily) {
+      const day = dayOf(Date.now());
+      return json(Object.assign({ day, game: dailyGame(day) }, await board(env.DB, dayList(day), name)));
+    }
+    const game = url.searchParams.get('game');
+    if (!GAMES[game]) return json({ error: 'Unknown game' }, 400);
+    if (url.searchParams.get('all')) return json(Object.assign({ all: true }, await board(env.DB, bestList(game), name)));
+    const list = gameList(game);
+    return json(Object.assign({ week: dayOf(list.since) }, await board(env.DB, list, name)));
+  }
+
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  // Scores only come from the site itself. (A determined cheater can fake this; it stops casual abuse.)
+  if (!SITES.includes(request.headers.get('origin'))) return json({ error: 'Forbidden' }, 403);
+
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'Bad request' }, 400); }
+  const now = Date.now();
+  const who = await visitor(request);
+  if (isChat) return chat(env.DB, body, who);
+  if (isName) {
+    const name = cleanName(body.name);
+    if (!name) return json({ error: 'Type a name first (A-Z, 0-9).' }, 400);
+    const r = await login(env.DB, name, body.pin, who);
+    if (r.error) return json({ error: r.error, taken: !!r.taken }, r.status);
+    return json({ ok: true, name, created: r.created });
+  }
+  let list = gameList(body.game, now);
+  if (isDaily) {
+    // Only today's challenge, or yesterday's for a few minutes after midnight.
+    const day = String(body.day);
+    if (day !== dayOf(now) && day !== dayOf(now - GRACE)) return json({ error: 'That Daily Challenge is over.' }, 400);
+    list = dayList(day);
+    if (body.game !== list.game) return json({ error: 'Invalid score' }, 400);
+  }
+  const rules = GAMES[body.game];
+  const name = cleanName(body.name);
+  const score = Number(body.score);
+  if (!rules || !name || !Number.isInteger(score) || score < (rules.min ?? 1) || score > rules.max) return json({ error: 'Invalid score' }, 400);
+  const me = await login(env.DB, name, body.pin, who);
+  if (me.error) return json({ error: me.error, taken: !!me.taken }, me.status);
+
+  const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM hits WHERE who = ? AND at > ?').bind(who, now - WINDOW).first();
+  if (n >= LIMIT) return json({ error: 'Slow down! Try again in a few minutes.' }, 429);
+
+  const better = rules.lowerWins ? `excluded.score < ${list.table}.score` : `excluded.score > ${list.table}.score`;
+  const steps = [
+    env.DB.prepare('INSERT INTO hits (who, at) VALUES (?, ?)').bind(who, now),
+    env.DB.prepare('DELETE FROM hits WHERE at < ?').bind(now - WINDOW),
+  ];
+  if (isDaily) {
+    steps.push(
+      env.DB.prepare(`INSERT INTO daily (day, game, name, score, at) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (day, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better}`).bind(list.key, list.game, name, score, now),
+      env.DB.prepare('DELETE FROM daily WHERE day < ?').bind(dayOf(now - KEEP_DAYS * 864e5)),
+    );
+  } else {
+    steps.push(env.DB.prepare(`INSERT INTO scores (game, name, score, at) VALUES (?, ?, ?, ?)
+      ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${better} OR scores.at < ?`)
+      .bind(body.game, name, score, now, list.since)); // A score from last week is always replaced.
+  }
+  await env.DB.batch(steps);
+  if (!isDaily) {
+    // The all-time board. Saved on its own, so a missing best table (schema.sql not run yet) can't stop the weekly score.
+    const beats = rules.lowerWins ? 'excluded.score < best.score' : 'excluded.score > best.score';
+    try {
+      await env.DB.prepare(`INSERT INTO best (game, name, score, at) VALUES (?, ?, ?, ?)
+        ON CONFLICT (game, name) DO UPDATE SET score = excluded.score, at = excluded.at WHERE ${beats}`)
+        .bind(body.game, name, score, now).run();
+    } catch (e) { /* The best table isn't there yet. */ }
+  }
+
+  const extra = isDaily ? { ok: true, day: list.key, game: list.game } : { ok: true };
+  return json(Object.assign(extra, await board(env.DB, list, name)));
+}
