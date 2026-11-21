@@ -3,7 +3,7 @@
    and falls, so the tower gets narrower. Drop it right on top (a "perfect") and nothing is cut; three perfects
    in a row make the block a little wider again. Miss the tower completely and the game is over. */
 (() => {
-  const { ctx, C, clamp, font, sfx, setScore, over, tween, pop, shake, banner } = Arcade;
+  const { ctx, clamp, font, sfx, setScore, over, tween, pop, shake, banner } = Arcade;
 
   const W = 360, H = 560, BH = 24, D = 16; // BH: block height. D: how deep the top face looks.
   const START_W = 180, BASE_Y = H - 70, PERFECT = 5, GROW = 10;

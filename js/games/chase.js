@@ -217,7 +217,7 @@
         g.fillStyle = wall; g.fillRect(0, 0, 128, 128);
         g.fillStyle = '#f2efe8'; g.fillRect(10, 18, 108, 22);
         g.fillStyle = '#34465e'; g.fillRect(14, 22, 100, 14);
-        for (let x = 0; x < 128; x += 16) { g.fillStyle = x % 32 ? '#f4f4f0' : wall === '#f0ede4' ? '#e2483d' : '#e2483d'; g.fillRect(x, 52, 16, 12); }
+        for (let x = 0; x < 128; x += 16) { g.fillStyle = x % 32 ? '#f4f4f0' : '#e2483d'; g.fillRect(x, 52, 16, 12); }
         g.fillStyle = '#8fd0ec'; g.fillRect(6, 66, 116, 60);
         g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(6, 66, 116, 8);
         g.fillStyle = '#4a4f5a'; g.fillRect(56, 76, 16, 50);
@@ -225,6 +225,13 @@
     }
     tex.wrapS = tex.wrapT = T.RepeatWrapping;
     return (G.facades[key] = tex);
+  }
+  // Slow phones step down: 1 draws a smaller picture (it is stretched to fit) with lighter shadows, 0 also turns the shadows off.
+  function quality(q) {
+    G.q = q; G.watch = 0; G.lag = 1 / 60;
+    const sh = G.sun.shadow;
+    if (q < 2 && sh.mapSize.x > 1024) { sh.mapSize.set(1024, 1024); if (sh.map) { sh.map.dispose(); sh.map = null; } }
+    G.sun.castShadow = q >= 1;
   }
   function build() {
     const W = chase.W, H = chase.H;
@@ -234,6 +241,7 @@
     } catch (e) { failed = true; G = null; return; }
     G.r.shadowMap.enabled = true; G.r.shadowMap.type = T.PCFSoftShadowMap;
     G.r.setPixelRatio(1);
+    G.q = 2; G.lag = 0; G.watch = 0; // Quality, see quality(): 2 = everything, 1 = smaller picture and shadows, 0 = no shadows.
     const scene = G.scene = new T.Scene();
     scene.background = new T.Color('#9ccfe6');
     G.cam = new T.PerspectiveCamera(45, W / H, 20, 4000);
@@ -703,8 +711,12 @@
       G.cam.position.set(cx, 680, cz + 380); G.cam.lookAt(cx, 0, cz - 20);
       G.sun.position.set(cx - 260, 620, cz - 300); G.sun.target.position.set(cx, 0, cz); G.sun.target.updateMatrixWorld();
 
+      // A phone that can't keep up (under about 38 frames a second for 3 seconds) gets a lighter picture.
+      const now = performance.now(), fdt = Math.min(0.1, (now - (G.last || now)) / 1000); G.last = now;
+      if (fdt > 0) { G.watch += fdt; G.lag = G.lag * 0.97 + fdt * 0.03; if (G.watch > 3 && G.lag > 1 / 38 && G.q > 0) quality(G.q - 1); }
+
       // Render, then copy the picture onto the arcade's canvas and draw the flat bits on top.
-      const cw = Math.min(ctx.canvas.width, 900), ch = Math.round(cw * H / W);
+      const cw = Math.min(ctx.canvas.width, G.q === 2 ? 900 : 640), ch = Math.round(cw * H / W);
       if (G.cw !== cw) { G.cw = cw; G.r.setSize(cw, ch, false); }
       G.r.render(G.scene, G.cam);
       ctx.drawImage(G.r.domElement, 0, 0, W, H);

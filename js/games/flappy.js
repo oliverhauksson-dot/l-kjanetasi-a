@@ -74,7 +74,7 @@
     },
     // A row of little snowy houses with lit windows, scrolling slower than the chimneys.
     town() {
-      const { W, H } = this, span = 480;
+      const { H } = this, span = 480;
       const off = -((this.dist * 0.25) % span);
       const strip = cached('sleigh-town', span, 140, (g) => {
         g.fillStyle = '#16285c';

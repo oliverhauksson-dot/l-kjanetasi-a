@@ -11,7 +11,7 @@
    - round posts and bumpers, spinning bars, sliding pucks, a windmill door, a drawbridge and a loop.
    Every moving part is worked out from the hole's clock, so a bot can try putts in its head and pick a good one. */
 (() => {
-  const { ctx, C, clamp, font, sfx, setScore, over, pop, shake, calm } = Arcade;
+  const { ctx, C, clamp, font, sfx, setScore, over, shake, calm } = Arcade;
 
   let T = null, failed = false;
   const here = document.currentScript ? document.currentScript.src : location.href;
@@ -758,7 +758,6 @@
       if (this.phase === 'podium') { this.podium(dt); return; }
       this.t += dt; this.celT = Math.max(0, this.celT - dt);
       this.sounds(Hl);
-      const me = this.me();
       if (this.canPutt() && !this.drag) {
         if (this.keys.ArrowLeft || this.keys.KeyA) this.aim.a += 1.6 * dt;
         if (this.keys.ArrowRight || this.keys.KeyD) this.aim.a -= 1.6 * dt;
@@ -983,8 +982,9 @@
       const Hl = this.Hl, pod = this.phase === 'podium' || (this.phase === 'end' && this.final);
       animateHole(Hl, this.t);
       const now = performance.now(), fdt = Math.min(0.1, (now - (G.last || now)) / 1000); G.last = now;
-      // A phone that can't keep up gets fewer extras (see quality()).
-      if (!this.keepQ && fdt > 0) { G.frames++; G.lag = G.lag * 0.97 + fdt * 0.03; if (G.frames > 180 && G.lag > 1 / 38 && G.q > 0) { quality(G.q - 1); G.frames = 0; G.lag = 1 / 60; } }
+      // A phone that can't keep up gets fewer extras (see quality()). It is judged on 3 seconds of play, not a number of frames,
+      // so a very slow phone gets the lighter picture after seconds instead of half a minute.
+      if (fdt > 0) { G.watch += fdt; G.lag = G.lag * 0.97 + fdt * 0.03; if (G.watch > 3 && G.lag > 1 / 38 && G.q > 0) { quality(G.q - 1); G.watch = 0; G.lag = 1 / 60; } }
       if (pod) this.drawPodium(); else { G.group.visible = true; if (G.pod) G.pod.visible = false; this.drawBalls(fdt, now); }
       const cam = G.cam;
       cam.position.set(...this.cam.p); cam.lookAt(...this.cam.l);
@@ -1422,7 +1422,7 @@
     try { G = { r: new T.WebGLRenderer({ antialias: true }) }; } catch (e) { failed = true; G = null; return; }
     const r = G.r;
     r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap; r.setPixelRatio(1);
-    G.q = 2; G.lag = 0; G.frames = 0; // Quality: 2 = everything, 1 = no far islands or clouds, 0 = no shadows either.
+    G.q = 2; G.lag = 0; G.watch = 0; // Quality: 2 = everything, 1 = no far islands or clouds, 0 = no shadows either.
     G.scene = new T.Scene(); G.scene.fog = new T.Fog(LOOK.fog, 80, 300);
     G.cam = new T.PerspectiveCamera(55, W / H, 0.3, 900);
     G.scene.add(new T.HemisphereLight(LOOK.hemi[0], LOOK.hemi[1], LOOK.hemi[2]));
@@ -1682,7 +1682,7 @@
     if (G.group) { G.scene.remove(G.group); G.group.traverse((o) => { if (o.isSprite) return; if (o.isInstancedMesh) o.dispose(); if (o.geometry && !o.geometry.keep) o.geometry.dispose(); }); }
     const grp = G.group = new T.Group(), M = G.m, add = (m, shadow = true, recv = true) => { m.castShadow = shadow; m.receiveShadow = recv; grp.add(m); return m; };
     const glow = (x, y, z, size, col, op) => { const s = new T.Sprite(new T.SpriteMaterial({ map: G.glowTex, color: col, transparent: true, opacity: op, blending: T.AdditiveBlending, depthWrite: false })); s.position.set(x, y, z); s.scale.setScalar(size); grp.add(s); return s; };
-    G.built = Hl; G.frames = 0; G.dyn = { spinners: [], pucks: [], sails: [], bridges: [], bumpers: [], smoke: [], bubbles: [], clouds: [], far: [], lamps: [], pads: [], falls: [] };
+    G.built = Hl; G.watch = 0; G.dyn = { spinners: [], pucks: [], sails: [], bridges: [], bumpers: [], smoke: [], bubbles: [], clouds: [], far: [], lamps: [], pads: [], falls: [] };
     const base = Hl.floor + 0.8;
     // Surfaces.
     for (const s of Hl.surfaces) {
