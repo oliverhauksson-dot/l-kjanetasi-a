@@ -2954,7 +2954,7 @@
         const sp = Math.round(Math.abs(this.spin) / Math.PI) * 180, fl = Math.round(Math.abs(this.flip) / (Math.PI * 2));
         const live = [fl ? flipName(Math.sign(this.flip) * fl) : '', sp ? sp : '', this.gk > 0.6 ? this.grab : ''].filter(Boolean).join(' ');
         text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
-        if (live) text(live, W / 2, H - 116, 9, '#ffd75e', 'center');
+        if (live) text(live, W / 2, this.jumpFlight ? H - 146 : H - 116, 9, '#ffd75e', 'center');
       }
       if (this.grind) text(this.grindName + '  ' + this.grindT.toFixed(1) + 's', W / 2, H - 100, 11, '#7fe3ff', 'center');
       // Trick names pop up on a dark tag with a stripe in the trick's colour, and lean a little.
