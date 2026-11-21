@@ -137,6 +137,9 @@ header.marquee { position: relative; display: grid; gap: 12px; text-align: left;
 .game.full {
   position: fixed; inset: 0; z-index: 10; overflow: auto; background: var(--bg);
   align-content: center; height: 100vh; height: 100dvh;
+  /* At game over, "Play next" and the top 10 make the screen taller than the window. Then the game keeps its size
+     and the screen scrolls, instead of the game (and its Play again button) being squashed flat. */
+  grid-auto-rows: max-content; align-content: safe center;
   padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 .game.full .hud { max-width: 860px; width: 100%; margin: 0 auto; }

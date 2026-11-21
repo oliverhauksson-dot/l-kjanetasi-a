@@ -5,7 +5,7 @@
    After 400 m, snowballs start dropping out of the sky.
    Positions on a slope are kept as u (how far along it) and h (height above the snow). */
 (() => {
-  const { ctx, C, rand, clamp, cached, sfx, setScore, over, tween, shake, banner } = Arcade;
+  const { ctx, C, rand, clamp, cached, sfx, setScore, over, tween, shake, banner, seeded, withRandom } = Arcade;
 
   const LEFT = 46, RIGHT = 354;     // Slopes end between these two x values.
   // Each new slope starts a little way out past the edge above it (so you land on it) and a little
@@ -97,6 +97,9 @@
       this.held = false; this.h = 0; this.vy = 0; this.ground = true;
       this.turn = null; this.turns = 0; this.spray = []; this.carve = 0; this.falls = []; this.nextFall = 2;
       this.squash = { k: 0 }; // Looks only: how squashed the skier is after landing.
+      // The mountain is built from its own random numbers, so snow spray and sounds can't change it
+      // (in a Daily Challenge everyone gets the same mountain).
+      this.world = seeded(Math.random() * 4294967296);
       this.slopes = [];
       this.addSlope({ x: LEFT, y: 120, d: 1, L: RIGHT - LEFT, slope: 0.3, obs: [] });
       this.seg = 0; this.u = 30;
@@ -113,7 +116,8 @@
       s.jag = Array.from({ length: Math.ceil(s.L / 14) + 1 }, () => rand(18, 34));
       this.slopes.push(s); return s;
     },
-    fill() {
+    fill() { withRandom(this.world, () => this.build()); },
+    build() {
       // Build well ahead (6 slopes below you), so new slopes are ready long before they come on screen.
       while (this.slopes.length - this.seg < 7) {
         const prev = this.slopes[this.slopes.length - 1], e = this.endOf(prev), k = this.level();
