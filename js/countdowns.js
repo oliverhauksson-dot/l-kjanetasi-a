@@ -4,8 +4,8 @@
    The Christmas countdown is in js/season.js, because it comes with the rest of the decorations. */
 (() => {
   const COUNTDOWNS = [
-    // name, release day (year, month, day), and how many days after it the badge stays up.
-    { id: 'gta', icon: '🌴', name: 'GTA 6', date: [2026, 11, 19], keep: 3 },
+    // name, release day (year, month, day), and how many days after it the badge stays up. For example:
+    // { id: 'gta', icon: '🌴', name: 'GTA 6', date: [2026, 11, 19], keep: 3 },
   ];
 
   const row = document.getElementById('notes');
