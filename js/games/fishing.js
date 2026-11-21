@@ -554,7 +554,7 @@
       ctx.globalAlpha = 1;
       ctx.restore();
       if (this.flash) { ctx.fillStyle = 'rgba(255,244,176,' + (this.flash * 1.5).toFixed(2) + ')'; ctx.fillRect(0, 0, W, H); }
-      this.drawHud(f);
+      this.drawHud();
     },
     drawSky(f) {
       const g = ctx.createLinearGradient(0, 0, 0, SURF);
@@ -733,7 +733,7 @@
       ctx.fillStyle = '#ff3b5c'; ctx.beginPath(); ctx.ellipse(x, y - 1, 4, 4, 0, Math.PI, 0); ctx.fill();
       ctx.fillStyle = '#0d0a15'; ctx.fillRect(x - 0.5, y - 9, 1, 5);
     },
-    drawHud(f) {
+    drawHud() {
       // Clock and catch count.
       const secs = Math.ceil(this.left), low = this.left <= 10 && this.left > 0;
       text('0:' + String(secs).padStart(2, '0'), W - 12, 18, 14, low ? (Math.floor(this.t * 4) % 2 ? C.pink : C.ink) : C.ink, 'right');
