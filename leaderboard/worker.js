@@ -36,7 +36,7 @@ const GAMES = {
   stack: { max: 5000 }, // Stack Tower, in blocks.
   minigolf: { min: 9, max: 63, lowerWins: true }, // Shots for 9 holes: 9 is all holes in one, 7 a hole is the most.
   words: { max: 100000 }, // Word Guesser: 10 to 60 points a word.
-  higherlower: { max: 1000 }, // Higher or Lower: right guesses in a row. The questions file has about 130 cards.
+  higherlower: { max: 1000 }, // Higher or Lower: right guesses in a row.
 };
 
 // The Daily Challenge game for a day (YYYY-MM-DD). This list must match DAILY in js/arcade.js.

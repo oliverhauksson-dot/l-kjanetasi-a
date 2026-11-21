@@ -26,13 +26,15 @@
     text.split(/\r?\n/).forEach((raw, i) => {
       const line = raw.trim(), n = i + 1;
       if (!line || line.startsWith('#')) return;
-      const head = line.match(/^(TITLE|TOPIC|UNIT)\s*:\s*(.*)$/i);
+      const head = line.match(/^(TITLE|TOPIC|UNIT|GAP)\s*:\s*(.*)$/i);
       if (head) {
         const kind = head[1].toUpperCase(), value = head[2].trim();
         if (kind === 'TITLE') title = value;
-        else if (kind === 'TOPIC') { const [emoji, name] = splitEmoji(value); topic = { emoji: emoji || '❓', name: name || 'Quiz', unit: '', cards: [] }; topics.push(topic); }
-        else if (topic) topic.unit = value;
-        else skipped.push([n, raw, 'UNIT must come after a TOPIC line']);
+        else if (kind === 'TOPIC') { const [emoji, name] = splitEmoji(value); topic = { emoji: emoji || '❓', name: name || 'Quiz', unit: '', gap: 0, cards: [] }; topics.push(topic); }
+        else if (!topic) skipped.push([n, raw, kind + ' must come after a TOPIC line']);
+        else if (kind === 'UNIT') topic.unit = value;
+        else if (toNumber(value) > 0) topic.gap = toNumber(value);
+        else skipped.push([n, raw, 'GAP needs a number, like GAP: 8']);
         return;
       }
       const eq = line.lastIndexOf('=');
@@ -41,7 +43,9 @@
       const value = toNumber(line.slice(eq + 1)), [emoji, name] = splitEmoji(line.slice(0, eq));
       if (!name) { skipped.push([n, raw, 'no name before the = sign']); return; }
       if (!Number.isFinite(value)) { skipped.push([n, raw, 'the number after = is not a number']); return; }
-      topic.cards.push({ name, value, emoji: emoji || topic.emoji, topic });
+      // Words in brackets at the end, like "L. Messi (FC Barcelona)", show as a small line under the name.
+      const m = name.match(/^(.+?)\s*\(([^()]*)\)$/);
+      topic.cards.push({ name, short: m ? m[1] : name, note: m ? m[2] : '', value, emoji: emoji || topic.emoji, topic });
     });
     const usable = topics.filter((t) => t.cards.length >= 2);
     topics.filter((t) => t.cards.length < 2).forEach((t) => skipped.push([0, 'TOPIC: ' + t.name, 'a topic needs at least 2 cards']));
@@ -106,10 +110,14 @@
       if (!this.decks.has(t)) this.decks.set(t, shuffle([...t.cards]));
       return this.decks.get(t);
     },
-    // Takes a card from the topic that isn't the same as not. Null if there is none left.
+    // Takes a card from the topic to go next to not. Null if there is none left.
+    // It prefers a card with a different number, and if the topic has a GAP, the number is at most GAP away from not's.
     draw(t, not) {
       const d = this.deck(t);
-      const i = d.findIndex((c) => !not || (c !== not && c.name !== not.name));
+      if (!not) return d.pop() || null;
+      const fits = (c) => c !== not && c.name !== not.name && (!t.gap || Math.abs(c.value - not.value) <= t.gap);
+      let i = d.findIndex((c) => fits(c) && c.value !== not.value);
+      if (i < 0) i = d.findIndex(fits);
       return i < 0 ? null : d.splice(i, 1)[0];
     },
     pickTopic() {
@@ -130,7 +138,9 @@
     card(c, shown) {
       const b = el('div', 'hlc');
       b.style.setProperty('--len', Math.max(fmt(c.value).length, 4)); // Long numbers get a smaller font, so they fit the card.
-      b.append(el('span', 'hle', c.emoji), el('b', 'hln', c.name));
+      const name = el('b', 'hln', c.short);
+      if (c.note) name.append(el('small', '', c.note));
+      b.append(el('span', 'hle', c.emoji), name);
       const num = el('span', 'hlv', shown ? fmt(c.value) : '?');
       b.append(num, el('span', 'hlu', c.topic.unit || ' '));
       b.num = num;
@@ -161,7 +171,7 @@
     },
     paintAsk() {
       this.askEl.textContent = '';
-      this.askEl.append('Is ', el('b', '', this.right.name), ' higher or lower than ', el('b', '', this.left.name), '?');
+      this.askEl.append('Is ', el('b', '', this.right.short), ' higher or lower than ', el('b', '', this.left.short), '?');
     },
     later(fn, ms) { const run = this.run; this.timers.push(setTimeout(() => { if (this.run === run) fn(); }, ms)); },
     timers: [],
@@ -177,7 +187,7 @@
         if (!right) {
           sfx.hit(); // The game over screen shakes and plays the lose sound.
           const unit = this.right.topic.unit ? ' ' + this.right.topic.unit : '';
-          this.later(() => over(this.score, this.left.name + ': ' + fmt(a) + unit + '. ' + this.right.name + ': ' + fmt(b) + unit + '. ' +
+          this.later(() => over(this.score, this.left.short + ': ' + fmt(a) + unit + '. ' + this.right.short + ': ' + fmt(b) + unit + '. ' +
             this.score + ' right in a row.'), 900);
           return;
         }
@@ -200,9 +210,10 @@
       };
       this.raf = requestAnimationFrame(step);
     },
-    // Right guess: the right card slides over to the left and a new card comes in. After PER_TOPIC guesses, a new topic.
+    // Right guess: the right card slides over to the left and a new card comes in.
+    // After PER_TOPIC guesses a new topic, if there is more than one.
     next() {
-      const c = this.inTopic < PER_TOPIC ? this.draw(this.topic, this.right) : null;
+      const c = this.inTopic < PER_TOPIC || quiz.topics.length < 2 ? this.draw(this.topic, this.right) : null;
       if (!c) { this.newPair(true); return; }
       this.left = this.right; this.right = c;
       const incoming = this.card(c, false);
