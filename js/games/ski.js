@@ -8,7 +8,7 @@
    (chunks) that are made just ahead of you and thrown away behind you.
    Units are metres. d is how far down the mountain, x is left/right. In three.js, z = -d. */
 (() => {
-  const { ctx, rand, clamp, font, sfx, setScore, over, tween, banner, seeded, withRandom } = Arcade;
+  const { ctx, rand, clamp, font, sfx, setScore, over, tween, banner } = Arcade;
   const THREE_URL = new URL('../vendor/three.module.min.js', document.currentScript.src).href;
   let T = null, failed = false;
 
@@ -1191,9 +1191,6 @@
       this.zoneK = -1; this.gateHit = 0; this.gateStreak = 0; this.gateN = 0; this.gateI = 0; this.ava = null;
       this.storm = 0; this.wind = 0; this.windX = 0; this.fallT = 0; this.ice = 0;
       this.villages = []; this.marks = []; this.onRoof = null; this.roofFrom = null; this.roofRunV = null;
-      // The mountain is built from its own random numbers, so snow puffs and trick names can't change it
-      // (in a Daily Challenge everyone gets the same mountain).
-      this.world = seeded(Math.random() * 4294967296);
       this.fans(JUMP_LIP + 150, JUMP_LIP + 215, 3); // A crowd along the ski jump's outrun.
       this.gen();
       if (S) { S.tiles.forEach((t) => { t.chunk = null; t.visible = false; }); S.feats.forEach(dropMesh); S.feats = []; S.built = ''; if (S.sjMesh) { dropMesh(S.sjMesh); S.sjMesh = null; } }
@@ -1220,7 +1217,7 @@
 
     /* ----- The mountain ahead ----- */
     gen() {
-      while (this.nextChunk < this.d + CL * (CHUNKS - 1)) { this.chunks.push(withRandom(this.world, () => this.makeChunk(this.nextChunk))); this.nextChunk += CL; }
+      while (this.nextChunk < this.d + CL * (CHUNKS - 1)) { this.chunks.push(this.makeChunk(this.nextChunk)); this.nextChunk += CL; }
       while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
     },
     makeChunk(d0) {
