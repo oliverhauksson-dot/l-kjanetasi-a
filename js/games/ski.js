@@ -68,6 +68,7 @@
   const LIFT_SPAN = 48;
   const MAX_FANS = 700; // Metres between chairlift towers. // The safety fence along both sides of the park.
   const HIP_THROW = 7; // How hard a side hit throws you towards the middle.
+  const PIPE_V = 11; // How fast you go across the halfpipe, at least, once you are on a wall.
   // Tricks. A jump (ollie) pops you up; spins count in half turns (180, 360, 540...), flips in full turns.
   const OLLIE = 7.8, SPIN_RATE = 11, FLIP_RATE = 12.5, GRAB_T = 0.75, SWAP_T = 0.35;
   const SPIN_PTS = [0, 100, 200, 350, 500, 700, 900];
@@ -664,7 +665,7 @@
         #include <tonemapping_fragment>`);
     };
     const tiles = [];
-    for (let k = 0; k < CHUNKS + 3; k++) {
+    for (let k = 0; k < CHUNKS + 4; k++) {
       const g = new T.BufferGeometry();
       g.setIndex(index);
       for (const a of ['position', 'normal', 'color']) g.setAttribute(a, new T.BufferAttribute(new Float32Array(NU * ND * 3), 3));
@@ -729,9 +730,11 @@
     const bannerSide = new T.MeshStandardMaterial({ color: '#1b2350', roughness: 0.7 });
     // One banner for each park section, each in its own colour.
     const banners = {};
-    for (const [text, col] of [['RAIL GARDEN', '#14405a'], ['JUMP LINE', '#5a2a10'], ['GAP JUMP', '#0f4a3a'], ['WALL RIDE', '#4a2a5a'], ['MEGA JUMP', '#5a1030'], ['SKI VILLAGE', '#6a1f1f']])
+    for (const [text, col] of [['RAIL GARDEN', '#14405a'], ['JUMP LINE', '#5a2a10'], ['GAP JUMP', '#0f4a3a'], ['WALL RIDE', '#4a2a5a'], ['MEGA JUMP', '#5a1030'], ['SKI VILLAGE', '#6a1f1f'], ['HALFPIPE', '#123a6a'], ['STREET', '#3a3f4a']])
       banners[text] = new T.MeshStandardMaterial({ map: bannerTexture(text, col), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.15 });
     const railMat2 = new T.MeshStandardMaterial({ color: '#2fd6a0', metalness: 0.6, roughness: 0.3 });
+    const tubeMat = new T.MeshStandardMaterial({ color: '#ff7a1a', metalness: 0.1, roughness: 0.45 });
+    const handMat = new T.MeshStandardMaterial({ color: '#ffd23f', metalness: 0.5, roughness: 0.35 });
     const wallMat = new T.MeshStandardMaterial({ color: '#b98a55', roughness: 0.8 });
     // Fans along the park, cheering, and big speakers.
     const crowdBody = new T.InstancedMesh(new T.CapsuleGeometry(0.28, 0.75, 3, 8), new T.MeshStandardMaterial({ roughness: 0.7 }), MAX_FANS);
@@ -815,7 +818,7 @@
     })).mat;
     for (const k of Object.keys(boards)) boards[k].draw();
 
-    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, ranges, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, banners, railMat2, fencePosts, fenceNet, lightPoles, lampMat, lamps, glow, towers, cables, chairs, boothGlow, boothGlow2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, box1, icicle, clock, spire, houseMat, winMat, bulbMat, smoke, snowmen, cableMat, iceMat, starMat, treeMat, sjBoard, distBoard: (t, c) => { const m = distBoard(t, c); boards[t].draw(); return m; }, sjMesh: null, built: '', sparkle, q: 2, lag: 1 / 60, watch: 0, last: null };
+    S = { renderer, scene, camera, hemi, sun, lamp, sky, skyMat, stars, aurora, auroraMat, peaks, ranges, tiles, trees, forest, rocks, coins, flags, rampMat, railMat, legMat, bannerMat, bannerSide, banners, railMat2, tubeMat, handMat, fencePosts, fenceNet, lightPoles, lampMat, lamps, glow, towers, cables, chairs, boothGlow, boothGlow2, wallMat, crowdBody, crowdHead, speakers, feats: [], skier, blob, tracks, spray, sparks, flakes, deer, hares, gateMats, poleGeo, panelGeo, avalanche, box1, icicle, clock, spire, houseMat, winMat, bulbMat, smoke, snowmen, cableMat, iceMat, starMat, treeMat, sjBoard, distBoard: (t, c) => { const m = distBoard(t, c); boards[t].draw(); return m; }, sjMesh: null, built: '', sparkle, q: 2, lag: 1 / 60, watch: 0, last: null };
     setQuality(2);
   }
   /* Picture quality. 2 = everything (sharper shadows on a computer), 1 = a smaller picture with lighter shadows,
@@ -861,16 +864,29 @@
   // Park features. Kickers are curved wedges of snow with a coloured lip, boxes are flat-topped slides,
   // and rails are metal bars on legs. All of them follow the slope.
   const LIPS = { kick: '#ff6a2c', big: '#ff2f55', hip: '#2fb5ff', mega: '#ffd23f', deck: '#ff2f55', ramp: '#2fd6a0' };
+  const STAIR_UP = 0.28, STAIR_TOP = 0.52; // Along the street stairs: the ramp up ends, then the platform ends and the steps start.
+  /* The halfpipe: a flat bottom (hw each side of the middle), curved walls R high that go straight up at the top
+     (the coping), and a flat deck behind them. The walls grow out of the snow at the start and sink back at the end. */
+  function pipeWall(f, u, d) {
+    const a = Math.abs(u) - f.hw, P = f.whole || f; // The pipe is built in pieces; the walls grow and sink at the ends of the whole pipe.
+    if (a <= 0 || a > f.R + f.deck) return 0;
+    const e = smooth((d - P.d) / 14) * smooth((P.d + P.len - d) / 14);
+    return e * (a < f.R ? f.R - Math.sqrt(Math.max(0, f.R * f.R - a * a)) : f.R);
+  }
   // Where a kicker is across the run at d. Most stand still, a ramp that follows the valley bends with it.
   const fxAt = (f, d) => (f.follow ? center(d) + f.u : f.x);
   // How high a kicker (or the landing deck of a gap jump) lifts the snow, s from 0 to 1 along it.
   function lift(f, s) {
     if (f.type === 'deck') return f.h * (s < 0.08 ? s / 0.08 : s > 0.75 ? (1 - s) / 0.25 : 1);
+    // The street stairs: a ramp up onto a platform, then a flight of steps down.
+    if (f.type === 'stairs') return s < STAIR_UP ? f.h * smooth(s / STAIR_UP) : s < STAIR_TOP ? f.h : f.h * (1 - Math.ceil(((s - STAIR_TOP) / (1 - STAIR_TOP)) * f.steps - 1e-6) / f.steps);
     return f.h * s * s;
   }
   // The top of a rail or box at d. Rainbow rails arch up and down, kinked rails step down in the middle.
   function bendAt(f, s) {
     if (f.shape === 'rainbow') return 1.5 * Math.sin(Math.PI * s);
+    if (f.shape === 'down') return s < 0.35 ? 0 : -0.8 * (s - 0.35) / 0.65; // Flat, then down.
+    if (f.shape === 'wave') return 0.4 * Math.sin(Math.PI * 4 * s) * Math.sin(Math.PI * s);
     if (f.shape === 'kink') return s < 0.38 ? 0 : s < 0.55 ? -0.75 * (s - 0.38) / 0.17 : -0.75;
     return 0;
   }
@@ -930,14 +946,18 @@
       m = new T.Group();
       const pts = [];
       for (let s = 0; s <= f.len + 0.01; s += 0.5) { const d = f.d + s, x = railX(f, d); pts.push(new T.Vector3(x, railTop(f, d) - 0.05, -d)); }
-      const bar = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 2, 0.07, 8), f.shape ? S.railMat2 : S.railMat);
+      const tube = f.shape === 'tube', mat = tube ? S.tubeMat : f.shape === 'hand' ? S.handMat : f.shape ? S.railMat2 : S.railMat;
+      const bar = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 2, tube ? 0.26 : 0.07, tube ? 14 : 8), mat);
       bar.castShadow = true; m.add(bar);
-      for (let s = 0.3; s < f.len; s += f.posts ? f.len - 0.6 : 3) {
+      if (tube) bar.position.y = -0.2; // A fat tube sits lower, so its top is where you slide.
+      for (let s = 0.3; s < f.len; s += f.shape === 'gap' ? f.len - 0.6 : 3) {
         const d = f.d + Math.min(s, f.len - 0.3), x = railX(f, d), y = f.posts ? f.posts(d) : f.base != null ? f.base : height(x, d), h = railTop(f, d) - y;
         const leg = new T.Mesh(new T.CylinderGeometry(0.05, 0.07, h + 0.3, 6), S.legMat);
         leg.position.set(x, y + (h - 0.3) / 2, -d); leg.castShadow = true; m.add(leg);
       }
-    } else if (f.type === 'arch') {
+    } else if (f.type === 'pipe') m = pipeMesh(f);
+    else if (f.type === 'stairs') m = stairsMesh(f);
+    else if (f.type === 'arch') {
       // The park's entrance: two posts and a banner right across the run.
       m = new T.Group();
       const half = f.half || FLOOR - 1, xl = center(f.d) + f.u - half, xr = center(f.d) + f.u + half, top = Math.max(height(xl, f.d), height(xr, f.d)) + (f.tall || 8);
@@ -982,6 +1002,47 @@
     } else m = wedge(f, (s) => lift(f, s), new T.Color('#f7f9ff'), new T.Color(f.type === 'deck' ? '#c4d3ee' : '#9fb5dc'), new T.Color(LIPS[f.type]));
     m.feat = f;
     return m;
+  }
+  // Quads into one mesh with a colour per corner, for the halfpipe and the stairs.
+  function quadMesh(build) {
+    const pos = [], col = [], c = new T.Color();
+    build((a, b, e, g, cl) => { c.set(cl); for (const p of [a, b, e, a, e, g]) { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b); } });
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    geo.computeVertexNormals();
+    const m = new T.Mesh(geo, S.rampMat); m.castShadow = m.receiveShadow = true;
+    return m;
+  }
+  // The halfpipe's two walls: snow curving up to a blue coping, a flat deck, and the outside wall down to the snow.
+  function pipeMesh(f) {
+    const prof = [], N = 12;
+    for (let i = 0; i <= N; i++) { const t = (i / N) * Math.PI / 2; prof.push([f.R * Math.sin(t), i === N ? '#2fb5ff' : i > N - 3 ? '#e4ecf8' : '#f4f7fd']); }
+    prof.push([f.R + 0.12, '#2fb5ff'], [f.R + f.deck, '#f7f9fe'], [f.R + f.deck + 0.01, '#b9c7e2']);
+    return quadMesh((quad) => {
+      for (let d = f.d; d < f.d + f.len - 0.01; d += 2) {
+        const d2 = Math.min(d + 2, f.d + f.len);
+        for (const side of [-1, 1]) {
+          const P = (a, dd, down) => { const u = side * (f.hw + a), x = center(dd) + u; return [x, height(x, dd) + (down ? -0.4 : pipeWall(f, u, dd)) + 0.01, -dd]; };
+          for (let i = 0; i + 1 < prof.length; i++) {
+            const [a0] = prof[i], [a1, cl] = prof[i + 1], last = i + 2 === prof.length;
+            quad(P(a0, d, 0), P(a0, d2, 0), P(a1, d2, last), P(a1, d, last), cl);
+          }
+        }
+      }
+    });
+  }
+  // The street: a concrete ramp up to a snowy platform, then the steps down, with low walls along the sides.
+  function stairsMesh(f) {
+    return quadMesh((quad) => {
+      const n = 90, P = (s, sd, up) => { const d = f.d + s * f.len, x = center(d) + f.u + sd * f.w; return [x, height(x, d) + (up ? lift(f, s) : -0.3), -d]; };
+      for (let i = 0; i < n; i++) {
+        const s0 = i / n, s1 = (i + 1) / n, stairs = s0 >= STAIR_TOP, edge = stairs && lift(f, s1) < lift(f, s0) - 0.01;
+        quad(P(s0, -1, 1), P(s0, 1, 1), P(s1, 1, 1), P(s1, -1, 1), edge ? '#ffd23f' : stairs ? '#c9ced8' : '#f2f5fb');
+        quad(P(s0, -1, 0), P(s0, -1, 1), P(s1, -1, 1), P(s1, -1, 0), '#8e96a6');
+        quad(P(s0, 1, 1), P(s0, 1, 0), P(s1, 1, 0), P(s1, 1, 1), '#8e96a6');
+      }
+      quad(P(0, 1, 1), P(0, -1, 1), P(0, -1, 0), P(0, 1, 0), '#8e96a6');
+    });
   }
   // A house: walls with windows, doors, lanterns and wooden trim, a snowy roof with icicles and
   // a string of coloured lights, a chimney, and for the church a tower with a clock and a spire.
@@ -1381,9 +1442,9 @@
     get H() { return H; },
     color: 'var(--violet)', title: 'Endless Ski', label: 'Score',
     quietScore: true, // The score goes up every metre, so coins and jumps get their own sounds instead.
-    intro: PARK_ONLY ? 'Start with a ski jump, then ski down an endless 3D terrain park. Grind rails, ride walls, ski over the village rooftops and fly off the mega jump. Land your tricks clean and stay off the fence.'
+    intro: PARK_ONLY ? 'Pick your outfit, start with a ski jump, then ski down an endless 3D terrain park. Grind rails, slide handrails down the street stairs, fly out of the halfpipe, ski over the village rooftops and hit the mega jump. Land your tricks clean and stay off the fence.'
       : 'Ski down an endless 3D valley. Dodge the trees, rocks and reindeer, grab coins, fly off kickers, and survive slaloms, frozen lakes, snowstorms and avalanches.',
-    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause',
+    hint: '<kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to steer, <kbd>Space</kbd> to jump. In the air, hold <kbd>←</kbd> <kbd>→</kbd> to spin, <kbd>W</kbd> to front flip and <kbd>S</kbd> to back flip. <kbd>S</kbd> on a rail spins you round. On a phone, hold a side to steer, swipe up to jump, and swipe up or down in the air to flip. <kbd>P</kbd> to pause. At the start, <kbd>O</kbd> opens the outfit locker',
 
     reset() {
       locked = true; // Keep the screen shape until the game is closed.
@@ -1404,6 +1465,7 @@
       this.coins = 0; this.bonus = 0; this.score = 0; this.t = 0; this.crash = null; this.shake = 0; this.sndT = 0; this.km = 0;
       this.left = this.right = this.touch = false; this.tx = W / 2;
       this.cam = null; this.lean = 0; this.crouch = 0.3; this.mult = 1; this.multT = 0; this.grab = ''; this.grabI = 0; this.grabSide = 1; this.gk = 0;
+      this.pipeAir = null; this.pipeTilt = 0; this.stairFrom = null;
       this.wallR = null; this.line = 0; this.lineT = 0; this.bestLine = 0; this.parkStart = 0;
       this.zoneK = -1; this.gateHit = 0; this.gateStreak = 0; this.gateN = 0; this.gateI = 0; this.ava = null;
       this.storm = 0; this.wind = 0; this.windX = 0; this.fallT = 0; this.ice = 0;
@@ -1509,7 +1571,7 @@
     /* ----- The mountain ahead ----- */
     gen() {
       while (this.nextChunk < this.d + CL * (CHUNKS - 1)) { this.chunks.push(this.makeChunk(this.nextChunk)); this.nextChunk += CL; }
-      while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 25) this.chunks.shift();
+      while (this.chunks.length && this.chunks[0].d0 + CL < this.d - 45) this.chunks.shift(); // Kept a while behind you, so long things (like the street stairs) stay whole.
     },
     makeChunk(d0) {
       const ch = { d0, trees: [], forest: [], rocks: [], coins: [], feats: [], flags: [], gates: [], animals: [], crowd: [], speakers: [], booths: [], fence: [], lights: [], towers: [], snowmen: [], blocks: [] }, lv = level(d0);
@@ -1569,11 +1631,15 @@
       }
     },
     // A rail (with a small kicker to pop onto it) or a box you can ride straight onto.
+    // Shapes: rainbow (arches up), kink (steps down), down (flat then down), wave (up and down), snake (bends left
+    // and right) and tube (a fat round pipe).
     rail(ch, d, u, len, box, shape) {
-      const f = { type: box ? 'box' : 'rail', x: center(d) + u, u, d, len, top: box ? 0.55 : shape === 'rainbow' ? 0.6 : 0.95, w: box ? 0.6 : 0.12, shape };
-      if (!box) this.kicker(ch, d - 4.4, u, 4, 1.3, 1.05, 'kick', true);
+      const top = box ? 0.55 : shape === 'rainbow' ? 0.6 : shape === 'down' ? 1.25 : shape === 'wave' ? 0.85 : shape === 'tube' ? 0.75 : 0.95;
+      const f = { type: box ? 'box' : 'rail', x: center(d) + u, u, d, len, top, w: box ? 0.6 : shape === 'tube' ? 0.3 : 0.12, shape };
+      if (shape === 'snake') f.xAt = (dd) => center(dd) + u + 1.3 * Math.sin(2 * Math.PI * clamp((dd - d) / len, 0, 1));
+      if (!box) this.kicker(ch, d - 4.4, u, 4, 1.3, shape === 'down' ? 1.3 : 1.05, 'kick', true);
       ch.feats.push(f);
-      for (let s = 3; s < len; s += 3) { const dd = d + s, x = center(dd) + u; ch.coins.push({ x, d: dd, y: railTop(f, dd) + 0.9 }); }
+      for (let s = 3; s < len; s += 3) { const dd = d + s; ch.coins.push({ x: railX(f, dd), d: dd, y: railTop(f, dd) + 0.9 }); }
       return f;
     },
     /* ----- The terrain park -----
@@ -1584,7 +1650,7 @@
       while (this.planD < d0 + CL + 80) {
         if (!inPark(this.planD)) { this.planD = PARK_AT + Math.ceil((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY; continue; }
         if (!PARK_ONLY && this.planD > PARK_AT + Math.floor((this.planD - PARK_AT) / PARK_EVERY) * PARK_EVERY + PARK_LEN - 150) { this.planD += 50; continue; }
-        if (!this.order.length) this.order = this.sections++ === 0 ? ['rails', 'village', 'jumps', 'gap', 'walls', 'mega'] : ['rails', 'jumps', 'gap', 'walls', 'village'].sort(() => Math.random() - 0.5).concat('mega');
+        if (!this.order.length) this.order = this.sections++ === 0 ? ['street', 'pipe', 'rails', 'village', 'jumps', 'gap', 'walls', 'mega'] : ['rails', 'jumps', 'gap', 'walls', 'village', 'pipe', 'street'].sort(() => Math.random() - 0.5).concat('mega');
         this.planD += this['sec_' + this.order.shift()](this.planD) + 12;
       }
       const keep = [];
@@ -1611,12 +1677,13 @@
     speakers(d) { this.at(d, (ch) => { for (const side of [-1, 1]) { const x = center(d) + side * (FLOOR + 1.6); ch.speakers.push({ x, d, y: height(x, d), side }); } }); },
     // One random feature in a lane: rails of all shapes, boxes and kickers.
     any(d, u, inner) {
-      const r = Math.random();
+      const r = Math.random(), shape = ['down', 'wave', 'snake', 'tube'][(Math.random() * 4) | 0];
       this.at(d, (ch) => {
-        if (r < 0.2) this.rail(ch, d, u, rand(13, 18), false);
-        else if (r < 0.36) this.rail(ch, d, u, rand(10, 14), true);
-        else if (r < 0.5) this.rail(ch, d, u, rand(14, 18), false, 'rainbow');
-        else if (r < 0.64) this.rail(ch, d, u, rand(15, 19), false, 'kink');
+        if (r < 0.14) this.rail(ch, d, u, rand(13, 18), false);
+        else if (r < 0.26) this.rail(ch, d, u, rand(10, 14), true);
+        else if (r < 0.36) this.rail(ch, d, u, rand(14, 18), false, 'rainbow');
+        else if (r < 0.46) this.rail(ch, d, u, rand(15, 19), false, 'kink');
+        else if (r < 0.64) this.rail(ch, d, u, rand(14, 18), false, shape);
         else if (r < 0.86 || !inner) this.kicker(ch, d, u, 8, 2.2, 2.6, 'kick');
         else this.kicker(ch, d, u, 11, 2.8, 4.2, 'big');
       });
@@ -1657,6 +1724,52 @@
       this.any(d + 30, -14, false); this.any(d + 30, 13.5, false); this.any(d + 75, -14, false); this.any(d + 75, 13.5, false);
       this.hip(d + 110, -1);
       return dd + 20 + this.landDist(9, 3, kd) * 0.5 + 15 - d;
+    },
+    // The halfpipe. Ski up a wall and you fly out over the coping, then drop back in and across to the other wall.
+    sec_pipe(d) {
+      this.sign(d, 'HALFPIPE', { half: 15, tall: 11 }); this.fans(d - 6, d + 8, 1);
+      const pd = d + 18, len = 250, f = { type: 'pipe', d: pd, len, x: center(pd), u: 0, hw: 4.6, R: 5, deck: 2.4, hits: 0 };
+      // Built in 25 m pieces, so each one is there for as long as you need it.
+      for (let sd = pd; sd < pd + len - 0.01; sd += 25) { const s2 = sd; this.at(s2, (ch) => ch.feats.push(Object.assign({}, f, { d: s2, len: Math.min(25, pd + len - s2), whole: f }))); }
+      // Coins up in the air over the copings, left and right in turn, to show the rhythm.
+      for (let k = 0, cd = pd + 30; cd < pd + len - 25; cd += 26, k++) {
+        const c2 = cd, side = k % 2 ? 1 : -1;
+        this.at(c2, (ch) => { for (let j = 0; j < 3; j++) { const dd = c2 + j * 2.5, x = center(dd) + side * (f.hw + f.R - 0.6); ch.coins.push({ x, d: dd, y: height(x, dd) + f.R + 2.2 + j * 0.4 }); } });
+      }
+      this.fans(pd + 40, pd + len - 30, 1); this.speakers(pd + len / 2);
+      this.marks.push({ d: pd + len, fn: () => {
+        if (f.hits < 2) return;
+        const pts = 100 * f.hits * this.mult; this.bonus += pts;
+        this.pop('HALFPIPE: ' + f.hits + ' HITS', '+' + pts, '#ffd75e'); snd.trick();
+      } });
+      return len + 30;
+    },
+    /* The street: a ramp up onto a platform, then stairs down with a handrail on both sides. Slide a handrail down
+       the stairs, or fly off the platform over all the steps. Ledges and tubes along the sides, then a second set. */
+    sec_street(d) {
+      this.sign(d, 'STREET'); this.fans(d - 6, d + 8, 1);
+      let k = d + 18;
+      for (const [len, h, steps] of [[34, 2.2, 7], [40, 2.8, 9]]) {
+        const sd = k, f = { type: 'stairs', follow: true, x: center(sd), u: 0, d: sd, len, w: 3.4, h, steps };
+        this.at(sd, (ch) => {
+          ch.feats.push(f);
+          const a = sd + len * (STAIR_TOP - 0.1), b = sd + len + 2, top = (dd) => height(center(dd), dd) + lift(f, clamp((dd - sd) / len, 0, 1));
+          for (const side of [-1, 1]) {
+            // A handrail: starts low over the platform, so you ride straight onto it, then runs down beside the steps.
+            const u = side * (f.w - 0.5);
+            const r = { type: 'rail', x: center(a) + u, u, d: a, len: b - a, top: 0, w: 0.12, shape: 'hand', entry: 0.75,
+              yAt: (dd) => height(center(dd) + u, dd) + 0.35 + h * clamp(1 - ((dd - sd) / len - STAIR_TOP) / (1 - STAIR_TOP), 0, 1),
+              posts: (dd) => top(dd) };
+            ch.feats.push(r);
+            for (let s2 = 2; s2 < b - a; s2 += 4) ch.coins.push({ x: center(a + s2) + u, d: a + s2, y: r.yAt(a + s2) + 0.9 });
+          }
+        });
+        // Ledges and a tube along both sides of the street.
+        this.at(sd + 4, (ch) => { this.rail(ch, sd + 4, -13, 16, true); this.rail(ch, sd + 4, 13, 16, false, 'tube'); });
+        k += len + this.landDist(6, h, sd) + 30;
+      }
+      this.any(k - 30, -9, true); this.any(k - 30, 9, true);
+      return k - d;
     },
     // Wall rides on both sides in turn, with big kickers and boxes down the middle.
     sec_walls(d) {
@@ -1865,10 +1978,16 @@
         if (d < ch.d0 - 30 || d > ch.d0 + CL + 30) continue;
         for (const f of ch.feats) {
           if (f.type === 'house') { if (d > f.d - 2 && d < f.d + f.len + 2) { const r = roofY(f, x, d); if (r != null && r > roof) roof = r; } }
+          else if (f.type === 'pipe') { if (d >= f.d && d <= f.d + f.len) y += pipeWall(f, x - center(d), d); }
           else if (f.h && d >= f.d && d <= f.d + f.len && Math.abs(x - fxAt(f, d)) < f.w) y += lift(f, (d - f.d) / f.len);
         }
       }
       return Math.max(y, roof);
+    },
+    // The halfpipe you are in (on its bottom or a wall, not near the ends where the walls are low), or null.
+    pipeAt(x, d) {
+      for (const ch of this.chunks) for (const f of ch.feats) if (f.type === 'pipe' && d >= f.d && d < f.d + f.len && d > f.whole.d + 14 && d < f.whole.d + f.whole.len - 14 && Math.abs(x - center(d)) < f.hw + f.R) return f;
+      return null;
     },
     kickerAt(x, d) {
       for (const ch of this.chunks) for (const f of ch.feats) if (f.h && d >= f.d - 0.5 && d <= f.d + f.len + 0.5 && Math.abs(x - fxAt(f, d)) < f.w + 0.3) return f;
@@ -1901,15 +2020,15 @@
 
     /* ----- Moving ----- */
     pop(text, sub, col) {
-      const p = { text, sub, col, life: 1.8, s: 0.3 };
+      const p = { text, sub, col, life: 1.8, s: 0.3, rot: (Math.random() - 0.5) * 0.08 };
       this.pops.push(p);
       tween(p, { s: 1 }, 600, { ease: 'elastic' }); // Trick names spring in instead of just appearing.
     },
     // A burst of snow (or sparks). sz is how big each puff starts, grow how much bigger it gets as it fades.
-    puff(n, x, y, d, speed, up, list = this.parts, sz = 0.35, grow = 1.2) {
+    puff(n, x, y, d, speed, up, list = this.parts, sz = 0.35, grow = 1.2, a = 0.85) {
       for (let i = 0; i < n; i++) {
         const a = rand(0, 6.3), sp = rand(0.3, 1) * speed;
-        list.push({ x, y, d, vx: Math.cos(a) * sp, vy: rand(0.5, 1) * up, vd: this.v * rand(0.4, 0.85) + Math.sin(a) * sp, life: rand(0.4, 1), max: 1, sz: sz * rand(0.7, 1.3), grow });
+        list.push({ x, y, d, vx: Math.cos(a) * sp, vy: rand(0.5, 1) * up, vd: this.v * rand(0.4, 0.85) + Math.sin(a) * sp, life: rand(0.4, 1), max: 1, sz: sz * rand(0.7, 1.3), grow, a });
       }
     },
     hit(what, msg) {
@@ -1993,6 +2112,7 @@
       } else {
         // Speed creeps up the further you go. Climbing the valley side slows you and pushes you back down.
         const inrun = !this.air && this.onInrun(this.x, this.d) && this.y > this.inrunY(this.d) - 0.5;
+        const pipe = this.air ? null : this.pipeAt(this.x, this.d), pu = this.x - center(this.d);
         if (inrun) {
           // In the ski jump's tracks: no steering, and you pick up speed fast.
           this.v += (JUMP_V - this.v) * Math.min(1, dt * 0.9); this.vx = 0;
@@ -2000,8 +2120,16 @@
           // On ice you go a bit faster, and turning hardly bites, so you slide on sideways.
           const want = Math.min(VMAX, cruise(this.d) * (wall > 0 ? 0.75 : 1) * (1 + 0.12 * this.ice) + this.boost);
           this.v += (want - this.v) * Math.min(1, dt * (want > this.v ? 0.5 : 1.2));
-          this.vx += (dir * maxSide + this.wind - this.vx) * Math.min(1, dt * (5 - 4.3 * this.ice));
-          this.vx -= Math.sign(u) * wall * 1.6 * dt;
+          if (pipe) {
+            // In the halfpipe: on a wall you are carried up it (or back down it); on the flat bottom you keep
+            // going across by yourself, and steering changes your way.
+            const a = Math.abs(pu) - pipe.hw;
+            if (a > 0.05) this.vx = Math.sign(this.vx || pu) * Math.max(Math.abs(this.vx), PIPE_V);
+            else if (dir) this.vx += (dir * maxSide - this.vx) * Math.min(1, dt * 3);
+          } else {
+            this.vx += (dir * maxSide + this.wind - this.vx) * Math.min(1, dt * (5 - 4.3 * this.ice));
+            this.vx -= Math.sign(u) * wall * 1.6 * dt;
+          }
         } else {
           // In the air: hold left or right to spin, up (W) to front flip and down (S) to back flip.
           if (dir && this.airT > (this.ollie || this.fromRail ? 0.05 : 0.2)) this.spin += dir * SPIN_RATE * dt;
@@ -2022,20 +2150,34 @@
           this.hit(hs.tower ? 'the church' : 'a house', hs.tower ? 'You skied into the church' : 'You skied into a house');
           this.v = -1.5; this.vx = 0; return; // Bounce back off the wall.
         }
-        if (!this.air) {
-          if (gv < this.vy - G * dt * 1.2) {
+        if (pipe) {
+          // Up at the coping of a halfpipe wall: fly straight up out of the pipe, then drop back in.
+          const side = Math.sign(this.x - center(this.d)), a = Math.abs(this.x - center(this.d)) - pipe.hw;
+          if (a >= pipe.R - 0.25 && this.vx * side > 0) {
+            this.takeoff(true); snd.jump();
+            this.x = center(this.d) + side * (pipe.hw + pipe.R - 0.3); this.y = this.lastG = this.ground(this.x, this.d);
+            this.vy = 9 + Math.min(5, this.v * 0.12); this.vx = -side * 0.8; this.pipeAir = { f: pipe, side };
+            this.puff(12, this.x, this.y, this.d, 2, 2, this.parts, 0.4, 1.8);
+          } else { this.y = g; this.vy = gv; }
+          this.pipeTilt += (side * Math.min(1.25, Math.atan(Math.max(0, a) / Math.sqrt(Math.max(0.01, pipe.R * pipe.R - a * a)))) * (a > 0 ? 1 : 0) - this.pipeTilt) * Math.min(1, dt * 12);
+        } else if (!this.air) {
+          // On the street platform you stay on the ground; the stairs are where you fly.
+          const st = this.kickerAt(this.x, this.d), sticky = st && st.type === 'stairs' && (this.d - st.d) / st.len < STAIR_TOP;
+          if (gv < this.vy - G * dt * 1.2 && !sticky) {
             this.takeoff(false); if (this.vy > 2) snd.jump();
             const k = this.kickerAt(this.x, this.d - this.v * dt);
             if (k && k.type === 'hip') this.vx = -Math.sign(k.u) * HIP_THROW;
             this.gapDeck = k && k.deck ? k.deck : null; // Off the gap jump's kicker: is the deck cleared?
+            this.stairFrom = st && st.type === 'stairs' ? st : null; // Off the street platform: over all the steps?
           }
-          else { this.y = g; if (gv < this.v * 0.5) this.vy = gv; } // Stepping up the side of a kicker is not a launch.
+          else { this.y = g; if (gv < this.v * 0.5 || sticky) this.vy = gv; } // Stepping up the side of a kicker is not a launch.
         }
         if (this.air) { this.airT += dt; this.vy -= G * (this.jumpFlight ? JUMP_GLIDE : 1) * dt; this.y += this.vy * dt; } // Off the ski jump you glide.
+        if (!pipe) this.pipeTilt *= Math.exp(-8 * dt);
         // Come down on a rail, or ride onto a box, and you start sliding. Ride into a rail and it knocks you aside.
         const f = this.railAt(this.x, this.d);
         if (f) {
-          const top = railTop(f, this.d), fromAbove = y0 >= top - (f.type === 'box' ? 0.75 : 0.3);
+          const top = railTop(f, this.d), fromAbove = y0 >= top - (f.entry || (f.type === 'box' ? 0.75 : 0.3));
           if (fromAbove && this.y <= top + 0.6) { this.startGrind(f, top); if (this.crash) return; } // Close enough: you pop onto it.
           else if (!fromAbove && f.type === 'rail' && Math.abs(this.x - railX(f, this.d)) < 0.3 && this.y < top - 0.3 && !this.bump) {
             const side = this.x >= railX(f, this.d) ? 1 : -1;
@@ -2051,7 +2193,7 @@
         if (deck && deck.type === 'deck' && !deck.hit && this.d - deck.d < 1.6 && y0 < height(this.x, this.d) + deck.h - 0.6) {
           deck.hit = true; return this.hit('the gap deck', 'You came up short on the gap jump');
         }
-        if (this.air && this.y <= g) { this.land(g, gv); if (this.crash) return; }
+        if (this.air && this.y <= g && !(this.pipeAir && this.airT < 0.15)) { this.land(g, gv); if (this.crash) return; } // Not straight back down onto the coping you just left.
         this.onRoof = this.air ? null : this.roofAt(this.x, this.d, this.y);
         if (!this.air && !this.grind) this.roofRun();
       }
@@ -2282,14 +2424,19 @@
     land(g, gv) {
       this.y = g; this.vy = Math.min(gv, this.v * 0.5); this.air = false;
       const t = this.airT;
-      if (t > 0.25) { snd.land(); this.puff(16 + Math.min(30, t * 18), this.x, g + 0.1, this.d, 3 + t, 2.5, this.parts, 0.5 + Math.min(0.6, t * 0.3), 2.6); this.shake = Math.max(this.shake, Math.min(0.5, t * 0.3)); }
+      if (t > 0.25) { snd.land(); this.puff(16 + Math.min(30, t * 18), this.x, g + 0.1, this.d, 3 + t, 2.5, this.parts, 0.4 + Math.min(0.4, t * 0.2), 1.9, 0.6); this.shake = Math.max(this.shake, Math.min(0.5, t * 0.3)); }
       // Spins count in half turns: an odd number (180, 540...) and you ride away backwards. Flips must come round to your feet.
       const halves = this.spin / Math.PI, n = Math.round(halves), off = Math.abs(halves - n);
       const flips = this.flip / (Math.PI * 2), nf = Math.round(flips), offF = Math.abs(flips - nf);
       const wasSw = this.airSw, out = this.fromRail && n !== 0;
       this.spin = this.flip = 0; this.airT = 0; this.fromRail = false; this.ollie = false; this.flipTouch = 0; this.jumpCd = 0.08;
+      const pa = this.pipeAir, sf = this.stairFrom; this.pipeAir = null; this.stairFrom = null;
       if (offF > 0.22) return this.hit('the snow head first');
       if (Math.abs(n) % 2) this.sw = !this.sw;
+      // Back into the halfpipe: down the wall and across to the other one.
+      if (pa) { this.vx = -pa.side * PIPE_V * 1.1; if (!((Math.abs(halves) > 0.3 && off > 0.28) || offF > 0.1)) pa.f.whole.hits++; }
+      // Off the street platform and over every step.
+      if (sf && this.d > sf.d + sf.len * 0.94 && t > 0.3) { const pts = (200 + 25 * sf.steps) * this.mult; this.bonus += pts; this.pop(sf.steps + ' STAIR GAP', '+' + pts, '#7fe3ff'); this.lineHit(); }
       this.roofScore(this.roofAt(this.x, this.d, g), g, t);
       // Landed on top of a gap jump's deck: the gap is cleared.
       const dk = this.gapDeck && this.d > this.gapDeck.d + 1 ? this.gapDeck : this.kickerAt(this.x, this.d);
@@ -2310,7 +2457,7 @@
         snd.trick(); this.mult = Math.min(this.mult + 1, 5); this.multT = 7;
         if (Math.abs(n) >= 3 || nf) this.puff(30, this.x, g + 0.2, this.d, 5, 4, this.sparks);
         if (t > 0.5) this.lineHit();
-        if (t > 1.3) { const big = Math.round(t * 200) * this.mult; this.bonus += big; this.pop('BIG AIR ' + t.toFixed(1) + 's', '+' + big, '#ff9d2f'); }
+        if (t > 1.3 && !pa) { const big = Math.round(t * 200) * this.mult; this.bonus += big; this.pop('BIG AIR ' + t.toFixed(1) + 's', '+' + big, '#ff9d2f'); }
       }
       // The ski jump: points for every metre, and more past the K point and the hill size.
       if (this.jumpFlight) {
@@ -2545,7 +2692,7 @@
       const swap = this.swapT / SWAP_T;
       sk.root.rotation.set(0, -heading, 0);
       sk.root.position.y += Math.sin(swap * Math.PI) * 0.35;
-      sk.flip.rotation.set(-this.flip, 0, 0);
+      sk.flip.rotation.set(-this.flip, 0, this.pipeTilt); // On a halfpipe wall you stand square to it.
       sk.turn.rotation.set(0, -this.spin - (this.sw ? Math.PI : 0) + swap * Math.PI - (this.grind && this.grindSide ? Math.PI / 2 : 0), 0);
       sk.lean.rotation.set(0, 0, -this.lean * 0.45);
       if (this.wallR) sk.lean.rotation.z = Math.sign(this.wallR.f.u) * 1.1 * Math.sin(Math.PI * Math.min(this.wallR.t / 0.85, 1));
@@ -2802,14 +2949,25 @@
         ctx.globalAlpha = 1;
         if (this.boostT > 0) text('BOOST!', W / 2, H - 82, 11, '#7fe3ff', 'center');
       }
-      if (this.air && this.airT > 0.35 && !this.crash) text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
+      if (this.air && this.airT > 0.35 && !this.crash) {
+        // While you are up: air time, how far round you have spun or flipped so far, and your grab.
+        const sp = Math.round(Math.abs(this.spin) / Math.PI) * 180, fl = Math.round(Math.abs(this.flip) / (Math.PI * 2));
+        const live = [fl ? flipName(Math.sign(this.flip) * fl) : '', sp ? sp : '', this.gk > 0.6 ? this.grab : ''].filter(Boolean).join(' ');
+        text('AIR ' + this.airT.toFixed(1) + 's', W / 2, H - 100, 10, '#ffffff', 'center');
+        if (live) text(live, W / 2, H - 116, 9, '#ffd75e', 'center');
+      }
       if (this.grind) text(this.grindName + '  ' + this.grindT.toFixed(1) + 's', W / 2, H - 100, 11, '#7fe3ff', 'center');
+      // Trick names pop up on a dark tag with a stripe in the trick's colour, and lean a little.
       this.pops.slice(-2).forEach((p, i) => {
         ctx.globalAlpha = clamp(p.life * 2, 0, 1);
-        const y = H * 0.12 + i * 40 - (1.8 - p.life) * 10;
-        ctx.save(); ctx.translate(W / 2, y + 8); ctx.scale(p.s, p.s);
-        text(p.text, 0, -8, 14, '#ffffff', 'center');
-        text(p.sub, 0, 12, 9, p.col, 'center');
+        const y = H * 0.12 + i * 46 - (1.8 - p.life) * 10, size = p.text.length > 22 ? 11 : 14;
+        ctx.save(); ctx.translate(W / 2, y + 8); ctx.scale(p.s, p.s); ctx.rotate(p.rot);
+        ctx.font = font(size); const w = Math.min(W - 20, ctx.measureText(p.text).width + 30);
+        ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-w / 2, -15, w, 42, 10); else ctx.rect(-w / 2, -15, w, 42);
+        ctx.fillStyle = 'rgba(14,18,36,0.55)'; ctx.fill();
+        ctx.fillStyle = p.col; ctx.fillRect(-w / 2 + 8, 24, w - 16, 3);
+        text(p.text, 0, -8, size, '#ffffff', 'center');
+        text(p.sub, 0, 11, 9, p.col, 'center');
         ctx.restore();
         ctx.globalAlpha = 1;
       });
