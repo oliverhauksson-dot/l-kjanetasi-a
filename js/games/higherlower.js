@@ -26,13 +26,17 @@
     text.split(/\r?\n/).forEach((raw, i) => {
       const line = raw.trim(), n = i + 1;
       if (!line || line.startsWith('#')) return;
-      const head = line.match(/^(TITLE|TOPIC|UNIT|GAP)\s*:\s*(.*)$/i);
+      const head = line.match(/^(TITLE|TOPIC|UNIT|GAP|POPULAR)\s*:\s*(.*)$/i);
       if (head) {
         const kind = head[1].toUpperCase(), value = head[2].trim();
         if (kind === 'TITLE') title = value;
-        else if (kind === 'TOPIC') { const [emoji, name] = splitEmoji(value); topic = { emoji: emoji || '❓', name: name || 'Quiz', unit: '', gap: 0, cards: [] }; topics.push(topic); }
+        else if (kind === 'TOPIC') { const [emoji, name] = splitEmoji(value); topic = { emoji: emoji || '❓', name: name || 'Quiz', unit: '', gap: 0, popular: false, cards: [] }; topics.push(topic); }
         else if (!topic) skipped.push([n, raw, kind + ' must come after a TOPIC line']);
         else if (kind === 'UNIT') topic.unit = value;
+        else if (kind === 'POPULAR') {
+          if (/^(yes|no)$/i.test(value)) topic.popular = /^yes$/i.test(value);
+          else skipped.push([n, raw, 'POPULAR must be yes or no']);
+        }
         else if (toNumber(value) > 0) topic.gap = toNumber(value);
         else skipped.push([n, raw, 'GAP needs a number, like GAP: 8']);
         return;
@@ -50,7 +54,7 @@
       if (!Number.isFinite(value)) { skipped.push([n, raw, 'the number after = is not a number']); return; }
       // Words in brackets at the end, like "L. Messi (FC Barcelona)", show as a small line under the name.
       const m = name.match(/^(.+?)\s*\(([^()]*)\)$/);
-      topic.cards.push({ name, short: m ? m[1] : name, note: m ? m[2] : '', value, emoji: emoji || topic.emoji, photo, credit, topic });
+      topic.cards.push({ rank: topic.cards.length, name, short: m ? m[1] : name, note: m ? m[2] : '', value, emoji: emoji || topic.emoji, photo, credit, topic });
     });
     const usable = topics.filter((t) => t.cards.length >= 2);
     topics.filter((t) => t.cards.length < 2).forEach((t) => skipped.push([0, 'TOPIC: ' + t.name, 'a topic needs at least 2 cards']));
@@ -126,12 +130,27 @@
     },
     // Takes a card from the topic to go next to not. Null if there is none left.
     // It prefers a card with a different number, and if the topic has a GAP, the number is at most GAP away from not's.
+    // With POPULAR: yes, cards near the top of the topic are much more likely to be picked.
     draw(t, not) {
       const d = this.deck(t);
+      if (t.popular) return this.drawPopular(t, d, not);
       if (!not) return d.pop() || null;
       const fits = (c) => c !== not && c.name !== not.name && (!t.gap || Math.abs(c.value - not.value) <= t.gap);
       let i = d.findIndex((c) => fits(c) && c.value !== not.value);
       if (i < 0) i = d.findIndex(fits);
+      return i < 0 ? null : d.splice(i, 1)[0];
+    },
+    drawPopular(t, d, not) {
+      const fits = (c) => !not || (c !== not && c.name !== not.name && (!t.gap || Math.abs(c.value - not.value) <= t.gap));
+      // A card's weight is (its place in the list + 20) to the power -1.5, so the first 100 cards of a big list come up about 2 times in 3.
+      // In a small topic (20 cards) the first card is only about 3 times as likely as the last.
+      const pick = (ok) => {
+        let best = -1, total = 0;
+        d.forEach((c, i) => { if (!ok(c)) return; const w = Math.pow(c.rank + 20, -1.5); total += w; if (Math.random() * total < w) best = i; });
+        return best;
+      };
+      let i = pick((c) => fits(c) && (!not || c.value !== not.value));
+      if (i < 0) i = pick(fits);
       return i < 0 ? null : d.splice(i, 1)[0];
     },
     pickTopic() {

@@ -31,7 +31,7 @@ Why `serve.py` and not a plain web server? The pages tell the browser to always 
 All the Higher or Lower cards are in one file: `higher-or-lower-questions.txt` (at the top of the repository). Change it every week, or whenever you like.
 
 1. On GitHub, open `higher-or-lower-questions.txt` and click the pencil (Edit).
-2. Change the cards. Each card is one line, like `Iceland = 390 000`. `GAP: 8` under a topic means the next number is at most 8 higher or lower. A new topic starts with a `TOPIC:` line, and `UNIT:` is the word after the numbers (like `people` or `km/h`). `TITLE:` is the quiz name shown at the top of the game. A card can have a photo: add ` | File:<Wikimedia Commons file name> | Photo: <author>, <licence>` after the number. Only use free photos, like the ones on Wikimedia Commons. The notes at the top of the file explain it all.
+2. Change the cards. Each card is one line, like `Iceland = 390 000`. `GAP: 8` under a topic means the next number is at most 8 higher or lower. A new topic starts with a `TOPIC:` line, and `UNIT:` is the word after the numbers (like `people` or `km/h`). `TITLE:` is the quiz name shown at the top of the game. `POPULAR: yes` under a topic makes the cards near the top of that topic come up much more often, so put the most famous ones first. A card can have a photo: add ` | File:<Wikimedia Commons file name> | Photo: <author>, <licence>` after the number. Only use free photos, like the ones on Wikimedia Commons. The notes at the top of the file explain it all.
 3. Click "Commit changes". The new questions are live in a minute or two.
 
 To try your changes first, run `python3 serve.py` and open Higher or Lower. On your own computer, any line the game could not read is listed under the cards, with the reason.
