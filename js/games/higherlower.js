@@ -37,15 +37,20 @@
         else skipped.push([n, raw, 'GAP needs a number, like GAP: 8']);
         return;
       }
-      const eq = line.lastIndexOf('=');
+      // After the number, optional parts split by | : a photo and the photo's credit.
+      // The photo is a Wikimedia Commons file name (File:Lionel Messi 20180626.jpg) or a link that starts with https://
+      const [body, photoPart = '', credit = ''] = line.split('|').map((x) => x.trim());
+      const photo = /^file:/i.test(photoPart) ? photoPart.replace(/^file:\s*/i, 'File:') : /^https:\/\/\S+$/.test(photoPart) ? photoPart : '';
+      if (photoPart && !photo) skipped.push([n, raw, 'the photo must be File:name.jpg from Wikimedia Commons, or a link that starts with https:// (the card is still used, without the photo)']);
+      const eq = body.lastIndexOf('=');
       if (eq < 0) { skipped.push([n, raw, 'no = sign']); return; }
       if (!topic) { skipped.push([n, raw, 'this card comes before the first TOPIC line']); return; }
-      const value = toNumber(line.slice(eq + 1)), [emoji, name] = splitEmoji(line.slice(0, eq));
+      const value = toNumber(body.slice(eq + 1)), [emoji, name] = splitEmoji(body.slice(0, eq));
       if (!name) { skipped.push([n, raw, 'no name before the = sign']); return; }
       if (!Number.isFinite(value)) { skipped.push([n, raw, 'the number after = is not a number']); return; }
       // Words in brackets at the end, like "L. Messi (FC Barcelona)", show as a small line under the name.
       const m = name.match(/^(.+?)\s*\(([^()]*)\)$/);
-      topic.cards.push({ name, short: m ? m[1] : name, note: m ? m[2] : '', value, emoji: emoji || topic.emoji, topic });
+      topic.cards.push({ name, short: m ? m[1] : name, note: m ? m[2] : '', value, emoji: emoji || topic.emoji, photo, credit, topic });
     });
     const usable = topics.filter((t) => t.cards.length >= 2);
     topics.filter((t) => t.cards.length < 2).forEach((t) => skipped.push([0, 'TOPIC: ' + t.name, 'a topic needs at least 2 cards']));
@@ -63,6 +68,15 @@
     })
     .catch(() => { quizError = 'The questions could not load. Check your connection and try again.'; });
 
+  // A Commons file name becomes a 250 pixel wide picture, and its credit links to the file's page on Commons.
+  const commons = (photo) => encodeURIComponent(photo.slice(5).trim().replace(/ /g, '_'));
+  const photoUrl = (photo) => (photo.startsWith('File:') ? 'https://commons.wikimedia.org/wiki/Special:FilePath/' + commons(photo) + '?width=250' : photo);
+  // A Wikimedia Commons photo link (upload.wikimedia.org/.../File.jpg/250px-File.jpg) also points its credit at the photo's page there.
+  function sourcePage(url) {
+    if (url.startsWith('File:')) return 'https://commons.wikimedia.org/wiki/File:' + commons(url);
+    const m = url.match(/^https:\/\/(?:upload|thumb)\.wikimedia\.org\/wikipedia\/commons\/(?:thumb\/)?[0-9a-f]\/[0-9a-f]{2}\/([^/?]+)/);
+    return m ? 'https://commons.wikimedia.org/wiki/File:' + m[1] : url;
+  }
   const fmt = (v) => (Math.abs(v) >= 10000 ? v.toLocaleString('en', { maximumFractionDigits: 2 }) : String(Math.round(v * 100) / 100));
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
@@ -140,11 +154,23 @@
       b.style.setProperty('--len', Math.max(fmt(c.value).length, 4)); // Long numbers get a smaller font, so they fit the card.
       const name = el('b', 'hln', c.short);
       if (c.note) name.append(el('small', '', c.note));
-      b.append(el('span', 'hle', c.emoji), name);
+      b.append(c.photo ? this.photo(c) : el('span', 'hle', c.emoji), name);
       const num = el('span', 'hlv', shown ? fmt(c.value) : '?');
       b.append(num, el('span', 'hlu', c.topic.unit || ' '));
       b.num = num;
+      if (c.photo && c.credit) {
+        // The photographer and licence, as free photos (like Wikimedia Commons) ask. It links to the photo's own page.
+        const a = el('a', 'hlcred', c.credit); a.href = sourcePage(c.photo); a.target = '_blank'; a.rel = 'noopener';
+        b.append(a);
+      }
       return b;
+    },
+    // The card's photo. If it can't load, the card shows the topic's emoji instead (and drops the photo credit).
+    photo(c) {
+      const img = el('img', 'hlimg'); img.alt = ''; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+      img.onerror = () => { img.closest('.hlc')?.querySelector('.hlcred')?.remove(); img.replaceWith(el('span', 'hle', c.emoji)); };
+      img.src = photoUrl(c.photo);
+      return img;
     },
     // A new topic: both cards change.
     newPair(animated) {
