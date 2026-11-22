@@ -1,6 +1,6 @@
 # jurtu.com
 
-> jurtu.com (https://jurtu.com) is a free website with 17 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
+> jurtu.com (https://jurtu.com) is a free website with 18 retro-style games that run in the browser on phones, tablets and computers. No download, no account and no in-game purchases. Best scores are saved only in the player's own browser.
 
 ## Games
 
@@ -21,10 +21,11 @@
 - [Stack Tower](https://jurtu.com/games/stack.html): Stack Tower is a one-button stacking game. A block slides back and forth above the tower; tap to drop it. The part that hangs over the edge is cut off, so the tower gets narrower. A perfect drop keeps the full width, and three perfects in a row make it wider again. Missing the tower ends the game.
 - [Minigolf](https://jurtu.com/games/minigolf.html): Minigolf is a 3D mini golf game with 9 holes (par 26), played against 3 computer bots with a camera behind the ball. Pull back and let go to putt. The holes have ramps, a pond jump, a windmill, pinball bumpers, a drawbridge, a loop-the-loop, an ice rink and a volcano, and most have a risky shortcut. Water or falling off the course costs a shot. The score is the total number of shots, so lower is better. A hole stops at 7 shots. In December the course has a Christmas look.
 - [Word Guesser](https://jurtu.com/games/words.html): Word Guesser is a word puzzle. Guess the secret 5-letter word in 6 tries; green tiles are the right letter in the right place, gold tiles are in the word but elsewhere. Solve it to get the next word. A word is worth 60 points in 1 guess down to 10 in 6, and missing a word ends the game.
+- [Higher or Lower](https://jurtu.com/games/higherlower.html): Higher or Lower is a quiz. Two cards from the same topic, like the population of two countries or the top speed of two animals: guess if the hidden number is higher or lower than the shown one. One wrong guess ends the run; the score is how many you got right in a row. The questions change every week.
 
 ## Play a game directly
 
-Open `https://jurtu.com/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, cube, chase, ski, tower, fishing, stack, minigolf, words. (Sleigh Ride uses the id flappy.)
+Open `https://jurtu.com/?play=<game>` to start a game right away, where `<game>` is one of: snake, runner, breakout, memory, pong, snapgrid, invaders, flappy, muncher, cube, chase, ski, tower, fishing, stack, minigolf, words, higherlower. (Sleigh Ride uses the id flappy.)
 
 ## Daily Challenge
 
