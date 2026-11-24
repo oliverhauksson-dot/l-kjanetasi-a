@@ -51,5 +51,6 @@ Plain HTML, CSS and JavaScript. There is no build step: GitHub Pages serves thes
 - `js/season.js`, `css/xmas.css`: the Christmas decorations (northern lights, snow, fairy lights, Santa's sleigh, tree, a live countdown to Christmas Eve, snowy hills). They turn on by themselves from 14 November to 6 January. Add `?xmas` to the address to see them on any other day.
 - `fonts/`: the two fonts, served from this site.
 - `sw.js`, `manifest.webmanifest`, `icons/`: what makes "Add to home screen" and offline play work.
+- `version.json`: changes every time the site is published. A page that was left open checks it when someone comes back, and reloads to the new version (only on the front page).
 - `leaderboard/`: the small Cloudflare server that keeps the leaderboard scores. See `leaderboard/README.md` for how to set it up.
 - `games/*.html`, `about.html`, `privacy.html`: the "how to play" and info pages, styled by `page.css`.
