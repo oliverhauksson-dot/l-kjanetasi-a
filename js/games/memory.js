@@ -4,7 +4,7 @@
 
   const SYMBOLS = [['★', '#ffb347'], ['♥', '#ff6b9a'], ['◆', '#5ce1e6'], ['●', '#b8e65c'], ['▲', '#a78bfa'], ['■', '#f4ecdc'], ['♣', '#7ee0a1'], ['☾', '#ffd56b']];
   const memory = {
-    dom: true, color: 'var(--violet)', title: 'Memory', label: 'Moves', lowerWins: true,
+    dom: true, square: true, color: 'var(--violet)', title: 'Memory', label: 'Moves', lowerWins: true,
     intro: 'Flip two cards per move. Matching pairs stay up. Clear all 8 pairs in as few moves as you can.',
     hint: 'Click or tap a card, or use <kbd>Tab</kbd> and <kbd>Enter</kbd>',
     reset() {

@@ -49,6 +49,7 @@
       '<div class="row"><button class="yes" type="button">ACCEPT</button><button class="no" type="button">ONLY NECESSARY</button></div></div>';
     document.body.appendChild(pop);
     pop.querySelector(".yes").focus({ preventScroll: true });
+    document.dispatchEvent(new CustomEvent("pa-cookies-open")); // js/arcade.js pauses a game that already started under this box.
 
     pop.addEventListener("click", function (e) {
       var yes = e.target.closest(".yes"), no = e.target.closest(".no");

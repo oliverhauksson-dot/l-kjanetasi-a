@@ -1,6 +1,6 @@
 /* Snake. Loaded on demand by js/arcade.js the first time the game is opened. */
 (() => {
-  const { ctx, C, cached, setScore, over, tween, pop } = Arcade;
+  const { ctx, C, cached, setScore, over, tween, pop, font } = Arcade;
 
   const N = 20;
   const snake = {
@@ -10,6 +10,7 @@
     reset() {
       this.body = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }];
       this.dir = { x: 1, y: 0 }; this.queue = []; this.score = 0; this.acc = 0; this.step = 0.13; this.t = 0;
+      this.waiting = true; // The snake stays still until the first key, swipe or tap, so it can't hit the wall before you've looked.
       this.food = this.place();
       this.wave = { p: 9 }; this.grow = { s: 1 }; // Looks only: a bulge that runs down the body after eating, and the new fruit growing in.
     },
@@ -20,6 +21,7 @@
       return p;
     },
     turn(dx, dy) {
+      this.waiting = false;
       const last = this.queue.length ? this.queue[this.queue.length - 1] : this.dir;
       if ((last.x === -dx && last.y === -dy) || (last.x === dx && last.y === dy)) return;
       if (this.queue.length < 3) this.queue.push({ x: dx, y: dy });
@@ -28,13 +30,17 @@
       if (!down) return;
       const m = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0] }[e.code];
       if (m) this.turn(m[0], m[1]);
+      else if (e.code === 'Space' || e.code === 'Enter') this.waiting = false;
     },
+    tap() { this.waiting = false; },
     swipe(dx, dy) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) { this.waiting = false; return; }
       if (Math.abs(dx) > Math.abs(dy)) this.turn(Math.sign(dx), 0); else this.turn(0, Math.sign(dy));
     },
     update(dt) {
-      this.t += dt; this.acc += dt;
+      this.t += dt;
+      if (this.waiting) return;
+      this.acc += dt;
       while (this.acc >= this.step) {
         this.acc -= this.step;
         if (this.queue.length) this.dir = this.queue.shift();
@@ -74,6 +80,11 @@
       const cx = h.x * s + s / 2 + d.x * 4, cy = h.y * s + s / 2 + d.y * 4;
       ctx.fillRect(cx - d.y * 5 - 2, cy - d.x * 5 - 2, 4, 4);
       ctx.fillRect(cx + d.y * 5 - 2, cy + d.x * 5 - 2, 4, 4);
+      if (this.waiting && Math.sin(this.t * 4) > -0.6) {
+        ctx.save(); ctx.font = font(12); ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = C.bg; ctx.fillStyle = C.ink;
+        const msg = matchMedia('(pointer: coarse)').matches ? 'SWIPE TO START' : 'PRESS AN ARROW TO START';
+        ctx.strokeText(msg, this.W / 2, this.H * 0.7); ctx.fillText(msg, this.W / 2, this.H * 0.7); ctx.restore();
+      }
     },
   };
 

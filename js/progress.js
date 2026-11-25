@@ -26,7 +26,8 @@
 
   /* ---------- Badges ---------- */
   // [id, emoji, name, how to get it, test]. Add a new badge by adding a line here.
-  const tried = () => Object.keys(P.played).length;
+  // Only games that are still on the site count (old saves can have Blackjack, which was taken off).
+  const tried = () => cards().filter((c) => P.played[c.dataset.game]).length;
   const BADGES = [
     ['first', '🎮', 'First game', 'Finish any game.', () => P.total >= 1],
     ['explorer', '🧭', 'Explorer', 'Play 5 different games.', () => tried() >= 5],
