@@ -2,14 +2,15 @@
 (() => {
   const { ctx, C, cached, setScore, over, tween, pop, font } = Arcade;
 
-  const N = 20;
+  const N = 15;
   const snake = {
-    W: 440, H: 440, color: 'var(--lime)', title: 'Snake', label: 'Score',
+    W: 420, H: 420, color: 'var(--lime)', title: 'Snake', label: 'Score',
     intro: 'Eat the fruit to grow. Hitting a wall or yourself ends the run.',
     hint: '<kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> or <kbd>WASD</kbd> to steer, swipe on a phone, <kbd>P</kbd> to pause',
     reset() {
-      this.body = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }];
-      this.dir = { x: 1, y: 0 }; this.queue = []; this.score = 0; this.acc = 0; this.step = 0.13; this.t = 0;
+      this.body = [{ x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 }]; // The middle of the 15x15 board.
+      this.dir = { x: 1, y: 0 }; this.queue = []; this.score = 0; this.acc = 0; this.step = 0.16; this.t = 0;
+      this.worn = new Float32Array(N * N); // Dirt the snake has worn into the grass, 0 to 1.
       this.waiting = true; // The snake stays still until the first key, swipe or tap, so it can't hit the wall before you've looked.
       this.food = this.place();
       this.wave = { p: 9 }; this.grow = { s: 1 }; // Looks only: a bulge that runs down the body after eating, and the new fruit growing in.
@@ -40,6 +41,7 @@
     update(dt) {
       this.t += dt;
       if (this.waiting) return;
+      for (let i = 0; i < this.worn.length; i++) if (this.worn[i] > 0) this.worn[i] = Math.max(0, this.worn[i] - dt * 0.12);
       this.acc += dt;
       while (this.acc >= this.step) {
         this.acc -= this.step;
@@ -48,13 +50,13 @@
         const eat = n.x === this.food.x && n.y === this.food.y;
         const hitsSelf = this.body.some((s, i) => (eat || i < this.body.length - 1) && s.x === n.x && s.y === n.y);
         if (n.x < 0 || n.y < 0 || n.x >= N || n.y >= N || hitsSelf) return over(this.score);
-        this.body.unshift(n);
+        this.body.unshift(n); this.worn[n.y * N + n.x] = 1;
         if (eat) {
           this.score++; setScore(this.score);
           pop(n.x * this.W / N + this.W / N / 2, n.y * this.W / N, '+1', C.amber);
           this.wave = { p: 0 }; tween(this.wave, { p: 1 }, 420, { ease: 'linear' });
           if (this.body.length >= N * N) return over(this.score, 'You filled the whole board!');
-          this.food = this.place(); this.step = Math.max(0.06, this.step - 0.003);
+          this.food = this.place(); this.step = Math.max(0.08, this.step - 0.003);
           this.grow = { s: 0 }; tween(this.grow, { s: 1 }, 320, { ease: 'back' });
         } else this.body.pop();
       }
@@ -62,18 +64,46 @@
     draw() {
       const s = this.W / N;
       ctx.drawImage(cached('snake-board', this.W, this.H, (g) => {
-        g.fillStyle = C.bg; g.fillRect(0, 0, this.W, this.H);
-        g.fillStyle = '#151024';
-        for (let y = 0; y < N; y++) for (let x = (y % 2); x < N; x += 2) g.fillRect(x * s, y * s, s, s);
+        // Grass: two greens in a checkerboard, tufts of darker and lighter blades, and a few bare dirt spots.
+        let seed = 7;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+          g.fillStyle = (x + y) % 2 ? '#4f9e2f' : '#5bad36'; g.fillRect(x * s, y * s, s, s);
+        }
+        for (let i = 0; i < 14; i++) {
+          const x = rnd() * this.W, y = rnd() * this.H, r = 5 + rnd() * 7;
+          g.fillStyle = 'rgba(122, 86, 48, 0.55)';
+          g.beginPath(); g.ellipse(x, y, r * 1.4, r, rnd() * Math.PI, 0, Math.PI * 2); g.fill();
+          g.fillStyle = 'rgba(92, 62, 34, 0.6)';
+          g.beginPath(); g.ellipse(x + 2, y + 1, r * 0.6, r * 0.4, 0, 0, Math.PI * 2); g.fill();
+        }
+        for (let i = 0; i < 520; i++) {
+          const x = rnd() * this.W, y = rnd() * this.H, h = 3 + rnd() * 5, lean = (rnd() - 0.5) * 3;
+          g.strokeStyle = rnd() < 0.55 ? '#3e8524' : '#7cc94a'; g.lineWidth = 1.2;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + lean, y - h); g.stroke();
+        }
       }), 0, 0, this.W, this.H);
-      const pulse = 2 + Math.sin(this.t * 8) * 1.5, fs = (s - 10 + pulse) * this.grow.s;
-      ctx.fillStyle = C.amber; ctx.fillRect(this.food.x * s + s / 2 - fs / 2, this.food.y * s + s / 2 - fs / 2, fs, fs);
-      if (this.grow.s > 0.6) { ctx.fillStyle = '#7a3b8a'; ctx.fillRect(this.food.x * s + s / 2 - 1, this.food.y * s + 1, 3, 4); }
+      // Brown dirt where the snake has been, fading back to grass over about 8 seconds.
+      for (let i = 0; i < this.worn.length; i++) {
+        const w = this.worn[i]; if (!w) continue;
+        ctx.fillStyle = `rgba(140, 92, 46, ${(w * 0.85).toFixed(3)})`;
+        ctx.fillRect((i % N) * s, Math.floor(i / N) * s, s, s);
+      }
+      // A red apple that pulses gently and grows in when it appears.
+      const pulse = 2 + Math.sin(this.t * 8) * 1.5, g = this.grow.s, fx = this.food.x * s + s / 2, fy = this.food.y * s + s / 2;
+      ctx.fillStyle = '#e8343b'; ctx.beginPath(); ctx.arc(fx, fy + 1, Math.max(0, (s / 2 - 6 + pulse / 2) * g), 0, Math.PI * 2); ctx.fill();
+      if (g > 0.6) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'; ctx.fillRect(fx - 6, fy - 4, 3, 3);
+        ctx.fillStyle = '#6b3d1e'; ctx.fillRect(fx - 1, fy - s / 2 + 3, 3, 6);
+        ctx.fillStyle = '#3e8524'; ctx.fillRect(fx + 2, fy - s / 2 + 4, 5, 3);
+      }
       const front = this.wave.p * this.body.length;
       this.body.forEach((p, i) => {
         const bulge = 3 * Math.max(0, 1 - Math.abs(i - front) / 1.5);
-        ctx.fillStyle = i === 0 ? '#e3ff9e' : (i % 2 ? C.lime : '#a3d24c');
-        ctx.fillRect(p.x * s + 1 - bulge, p.y * s + 1 - bulge, s - 2 + bulge * 2, s - 2 + bulge * 2);
+        // A dark outline so the snake stands out on the green grass.
+        ctx.fillStyle = '#1f3d10'; ctx.fillRect(p.x * s + 1 - bulge, p.y * s + 1 - bulge, s - 2 + bulge * 2, s - 2 + bulge * 2);
+        ctx.fillStyle = i === 0 ? '#f2ff9e' : (i % 2 ? '#e3f26b' : '#c9e04a');
+        ctx.fillRect(p.x * s + 3 - bulge, p.y * s + 3 - bulge, s - 6 + bulge * 2, s - 6 + bulge * 2);
       });
       const h = this.body[0], d = this.dir;
       ctx.fillStyle = C.bg;
