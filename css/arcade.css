@@ -143,6 +143,15 @@ header.marquee { position: relative; display: grid; gap: 12px; text-align: left;
   padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 .game.full .hud { max-width: 860px; width: 100%; margin: 0 auto; }
+/* A phone turned sideways: the buttons, name and scores stay on one line, so the game gets the height. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .game.full .hud { flex-wrap: nowrap; gap: 8px 12px; }
+  .game.full .hud .back, .game.full .hud .sound { padding: 8px 10px; font-size: 9px; white-space: nowrap; }
+  .game.full .hud h2 { font-size: 11px; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .game.full .hud .stat { flex: none; }
+  .game.full .hud .stat span { font-size: 9px; letter-spacing: 0; white-space: nowrap; }
+  .game.full .hint { display: none; } /* The how-to-play line would take half the height. It is still on the game's own page. */
+}
 html.lock, html.lock body { overflow: hidden; }
 .hud h2 { font: 14px/1.3 var(--display); margin: 0; color: var(--c); flex: 1 1 auto; }
 .stat { display: grid; gap: 4px; text-align: right; }
@@ -268,6 +277,18 @@ html.lock, html.lock body { overflow: hidden; }
 }
 .hlb.hi { background: var(--lime); }
 .hlb.lo { background: var(--pink); }
+/* A phone turned sideways (or any short window): smaller cards, so the cards and both buttons fit without scrolling. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hl { min-height: 0; padding: 10px 12px; gap: 8px; --hlgap: 10px; }
+  .hltitle { display: none; }
+  .hlc { min-height: 0; padding: 6px; gap: 2px; }
+  .hle { font-size: 26px; }
+  .hlimg { width: 52px; height: 52px; }
+  .hln { min-height: 0; font-size: 13px; line-height: 1.2; }
+  .hlu { font-size: 11px; }
+  .hlask { font-size: 13px; }
+  .hlb { padding: 12px 8px; }
+}
 .hlb:active, .hlb.picked { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0, 0, 0, .45); }
 .hlb.picked { outline: 3px solid var(--ink); outline-offset: 2px; }
 .hlb:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }

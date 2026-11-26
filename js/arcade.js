@@ -3,7 +3,8 @@
    A game file calls Arcade.register(id, game) with an object that has reset() and either
    update(dt) + draw() for canvas games, or dom: true for games built from HTML (Memory).
    Optional input hooks: key(e, down), press(down), point({x, y}), swipe(dx, dy), tap(), stop().
-   Optional flags: lowerWins (fewer is better), quietScore (no sound when the score goes up), typing (P doesn't pause). */
+   Optional flags: lowerWins (fewer is better), quietScore (no sound when the score goes up), typing (P doesn't pause),
+   square (a dom game whose board is square, so it shrinks to fit a short full screen). */
 (() => {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
@@ -599,8 +600,7 @@
     $('#blabel').textContent = game.lowerWins ? 'Fewest' : 'Best';
     bestEl.textContent = fmtBest(gid); $('#hint').innerHTML = game.hint;
     $('#mem').hidden = !game.dom; cv.hidden = !!game.dom;
-    if (game.dom) stage.style.maxWidth = '520px';
-    else {
+    if (!game.dom) {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       cv.width = game.W * dpr; cv.height = game.H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -611,7 +611,10 @@
     if (!game.dom) game.draw();
     window.scrollTo(0, 0);
     emit('open', { id: gid, daily, title: game.title, label: game.label, lowerWins: !!game.lowerWins });
-    play(); // Picking a game starts it right away, with no extra Start button.
+    // Picking a game starts it right away, with no extra Start button. Only if the cookie box is still open (a first visit
+    // straight into a game) the game waits behind a Play button, so it doesn't run while the box covers it.
+    if (!game.dom && document.getElementById('cookie-pop')) showOverlay('Ready?', 'Answer the cookie question first, then tap Play.', 'Play', play);
+    else play();
   }
   function stopGame() {
     running = false; cancelAnimationFrame(raf); phase = 'idle';
@@ -673,13 +676,22 @@
   const isFull = () => screen.classList.contains('full');
   function fit() {
     // In full screen a canvas game grows as big as it can while keeping its shape.
-    if (!game || game.dom) return;
+    if (!game) return;
+    // The height left for the game in full screen, after the buttons and score at the top.
+    const room = () => {
+      const cs = getComputedStyle(screen), gap = parseFloat(cs.rowGap) || 0;
+      let h = screen.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 12; // 12 = the frame around the stage
+      [...screen.children].forEach((el) => { if (el !== stage && !el.hidden) h -= el.offsetHeight + gap; });
+      return h;
+    };
+    if (game.dom) {
+      // A square board (Memory) shrinks to fit a short screen, like a phone turned sideways, so no row is cut off.
+      stage.style.maxWidth = (game.square && isFull() ? Math.max(220, Math.min(520, Math.floor(room()))) : 520) + 'px';
+      return;
+    }
     let scale = 1;
     if (isFull()) {
-      const cs = getComputedStyle(screen), gap = parseFloat(cs.rowGap) || 0;
-      let room = screen.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 12; // 12 = the frame around the stage
-      [...screen.children].forEach((el) => { if (el !== stage && !el.hidden) room -= el.offsetHeight + gap; });
-      const w = Math.max(160, Math.floor(room * game.W / game.H));
+      const w = Math.max(160, Math.floor(room() * game.W / game.H));
       stage.style.maxWidth = w + 'px';
       scale = Math.max(1, cv.clientWidth / game.W);
     } else stage.style.maxWidth = game.W + 'px';
@@ -783,6 +795,9 @@
   // because browsers allow real full screen only right after a tap. So the first tap or key in the game asks for it.
   ['pointerup', 'keydown'].forEach((t) => document.addEventListener(t, (e) => { if (e.key !== 'Escape' && isFull() && !(e.target.closest && e.target.closest('button'))) askFull(); }, { capture: true }));
   document.addEventListener('visibilitychange', () => { if (document.hidden && game) pause(); });
+  // A first-time visitor who comes straight into a game (?play= from Google) gets the cookie box a moment after it starts.
+  // It covers part of the game, so the game pauses until they have answered it and tap Resume.
+  document.addEventListener('pa-cookies-open', () => { if (game) pause(); });
 
   // A random number maker of its own, started from seed (a whole number). Same seed, same numbers.
   function seeded(seed) {
