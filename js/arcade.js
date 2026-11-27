@@ -830,6 +830,23 @@
   /* ---------- Add to home screen ---------- */
   // sw.js keeps a copy of the site, so it opens like an app from the home screen and works offline after the first visit.
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+  /* ---------- A newer version of the site ---------- */
+  // Someone who keeps the site open in a tab, or as a home screen app, would keep the old version until they close it.
+  // So when they come back to it, it asks version.json (it changes every time the site is published) if there is a newer one.
+  // If there is, the page reloads, but only on the front page, so nobody loses a game. In a game it waits until they're back on the front page.
+  let newer = false, lastCheck = Date.now();
+  const reloadIfNewer = () => { if (newer && !home.hidden) location.reload(); };
+  async function checkVersion() {
+    if (!/^\?v=\d+$/.test(VERSION) || Date.now() - lastCheck < 60000) return; // At most once a minute. A copy on your own computer has no version.
+    lastCheck = Date.now();
+    try {
+      const { v } = await (await fetch('version.json', { cache: 'no-store' })).json();
+      if (/^\d+$/.test(v) && '?v=' + v !== VERSION) { newer = true; reloadIfNewer(); }
+    } catch (e) { /* Offline: try again next time. */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+  on('home', reloadIfNewer);
   const installBtn = $('#install'), installTip = $('#itip');
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let installAsk = null;

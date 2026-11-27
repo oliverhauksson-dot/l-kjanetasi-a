@@ -1,0 +1,4 @@
+---
+# The site's version: GitHub Pages fills in the time it published the site. js/arcade.js checks it to find out about updates.
+---
+{"v": "{{ site.time | date: '%s' }}"}

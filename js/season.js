@@ -144,7 +144,7 @@
   /* Wait for the styles, so the decorations never flash up unstyled. */
   const css = document.createElement('link');
   css.rel = 'stylesheet';
-  css.href = new URL('../css/xmas.css', script.src).href;
+  css.href = new URL('../css/xmas.css' + new URL(script.src).search, script.src).href; // Same ?v= as this file, so updates show up right away.
   css.onload = decorate;
   document.head.append(css);
 })();
